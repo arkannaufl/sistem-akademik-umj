@@ -120,6 +120,9 @@ class KelompokKecilController extends Controller
                     ]);
                 }
             }
+
+            // Auto-mapping ke mata kuliah PBL
+            $this->autoMapKelompokToMataKuliah($semester, $request->jumlah_kelompok);
         });
 
         return response()->json([
@@ -127,6 +130,45 @@ class KelompokKecilController extends Controller
             'jumlah_kelompok' => $request->jumlah_kelompok,
             'total_mahasiswa' => count($request->mahasiswa_ids)
         ]);
+    }
+
+    /**
+     * Auto-mapping kelompok kecil ke mata kuliah PBL
+     */
+    private function autoMapKelompokToMataKuliah($semester, $jumlahKelompok)
+    {
+        // Ambil semua mata kuliah blok untuk semester ini
+        $mataKuliahBlok = \App\Models\MataKuliah::where('jenis', 'Blok')
+            ->where('semester', $semester)
+            ->get();
+
+        if ($mataKuliahBlok->isEmpty()) {
+            return; // Tidak ada mata kuliah blok untuk semester ini
+        }
+
+        // Ambil semua nama kelompok yang benar-benar ada di tabel kelompok_kecil untuk semester ini
+        $kelompokList = \App\Models\KelompokKecil::where('semester', $semester)
+            ->distinct()
+            ->pluck('nama_kelompok')
+            ->toArray();
+
+        if (empty($kelompokList)) {
+            return; // Tidak ada kelompok kecil
+        }
+
+        // Hapus mapping lama untuk semester ini
+        \App\Models\MataKuliahPBLKelompokKecil::where('semester', $semester)->delete();
+
+        // Untuk setiap mata kuliah blok, mapping-kan SEMUA kelompok kecil
+        foreach ($mataKuliahBlok as $mataKuliah) {
+            foreach ($kelompokList as $namaKelompok) {
+                \App\Models\MataKuliahPBLKelompokKecil::create([
+                    'mata_kuliah_kode' => $mataKuliah->kode,
+                    'nama_kelompok' => $namaKelompok,
+                    'semester' => $semester,
+                ]);
+            }
+        }
     }
 
     // Update pengelompokan (drag & drop)
@@ -148,7 +190,16 @@ class KelompokKecilController extends Controller
     public function destroy($id)
     {
         $row = KelompokKecil::findOrFail($id);
-        $row->delete();
+        $semester = $row->semester;
+        $jumlahKelompok = $row->jumlah_kelompok;
+        
+        DB::transaction(function () use ($row, $semester, $jumlahKelompok) {
+            $row->delete();
+            
+            // Re-generate mapping setelah delete
+            $this->autoMapKelompokToMataKuliah($semester, $jumlahKelompok);
+        });
+        
         return response()->json(['message' => 'Data berhasil dihapus']);
     }
 
@@ -171,9 +222,21 @@ class KelompokKecilController extends Controller
             'updates.*.id' => 'required|integer|exists:kelompok_kecil,id',
             'updates.*.nama_kelompok' => 'required|string',
         ]);
-        foreach ($request->updates as $update) {
-            \App\Models\KelompokKecil::where('id', $update['id'])->update(['nama_kelompok' => $update['nama_kelompok']]);
-        }
+        
+        DB::transaction(function () use ($request) {
+            foreach ($request->updates as $update) {
+                \App\Models\KelompokKecil::where('id', $update['id'])->update(['nama_kelompok' => $update['nama_kelompok']]);
+            }
+            
+            // Re-generate mapping setelah update
+            $kelompokKecil = \App\Models\KelompokKecil::where('id', $request->updates[0]['id'])->first();
+            if ($kelompokKecil) {
+                $semester = $kelompokKecil->semester;
+                $jumlahKelompok = $kelompokKecil->jumlah_kelompok;
+                $this->autoMapKelompokToMataKuliah($semester, $jumlahKelompok);
+            }
+        });
+        
         return response()->json(['message' => 'Batch update berhasil']);
     }
 
@@ -222,16 +285,21 @@ class KelompokKecilController extends Controller
             ], 422);
         }
 
-        $kelompokKecil = KelompokKecil::create([
-            'semester' => $semester,
-            'nama_kelompok' => $request->nama_kelompok,
-            'mahasiswa_id' => $request->mahasiswa_id,
-            'jumlah_kelompok' => $request->jumlah_kelompok,
-        ]);
+        DB::transaction(function () use ($request, $semester) {
+            $kelompokKecil = KelompokKecil::create([
+                'semester' => $semester,
+                'nama_kelompok' => $request->nama_kelompok,
+                'mahasiswa_id' => $request->mahasiswa_id,
+                'jumlah_kelompok' => $request->jumlah_kelompok,
+            ]);
+
+            // Re-generate mapping setelah create single
+            $this->autoMapKelompokToMataKuliah($semester, $request->jumlah_kelompok);
+        });
 
         return response()->json([
             'message' => 'Mahasiswa berhasil ditambahkan ke kelompok',
-            'data' => $kelompokKecil
+            'data' => $kelompokKecil ?? null
         ]);
     }
 
@@ -294,10 +362,18 @@ class KelompokKecilController extends Controller
     public function batchBySemester(Request $request)
     {
         $semesters = $request->input('semesters', []);
+        
+        // OPTIMIZATION: Use single query with whereIn instead of foreach
+        $allKelompokKecil = KelompokKecil::with('mahasiswa')
+            ->whereIn('semester', $semesters)
+            ->get()
+            ->groupBy('semester');
+        
         $result = [];
         foreach ($semesters as $sem) {
-            $result[$sem] = KelompokKecil::with('mahasiswa')->where('semester', $sem)->get();
+            $result[$sem] = $allKelompokKecil->get($sem, collect())->values();
         }
+        
         return response()->json($result);
     }
 
@@ -317,5 +393,40 @@ class KelompokKecilController extends Controller
             ->where('semester', $semester)
             ->get();
         return response()->json($data);
+    }
+
+    /**
+     * Batch detail kelompok kecil: hanya id, nama_kelompok, semester
+     * Endpoint: POST /kelompok-kecil/batch-detail
+     * Body: { "nama_kelompok": ["1", "2", ...], "semester": "1" }
+     * Response: [ { id, nama_kelompok, semester }, ... ]
+     */
+    public function batchDetail(Request $request)
+    {
+        $request->validate([
+            'nama_kelompok' => 'required|array',
+            'semester' => 'required',
+        ]);
+        $semester = $request->semester;
+        $namaKelompokArr = $request->nama_kelompok;
+        
+        // OPTIMIZATION: Use single query with whereIn instead of foreach
+        $allKelompokKecil = KelompokKecil::where('semester', $semester)
+            ->whereIn('nama_kelompok', $namaKelompokArr)
+            ->get()
+            ->groupBy('nama_kelompok');
+        
+        $result = [];
+        foreach ($namaKelompokArr as $nama) {
+            $anggota = $allKelompokKecil->get($nama, collect());
+            $first = $anggota->first();
+            $result[] = [
+                'id' => $first ? $first->id : null,
+                'nama_kelompok' => $nama,
+                'semester' => $semester,
+            ];
+        }
+        
+        return response()->json($result);
     }
 }

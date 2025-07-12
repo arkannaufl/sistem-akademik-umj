@@ -27,6 +27,7 @@ class User extends Authenticatable
         'is_logged_in',
         'current_token',
         'semester',
+        'peran_utama', 'matkul_ketua_id', 'matkul_anggota_id', 'peran_kurikulum_mengajar',
     ];
 
     /**
@@ -53,5 +54,15 @@ class User extends Authenticatable
             'peran_kurikulum' => 'array',
             'keahlian' => 'array',
         ];
+    }
+
+    public function matkulKetua()
+    {
+        return $this->belongsTo(MataKuliah::class, 'matkul_ketua_id', 'kode');
+    }
+
+    public function matkulAnggota()
+    {
+        return $this->belongsTo(MataKuliah::class, 'matkul_anggota_id', 'kode');
     }
 }

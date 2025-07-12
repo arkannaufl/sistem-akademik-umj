@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlus, faTrash, faEdit, faSave, faTimes, faGraduationCap, faUsers, faBookOpen, faCalendar } from "@fortawesome/free-solid-svg-icons";
+import {
+  faPlus,
+  faTrash,
+  faEdit,
+  faTimes,
+  faUsers,
+  faBookOpen,
+  faCalendar,
+} from "@fortawesome/free-solid-svg-icons";
 import api from "../utils/api";
+import { useNavigate } from "react-router-dom";
 
 interface Dosen {
   id: number;
@@ -28,7 +37,7 @@ interface CSR {
   keahlian_required: string[];
   tanggal_mulai?: string;
   tanggal_akhir?: string;
-  status: 'available' | 'assigned' | 'completed';
+  status: "available" | "assigned" | "completed";
   dosen?: User[];
   mata_kuliah?: {
     kode: string;
@@ -51,11 +60,11 @@ interface User {
 }
 
 function toDateInputValue(dateString: string) {
-  if (!dateString) return '';
+  if (!dateString) return "";
   const d = new Date(dateString);
-  if (isNaN(d.getTime())) return '';
-  const month = (d.getMonth() + 1).toString().padStart(2, '0');
-  const day = d.getDate().toString().padStart(2, '0');
+  if (isNaN(d.getTime())) return "";
+  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
@@ -75,16 +84,14 @@ const CSR: React.FC = () => {
   const [editMode, setEditMode] = useState(false);
   const [selectedCSR, setSelectedCSR] = useState<CSR | null>(null);
 
-  // Drag & drop states
-  const [draggedDosen, setDraggedDosen] = useState<Dosen | null>(null);
-  const [dragOverCSR, setDragOverCSR] = useState<number | null>(null);
-
   // Data states
   const [dosen, setDosen] = useState<Dosen[]>([]);
   const [mappings, setMappings] = useState<CSRMapping[]>([]);
   const [csrs, setCsrs] = useState<CSR[]>([]);
   const [availableDosen, setAvailableDosen] = useState<User[]>([]);
-  const [mataKuliah, setMataKuliah] = useState<Array<{kode: string, nama: string}>>([]);
+  const [mataKuliah, setMataKuliah] = useState<
+    Array<{ kode: string; nama: string }>
+  >([]);
 
   // Form states
   const [form, setForm] = useState({
@@ -98,7 +105,7 @@ const CSR: React.FC = () => {
 
   const [mappingForm, setMappingForm] = useState({
     csr_id: "",
-    dosen_id: ""
+    dosen_id: "",
   });
 
   // Notification states
@@ -122,11 +129,11 @@ const CSR: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Tambahkan state baru di atas:
-  const [activeSemesterJenis, setActiveSemesterJenis] = useState<string | null>(null);
+  const [activeSemesterJenis, setActiveSemesterJenis] = useState<string | null>(
+    null
+  );
 
-  // Tambahkan state untuk loading generate
-  type DosenWithKeahlian = Dosen & { keahlianArr: string[] };
-  const [isGenerating, setIsGenerating] = useState(false);
+  const navigate = useNavigate();
 
   // Fetch data
   useEffect(() => {
@@ -136,12 +143,13 @@ const CSR: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [csrResponse, mappingResponse, dosenResponse, mataKuliahResponse] = await Promise.all([
-        api.get('/csr'),
-        api.get('/csr-mappings'),
-        api.get('/users?role=dosen'),
-        api.get('/mata-kuliah')
-      ]);
+      const [csrResponse, mappingResponse, dosenResponse, mataKuliahResponse] =
+        await Promise.all([
+          api.get("/csr"),
+          api.get("/csr-mappings"),
+          api.get("/users?role=dosen"),
+          api.get("/mata-kuliah"),
+        ]);
 
       // Ensure mappings is always an array - API returns {data: [...]}
       const mappingsData = mappingResponse.data?.data || [];
@@ -179,7 +187,7 @@ const CSR: React.FC = () => {
   // Fetch semester aktif
   const fetchActiveSemester = async () => {
     try {
-      const res = await api.get('/tahun-ajaran/active');
+      const res = await api.get("/tahun-ajaran/active");
       const semester = res.data?.semesters?.[0];
       if (semester && semester.jenis) {
         setActiveSemesterJenis(semester.jenis);
@@ -193,32 +201,39 @@ const CSR: React.FC = () => {
   fetchActiveSemester();
 
   // Filter mata kuliah CSR berdasarkan semester aktif (periode)
-  const filteredCSR = csrs.filter(csr => {
+  const filteredCSR = csrs.filter((csr) => {
     // Cek periode dari nomor_csr atau field lain jika ada
     let periode = null;
     if (csr.semester) {
-      periode = csr.semester % 2 === 1 ? 'Ganjil' : 'Genap';
+      periode = csr.semester % 2 === 1 ? "Ganjil" : "Genap";
     } else if (csr.nomor_csr) {
-      const sem = parseInt(csr.nomor_csr.split('.')[0]);
-      if (!isNaN(sem)) periode = sem % 2 === 1 ? 'Ganjil' : 'Genap';
+      const sem = parseInt(csr.nomor_csr.split(".")[0]);
+      if (!isNaN(sem)) periode = sem % 2 === 1 ? "Ganjil" : "Genap";
     }
     if (activeSemesterJenis && periode !== activeSemesterJenis) return false;
-    const semester = csr.semester || parseInt(csr.nomor_csr.split('.')[0]);
-    if (filterSemester !== "semua" && semester !== parseInt(filterSemester)) return false;
+    const semester = csr.semester || parseInt(csr.nomor_csr.split(".")[0]);
+    if (filterSemester !== "semua" && semester !== parseInt(filterSemester))
+      return false;
     if (filterStatus !== "semua" && csr.status !== filterStatus) return false;
-    if (searchQuery && !csr.nama.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !csr.mata_kuliah_kode.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (
+      searchQuery &&
+      !csr.nama.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !csr.mata_kuliah_kode.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+      return false;
     return true;
   });
 
   // Filter dosen
-  const filteredDosen = dosen.filter(d => {
+  const filteredDosen = dosen.filter((d) => {
     const q = searchDosen.toLowerCase();
     // Cari di nama, nid, dan keahlian
-    const keahlianArr = Array.isArray(d.keahlian) ? d.keahlian : d.keahlian.split(',').map(k => k.trim());
+    const keahlianArr = Array.isArray(d.keahlian)
+      ? d.keahlian
+      : d.keahlian.split(",").map((k) => k.trim());
     const matchNama = d.name.toLowerCase().includes(q);
     const matchNid = d.nid.toLowerCase().includes(q);
-    const matchKeahlian = keahlianArr.some(k => k.toLowerCase().includes(q));
+    const matchKeahlian = keahlianArr.some((k) => k.toLowerCase().includes(q));
     if (searchDosen && !(matchNama || matchNid || matchKeahlian)) return false;
     return true;
   });
@@ -226,29 +241,31 @@ const CSR: React.FC = () => {
   // Get available dosen (not assigned to any CSR)
   const getAvailableDosen = () => {
     if (!Array.isArray(mappings)) return filteredDosen;
-    const assignedDosenIds = mappings.map(m => m.dosen_id);
-    return filteredDosen.filter(d => !assignedDosenIds.includes(d.id));
+    const assignedDosenIds = mappings.map((m) => m.dosen_id);
+    return filteredDosen.filter((d) => !assignedDosenIds.includes(d.id));
   };
 
   // Get dosen by keahlian
   const getDosenByKeahlian = (keahlianRequired: string[]) => {
-    return getAvailableDosen().filter(d => {
-      const dosenKeahlian = Array.isArray(d.keahlian) ? d.keahlian : d.keahlian.split(',').map(k => k.trim());
-      return keahlianRequired.some(k => dosenKeahlian.includes(k));
+    return getAvailableDosen().filter((d) => {
+      const dosenKeahlian = Array.isArray(d.keahlian)
+        ? d.keahlian
+        : d.keahlian.split(",").map((k) => k.trim());
+      return keahlianRequired.some((k) => dosenKeahlian.includes(k));
     });
   };
 
   // Get assigned dosen for CSR
   const getAssignedDosen = (csrId: number) => {
     if (!Array.isArray(mappings)) return null;
-    const mapping = mappings.find(m => m.csr_id === csrId);
+    const mapping = mappings.find((m) => m.csr_id === csrId);
     if (!mapping) return null;
-    return dosen.find(d => d.id === mapping.dosen_id);
+    return dosen.find((d) => d.id === mapping.dosen_id);
   };
 
   // Handle form submission
   const handleSubmit = async () => {
-    console.log('handleSubmit called');
+    console.log("handleSubmit called");
     setIsSaving(true);
     try {
       if (selectedCSR && selectedCSR.id) {
@@ -263,34 +280,34 @@ const CSR: React.FC = () => {
         });
         setSuccess("Mata kuliah CSR berhasil diupdate");
         setError(null);
-      setShowModal(false);
-      setEditMode(false);
-      setSelectedCSR(null);
-      setForm({
-        mata_kuliah_kode: "",
-        nomor_csr: "",
-        nama: "",
-        keahlian_required: [],
-        tanggal_mulai: "",
-        tanggal_akhir: "",
-      });
-      fetchData();
-        console.log('handleSubmit success, isSaving:', isSaving);
+        setShowModal(false);
+        setEditMode(false);
+        setSelectedCSR(null);
+        setForm({
+          mata_kuliah_kode: "",
+          nomor_csr: "",
+          nama: "",
+          keahlian_required: [],
+          tanggal_mulai: "",
+          tanggal_akhir: "",
+        });
+        fetchData();
+        console.log("handleSubmit success, isSaving:", isSaving);
       } else {
-        setError('Pilih CSR yang valid untuk diedit.');
+        setError("Pilih CSR yang valid untuk diedit.");
       }
     } catch (err: any) {
-      console.error('handleSubmit error:', err);
+      console.error("handleSubmit error:", err);
       if (err?.response?.data?.errors) {
         const errors = err.response.data.errors;
-        const messages = Object.values(errors).flat().join(' ');
+        const messages = Object.values(errors).flat().join(" ");
         setError(messages);
       } else {
         setError(err?.response?.data?.message || "Gagal menyimpan data");
       }
     } finally {
       setIsSaving(false);
-      console.log('handleSubmit finally, isSaving:', isSaving);
+      console.log("handleSubmit finally, isSaving:", isSaving);
     }
   };
 
@@ -299,12 +316,16 @@ const CSR: React.FC = () => {
     try {
       const res = await api.post("/csr-mappings", {
         csr_id: csrId,
-        dosen_id: dosenId
+        dosen_id: dosenId,
       });
       setSuccess("Dosen berhasil ditugaskan");
       // Update state lokal mappings dan csrs agar animasi langsung terlihat
-      setMappings(prev => [...prev, res.data.data]);
-      setCsrs(prev => prev.map(csr => csr.id === csrId ? { ...csr, status: 'assigned' } : csr));
+      setMappings((prev) => [...prev, res.data.data]);
+      setCsrs((prev) =>
+        prev.map((csr) =>
+          csr.id === csrId ? { ...csr, status: "assigned" } : csr
+        )
+      );
       // Jangan fetchData di sini, biar tidak reload page
     } catch (err: any) {
       setError(err?.response?.data?.message || "Gagal menugaskan dosen");
@@ -315,13 +336,17 @@ const CSR: React.FC = () => {
   const handleRemoveAssignment = async (csrId: number) => {
     try {
       if (!Array.isArray(mappings)) return;
-      const mapping = mappings.find(m => m.csr_id === csrId);
+      const mapping = mappings.find((m) => m.csr_id === csrId);
       if (mapping) {
         await api.delete(`/csr-mappings/${mapping.id}`);
         setSuccess("Penugasan dosen berhasil dihapus");
         // Update state lokal mappings dan csrs agar animasi langsung terlihat
-        setMappings(prev => prev.filter(m => m.csr_id !== csrId));
-        setCsrs(prev => prev.map(csr => csr.id === csrId ? { ...csr, status: 'available' } : csr));
+        setMappings((prev) => prev.filter((m) => m.csr_id !== csrId));
+        setCsrs((prev) =>
+          prev.map((csr) =>
+            csr.id === csrId ? { ...csr, status: "available" } : csr
+          )
+        );
         // Jangan fetchData di sini, biar tidak reload page
       }
     } catch (err: any) {
@@ -345,79 +370,40 @@ const CSR: React.FC = () => {
     }
   };
 
-  // Drag & drop handlers
-  const handleDragStart = (e: React.DragEvent, dosen: Dosen) => {
-    setDraggedDosen(dosen);
-    e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDragOver = (e: React.DragEvent, csrId: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverCSR(csrId);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    // Hanya reset jika benar-benar meninggalkan elemen (bukan masuk ke child)
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setDragOverCSR(null);
-    }
-  };
-
-  // Pada handler handleDrop:
-  const handleDrop = (e: React.DragEvent, csrId: number) => {
-    e.preventDefault();
-    if (!draggedDosen) return;
-    const csr = csrs.find(c => c.id === csrId);
-    if (!csr) return;
-    const dosenKeahlian = Array.isArray(draggedDosen.keahlian)
-      ? draggedDosen.keahlian
-      : draggedDosen.keahlian.split(',').map(k => k.trim());
-    const isStandby = dosenKeahlian.map(k => k.toLowerCase()).includes('standby');
-    const hasMatchingKeahlian = csr.keahlian_required.some(k => dosenKeahlian.includes(k));
-    if (hasMatchingKeahlian || isStandby) {
-      handleAssignDosen(csr.id, draggedDosen.id);
-    } else {
-      setError("Keahlian dosen tidak sesuai dengan mata kuliah CSR");
-    }
-    setDragOverCSR(null);
-    setDraggedDosen(null);
-  };
-
-  const handleDragEnd = () => {
-    setDragOverCSR(null);
-    setDraggedDosen(null);
-  };
-
   // Get unique keahlian from dosen
   const getAllKeahlian = () => {
     const allKeahlian = new Set<string>();
-    dosen.forEach(d => {
-      const keahlian = Array.isArray(d.keahlian) ? d.keahlian : d.keahlian.split(',').map(k => k.trim());
-      keahlian.forEach(k => allKeahlian.add(k));
+    dosen.forEach((d) => {
+      const keahlian = Array.isArray(d.keahlian)
+        ? d.keahlian
+        : d.keahlian.split(",").map((k) => k.trim());
+      keahlian.forEach((k) => allKeahlian.add(k));
     });
     return Array.from(allKeahlian).sort();
   };
 
   // Get semester options
-  const semesterOptions = Array.from(new Set(csrs.map(csr => {
-    const semester = csr.semester || parseInt(csr.nomor_csr.split('.')[0]);
-    return semester;
-  }))).sort();
+  const semesterOptions = Array.from(
+    new Set(
+      csrs.map((csr) => {
+        const semester = csr.semester || parseInt(csr.nomor_csr.split(".")[0]);
+        return semester;
+      })
+    )
+  ).sort();
 
   // CSR functions
   const handleOpenMappingModal = async (csr: CSR) => {
     setSelectedCSR(csr);
     setMappingForm({ csr_id: csr.id.toString(), dosen_id: "" });
-    
+
     try {
       const response = await api.get(`/csr/${csr.id}/available-dosen`);
       setAvailableDosen(response.data.data);
     } catch (error) {
-      console.error('Error fetching available dosen:', error);
+      console.error("Error fetching available dosen:", error);
     }
-    
+
     setShowMappingModal(true);
   };
 
@@ -426,7 +412,10 @@ const CSR: React.FC = () => {
     setMappingError("");
 
     try {
-      await api.post('/csr-mappings', { ...mappingForm, dosen_id: parseInt(mappingForm.dosen_id) });
+      await api.post("/csr-mappings", {
+        ...mappingForm,
+        dosen_id: parseInt(mappingForm.dosen_id),
+      });
       setSuccess("Dosen berhasil ditugaskan");
       setShowMappingModal(false);
       setMappingForm({ csr_id: "", dosen_id: "" });
@@ -438,13 +427,15 @@ const CSR: React.FC = () => {
   };
 
   const handleRemoveMapping = async (mappingId: number) => {
-    if (window.confirm("Apakah Anda yakin ingin menghapus penugasan dosen ini?")) {
+    if (
+      window.confirm("Apakah Anda yakin ingin menghapus penugasan dosen ini?")
+    ) {
       try {
         await api.delete(`/csr-mappings/${mappingId}`);
         setSuccess("Penugasan dosen berhasil dihapus");
         fetchData();
       } catch (error: any) {
-        console.error('Error removing mapping:', error);
+        console.error("Error removing mapping:", error);
       }
     }
   };
@@ -472,10 +463,10 @@ const CSR: React.FC = () => {
 
   const handleCloseModal = () => {
     setShowModal(false);
-    setForm({ 
-      mata_kuliah_kode: "", 
-      nomor_csr: "", 
-      nama: "", 
+    setForm({
+      mata_kuliah_kode: "",
+      nomor_csr: "",
+      nama: "",
       keahlian_required: [],
       tanggal_mulai: "",
       tanggal_akhir: "",
@@ -523,97 +514,170 @@ const CSR: React.FC = () => {
 
   // Pada filter mataKuliahNonBlokCSR, gunakan any agar tidak error property
   const mataKuliahNonBlokCSR = (mataKuliah as any[]).filter(
-    (mk) => mk.jenis === 'Non Blok' && mk.tipe_non_block === 'CSR'
+    (mk) => mk.jenis === "Non Blok" && mk.tipe_non_block === "CSR"
   );
 
   // Group CSR by semester
   const groupedCSR = filteredCSR.reduce((acc, csr) => {
-    const semester = csr.semester || parseInt(csr.nomor_csr.split('.')[0]);
+    const semester = csr.semester || parseInt(csr.nomor_csr.split(".")[0]);
     if (!acc[semester]) acc[semester] = [];
     acc[semester].push(csr);
     return acc;
   }, {} as Record<number, typeof filteredCSR>);
-  const sortedSemesters = Object.keys(groupedCSR).map(Number).sort((a, b) => a - b);
+  const sortedSemesters = Object.keys(groupedCSR)
+    .map(Number)
+    .sort((a, b) => a - b);
 
   // Tambahkan helper untuk memisahkan dosen standby dan dosen biasa
-  const dosenWithKeahlian = getAvailableDosen().map(d => ({
+  const dosenWithKeahlian = getAvailableDosen().map((d) => ({
     ...d,
-    keahlianArr: Array.isArray(d.keahlian) ? d.keahlian : d.keahlian.split(',').map(k => k.trim()),
+    keahlianArr: Array.isArray(d.keahlian)
+      ? d.keahlian
+      : d.keahlian.split(",").map((k) => k.trim()),
   }));
   // Tambahkan helper untuk mengambil semua dosen yang sudah di-assign ke CSR
-  const assignedDosenIds = mappings.map(m => m.dosen_id);
-  const standbyDosenList = dosenWithKeahlian.filter(d => d.keahlianArr.map(k => k.toLowerCase()).includes('standby') && !assignedDosenIds.includes(d.id) && (!searchDosen || (
-    d.name.toLowerCase().includes(searchDosen.toLowerCase()) ||
-    d.nid.toLowerCase().includes(searchDosen.toLowerCase()) ||
-    d.keahlianArr.some((k) => k.toLowerCase().includes(searchDosen.toLowerCase()))
-  )));
-  const regularDosenList = dosenWithKeahlian.filter(d => !d.keahlianArr.map(k => k.toLowerCase()).includes('standby') && !assignedDosenIds.includes(d.id) && (!searchDosen || (
-    d.name.toLowerCase().includes(searchDosen.toLowerCase()) ||
-    d.nid.toLowerCase().includes(searchDosen.toLowerCase()) ||
-    d.keahlianArr.some((k) => k.toLowerCase().includes(searchDosen.toLowerCase()))
-  )));
+  const assignedDosenIds = mappings.map((m) => m.dosen_id);
+  const standbyDosenList = dosenWithKeahlian.filter(
+    (d) =>
+      d.keahlianArr.map((k) => k.toLowerCase()).includes("standby") &&
+      !assignedDosenIds.includes(d.id) &&
+      (!searchDosen ||
+        d.name.toLowerCase().includes(searchDosen.toLowerCase()) ||
+        d.nid.toLowerCase().includes(searchDosen.toLowerCase()) ||
+        d.keahlianArr.some((k) =>
+          k.toLowerCase().includes(searchDosen.toLowerCase())
+        ))
+  );
+  const regularDosenList = dosenWithKeahlian.filter(
+    (d) =>
+      !d.keahlianArr.map((k) => k.toLowerCase()).includes("standby") &&
+      !assignedDosenIds.includes(d.id) &&
+      (!searchDosen ||
+        d.name.toLowerCase().includes(searchDosen.toLowerCase()) ||
+        d.nid.toLowerCase().includes(searchDosen.toLowerCase()) ||
+        d.keahlianArr.some((k) =>
+          k.toLowerCase().includes(searchDosen.toLowerCase())
+        ))
+  );
+
+  // Center the summary cards (real)
+  <div className="flex justify-center mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-fit">
+      <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+            <FontAwesomeIcon
+              icon={faBookOpen}
+              className="w-6 h-6 text-blue-500"
+            />
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-800 dark:text-white">
+              {csrs.length}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Total Mata Kuliah CSR
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+            <FontAwesomeIcon
+              icon={faUsers}
+              className="w-6 h-6 text-purple-500"
+            />
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-800 dark:text-white">
+              {csrs.filter((csr) => csr.status === "available").length}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Belum Ditugaskan
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>;
 
   if (loading) {
     return (
-      <div className="w-full mx-auto">
+      <div className="mx-auto py-8 px-2 md:px-0">
         {/* Skeleton Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6 animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700" />
-                <div className="flex-1">
-                  <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+        <div className="flex justify-center mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-fit">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div
+                key={i}
+                className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6 animate-pulse"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700" />
+                  <div className="flex-1">
+                    <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-        {/* Skeleton Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Skeleton Mata Kuliah CSR */}
-          <div className="lg:col-span-2">
-            <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-              <div className="h-6 w-48 bg-gray-200 dark:bg-gray-700 rounded mb-6 animate-pulse" />
-              <div className="space-y-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 animate-pulse">
-                    <div className="h-5 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                    <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                    <div className="flex gap-2 mb-2">
-                      <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
-                      <div className="h-4 w-12 bg-gray-200 dark:bg-gray-700 rounded-full" />
-                    </div>
-                    <div className="h-10 w-full bg-gray-100 dark:bg-gray-800 rounded" />
-                  </div>
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
-          {/* Skeleton Dosen List */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-              <div className="h-6 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-6 animate-pulse" />
-              <div className="space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg animate-pulse">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700" />
-                      <div className="flex-1">
-                        <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-1" />
-                        <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+        </div>
+        {/* Skeleton Controls */}
+        <div className="flex flex-col md:flex-row gap-4 mb-8 items-stretch md:items-center justify-between w-full">
+          <div className="h-12 w-80 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+          <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+            <div className="h-12 w-40 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+            <div className="h-12 w-40 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+            <div className="h-12 w-56 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+          </div>
+        </div>
+        {/* Skeleton Mata Kuliah CSR Section */}
+        <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+          <div className="h-6 w-48 bg-gray-200 dark:bg-gray-700 rounded mb-6 animate-pulse" />
+          {/* Semester Card Skeleton */}
+          <div className="space-y-8">
+            {Array.from({ length: 1 }).map((_, i) => (
+              <div
+                key={i}
+                className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-6 border border-gray-200 dark:border-gray-700 animate-pulse"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-brand-500/30 dark:bg-brand-900/20" />
+                  <div className="h-6 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded ml-4" />
+                  <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded ml-auto" />
+                </div>
+                {/* CSR Cards Skeleton */}
+                <div className="grid gap-4">
+                  {Array.from({ length: 2 }).map((_, j) => (
+                    <div
+                      key={j}
+                      className="p-5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-800/50 hover:shadow-md animate-pulse"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+                        <div className="flex-1">
+                          <div className="h-5 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                          <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                          <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                          <div className="flex gap-2 mb-2">
+                            <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                            <div className="h-4 w-12 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                          </div>
+                        </div>
+                        <div className="flex flex-row items-center gap-2 sm:ml-4">
+                          <div className="h-6 w-32 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                          <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+                          <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+                        </div>
                       </div>
+                      <div className="h-10 w-48 bg-brand-100 dark:bg-brand-900/20 rounded-lg mt-4" />
                     </div>
-                    <div className="flex gap-1">
-                      <div className="h-4 w-12 bg-gray-200 dark:bg-gray-700 rounded-full" />
-                      <div className="h-4 w-10 bg-gray-200 dark:bg-gray-700 rounded-full" />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -621,7 +685,7 @@ const CSR: React.FC = () => {
   }
 
   return (
-    <div className="w-full mx-auto">
+    <div className="mx-auto py-8 px-4 md:px-8">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white/90 mb-2">
@@ -632,91 +696,42 @@ const CSR: React.FC = () => {
         </p>
       </div>
 
-      {/* Notifications */}
-      <AnimatePresence>
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="bg-brand-100 border text-brand-700 p-3 rounded-lg mb-6"
-          >
-            {success}
-          </motion.div>
-        )}
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="bg-red-100 border text-red-700 p-3 rounded-lg mb-6"
-          >
-            {error}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-              <FontAwesomeIcon icon={faBookOpen} className="w-6 h-6 text-blue-500" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-800 dark:text-white">
-                {csrs.length}
+      <div className="flex justify-center mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-fit">
+          <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                <FontAwesomeIcon
+                  icon={faBookOpen}
+                  className="w-6 h-6 text-blue-500"
+                />
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Total Mata Kuliah CSR
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-brand-100 dark:bg-brand-900/20 flex items-center justify-center">
-              <FontAwesomeIcon icon={faUsers} className="w-6 h-6 text-brand-500" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-800 dark:text-white">
-                {mappings.length}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Dosen Ditugaskan
+              <div>
+                <div className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {csrs.length}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Total Mata Kuliah CSR
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        
-        <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/20 flex items-center justify-center">
-              <FontAwesomeIcon icon={faGraduationCap} className="w-6 h-6 text-yellow-500" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-800 dark:text-white">
-                {getAvailableDosen().length}
+          <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+                <FontAwesomeIcon
+                  icon={faUsers}
+                  className="w-6 h-6 text-purple-500"
+                />
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Dosen Tersedia
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
-              <FontAwesomeIcon icon={faUsers} className="w-6 h-6 text-purple-500" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-800 dark:text-white">
-                {csrs.filter(csr => csr.status === 'available').length}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Belum Ditugaskan
+              <div>
+                <div className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {csrs.filter((csr) => csr.status === "available").length}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Belum Ditugaskan
+                </div>
               </div>
             </div>
           </div>
@@ -724,407 +739,373 @@ const CSR: React.FC = () => {
       </div>
 
       {/* Controls */}
-      <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6 mb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:gap-4 items-stretch sm:items-center justify-between w-full">
-          <div className="flex flex-col gap-4 w-full sm:w-auto">
-            <button
-              onClick={() => {
-                setShowModal(true);
-                setEditMode(false);
-                setSelectedCSR(null);
-                setForm({
-                  mata_kuliah_kode: "",
-                  nomor_csr: "",
-                  nama: "",
-                  keahlian_required: [],
-                  tanggal_mulai: "",
-                  tanggal_akhir: "",
-                });
-              }}
-              className="w-full sm:w-auto px-4 py-2 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition flex items-center gap-2 shadow-theme-xs"
-            >
-              <FontAwesomeIcon icon={faPlus} className="w-4 h-4" />
-              Tambah Nama Mata Kuliah CSR & Keahlian
-            </button>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 w-full sm:w-auto">
-            <select
-              value={filterSemester}
-              onChange={(e) => setFilterSemester(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-theme-xs"
-            >
-              <option value="semua">Semua Semester</option>
-              {semesterOptions.map((semester) => (
-                <option key={semester} value={semester}>
-                  Semester {semester}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-theme-xs"
-            >
-              <option value="semua">Semua Status</option>
-              <option value="available">Belum Ditugaskan</option>
-              <option value="assigned">Sudah Ditugaskan</option>
-              <option value="completed">Selesai</option>
-            </select>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari mata kuliah CSR..."
-              className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-theme-xs"
-            />
-            <button
-              className="px-4 py-2 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition flex items-center gap-2 shadow-theme-xs"
-              disabled={isGenerating}
-              onClick={async () => {
-                setIsGenerating(true);
-                try {
-                  // Ambil semua dosen yang bukan standby
-                  const dosenNonStandby: DosenWithKeahlian[] = dosenWithKeahlian.filter(d => !d.keahlianArr.map(k => k.toLowerCase()).includes('standby'));
-                  // Ambil semua CSR yang belum ada dosen assigned
-                  const unassignedCSRs = csrs.filter(csr => !mappings.some(m => m.csr_id === csr.id));
-                  // Buat mapping dosen yang sudah di-assign per blok/semester
-                  const dosenAssignedByBlok: { [blok: string]: Set<number> } = {};
-                  csrs.forEach(csr => {
-                    const blokKey = csr.blok ? String(csr.blok) : 'unknown';
-                    if (!dosenAssignedByBlok[blokKey]) dosenAssignedByBlok[blokKey] = new Set();
-                    const mapping = mappings.find(m => m.csr_id === csr.id);
-                    if (mapping) dosenAssignedByBlok[blokKey].add(mapping.dosen_id);
-                  });
-                  // Cek dosen yang sudah di-assign di PBL (jika ada data sharing)
-                  // TODO: Integrasi dengan PBL jika ingin cross-page assign
-                  // Proses auto-assign
-                  for (const csr of unassignedCSRs) {
-                    const blokKey = csr.blok ? String(csr.blok) : 'unknown';
-                    // Cari dosen yang belum di-assign di blok ini dan punya keahlian cocok
-                    const availableDosen = dosenNonStandby.filter(d => {
-                      if (dosenAssignedByBlok[blokKey] && dosenAssignedByBlok[blokKey].has(d.id)) return false;
-                      return (csr.keahlian_required || []).some(k => d.keahlianArr.includes(k));
-                    });
-                    if (availableDosen.length > 0) {
-                      const dosenToAssign = availableDosen[0];
-                      await api.post('/csr-mappings', { csr_id: csr.id, dosen_id: dosenToAssign.id });
-                      // Update mapping
-                      if (!dosenAssignedByBlok[blokKey]) dosenAssignedByBlok[blokKey] = new Set();
-                      dosenAssignedByBlok[blokKey].add(dosenToAssign.id);
-                    }
-                  }
-                  // Refresh data
-                  await fetchData();
-                  setSuccess('Auto-assign dosen selesai!');
-                } catch (err) {
-                  setError('Gagal auto-assign dosen');
-                } finally {
-                  setIsGenerating(false);
-                }
-              }}
-            >
-              {isGenerating ? 'Mengisi...' : 'Generate Dosen'}
-            </button>
-          </div>
+      <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6 mb-8 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between w-full">
+        <div className="flex flex-col gap-4 w-full sm:w-auto">
+          <button
+            onClick={() => {
+              setShowModal(true);
+              setEditMode(false);
+              setSelectedCSR(null);
+              setForm({
+                mata_kuliah_kode: "",
+                nomor_csr: "",
+                nama: "",
+                keahlian_required: [],
+                tanggal_mulai: "",
+                tanggal_akhir: "",
+              });
+            }}
+            className="w-full sm:w-auto px-4 py-2 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition flex items-center gap-2 shadow-theme-xs"
+          >
+            <FontAwesomeIcon icon={faPlus} className="w-4 h-4" />
+            Tambah Nama Mata Kuliah CSR & Keahlian
+          </button>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 w-full sm:w-auto">
+          <select
+            value={filterSemester}
+            onChange={(e) => setFilterSemester(e.target.value)}
+            className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-theme-xs"
+          >
+            <option value="semua">Semua Semester</option>
+            {semesterOptions.map((semester) => (
+              <option key={semester} value={semester}>
+                Semester {semester}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-theme-xs"
+          >
+            <option value="semua">Semua Status</option>
+            <option value="available">Belum Ditugaskan</option>
+            <option value="assigned">Sudah Ditugaskan</option>
+            <option value="completed">Selesai</option>
+          </select>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari mata kuliah CSR..."
+            className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-theme-xs"
+          />
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Mata Kuliah CSR Section */}
-        <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-4">
-              Mata Kuliah CSR ({filteredCSR.length})
-            </h3>
-            
-            {sortedSemesters.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                  <FontAwesomeIcon icon={faBookOpen} className="w-8 h-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  Belum ada mata kuliah CSR
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Tambahkan mata kuliah CSR untuk memulai penugasan dosen.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                {sortedSemesters.map(semester => {
-                  const semesterCSRs = groupedCSR[semester];
-                  const availableCount = semesterCSRs.filter(csr => csr.status === 'available').length;
-                  const assignedCount = semesterCSRs.filter(csr => csr.status === 'assigned').length;
-                  const completedCount = semesterCSRs.filter(csr => csr.status === 'completed').length;
-                  
-                  return (
-                    <div key={semester} className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-                      {/* Semester Header */}
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">{semester}</span>
-                          </div>
-                          <div>
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-white">
-                              Semester {semester}
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {semesterCSRs.length} mata kuliah CSR
-                            </p>
-                          </div>
-                        </div>
-                        
-                        {/* Status Summary */}
-                        <div className="flex items-center gap-4">
-                          {availableCount > 0 && (
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                              <span className="text-sm text-gray-600 dark:text-gray-400">
-                                {availableCount} belum ditugaskan
-                              </span>
-                            </div>
-                          )}
-                          {assignedCount > 0 && (
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-blue-400"></div>
-                              <span className="text-sm text-gray-600 dark:text-gray-400">
-                                {assignedCount} sudah ditugaskan
-                              </span>
-                            </div>
-                          )}
-                          {completedCount > 0 && (
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-brand-400"></div>
-                              <span className="text-sm text-gray-600 dark:text-gray-400">
-                                {completedCount} selesai
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* CSR Cards Grid */}
-                      <div className="grid gap-4">
-                        {semesterCSRs.map((csr) => {
-                        const assignedDosen = getAssignedDosen(csr.id!);
-                        const availableDosen = getDosenByKeahlian(csr.keahlian_required);
-                        
-                        return (
-                          <div
-                            key={csr.id}
-                              className={`p-3 sm:p-5 rounded-xl border transition-all duration-300 ${
-                              dragOverCSR === csr.id
-                                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 shadow-lg scale-[1.02]'
-                                  : 'border-gray-200 dark:border-white/10 bg-white dark:bg-gray-800/50 hover:shadow-md'
-                            }`}
-                            onDragOver={e => handleDragOver(e, csr.id)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={e => handleDrop(e, csr.id)}
-                          >
-                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
-                              <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-3">
-                                    <div className="flex-1">
-                                      <h4 className="font-semibold text-gray-800 dark:text-white/90 text-lg">
-                                        {csr.mata_kuliah_kode}
-                                  </h4>
-                                      <p className="text-gray-600 dark:text-gray-400 text-sm">
-                                        {csr.nama}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
-                                    <span className="flex items-center gap-1">
-                                      <FontAwesomeIcon icon={faBookOpen} className="w-3 h-3" />
-                                      {csr.nomor_csr}
-                                    </span>
-                                {csr.tanggal_mulai && csr.tanggal_akhir && (
-                                      <span className="flex items-center gap-1">
-                                        <FontAwesomeIcon icon={faCalendar} className="w-3 h-3" />
-                                    {new Date(csr.tanggal_mulai).toLocaleDateString('id-ID')} - {new Date(csr.tanggal_akhir).toLocaleDateString('id-ID')}
-                                      </span>
-                                )}
-                                  </div>
-                                
-                                  <div className="flex flex-wrap gap-2 mb-4">
-                                  {(Array.isArray(csr.keahlian_required) ? csr.keahlian_required : []).map((keahlian, idx) => (
-                                      <span key={idx} className="text-xs px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full font-medium">
-                                      {keahlian}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                              
-                                <div className="flex flex-row items-center gap-2 sm:ml-4">
-                                <span className={`text-xs px-3 py-1 rounded-full font-medium ${
-                                  csr.status === 'available' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300' :
-                                  csr.status === 'assigned' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' :
-                                  'bg-brand-100 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300'
-                                }`}>
-                                    {csr.status === 'available' ? 'Belum Ditugaskan' :
-                                     csr.status === 'assigned' ? 'Sudah Ditugaskan' : 'Selesai'}
-                                  </span>
-                                <button
-                                  onClick={() => handleEdit(csr)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 bg-transparent rounded-lg transition"
-                                  title="Edit CSR"
-                                >
-                                  <FontAwesomeIcon icon={faEdit} className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Edit</span>
-                                </button>
-                                <button
-                                  onClick={() => { setCsrToDelete(csr); setShowDeleteModalCSR(true); }}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 bg-transparent rounded-lg transition"
-                                  title="Hapus CSR"
-                                >
-                                  <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Hapus</span>
-                                </button>
-                              </div>
-                            </div>
-                            
-                              {/* Assigned Dosen Section */}
-                            {assignedDosen ? (
-                                <div className={`border rounded-lg p-4 ${(() => {
-                                  const dosenKeahlian = Array.isArray(assignedDosen.keahlian) ? assignedDosen.keahlian : (assignedDosen.keahlian || '').split(',').map(k => k.trim());
-                                  return dosenKeahlian.map(k => k.toLowerCase()).includes('standby')
-                                    ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-500/20 dark:border-yellow-400'
-                                    : 'bg-brand-50 border-brand-200 dark:bg-brand-900/20 dark:border-brand-700';
-                                })()}`}> 
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${(() => {
-                                      const dosenKeahlian = Array.isArray(assignedDosen.keahlian) ? assignedDosen.keahlian : (assignedDosen.keahlian || '').split(',').map(k => k.trim());
-                                      return dosenKeahlian.map(k => k.toLowerCase()).includes('standby') ? 'bg-yellow-400' : 'bg-brand-500';
-                                    })()}`}> 
-                                      <span className="text-white text-sm font-bold">
-                                        {assignedDosen.name.charAt(0)}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <div className={`font-medium ${(() => {
-                                        const dosenKeahlian = Array.isArray(assignedDosen.keahlian) ? assignedDosen.keahlian : (assignedDosen.keahlian || '').split(',').map(k => k.trim());
-                                        return dosenKeahlian.map(k => k.toLowerCase()).includes('standby') ? 'text-yellow-800 dark:text-yellow-100' : 'text-gray-800 dark:text-white/90';
-                                      })()}`}>{assignedDosen.name}</div>
-                                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                                        NID: {assignedDosen.nid}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={() => handleRemoveAssignment(csr.id!)}
-                                      className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition"
-                                      title="Hapus penugasan"
-                                  >
-                                    <FontAwesomeIcon icon={faTimes} className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center">
-                                <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                                  Seret dosen ke sini untuk menugaskan
-                                </div>
-                                {availableDosen.length > 0 ? (
-                                  <div className="text-xs text-gray-400 dark:text-gray-500">
-                                    {availableDosen.length} dosen tersedia dengan keahlian yang sesuai
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-red-400 dark:text-red-300">
-                                    Tidak ada dosen dengan keahlian yang sesuai
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-4">
+          Mata Kuliah CSR ({filteredCSR.length})
+        </h3>
 
-        {/* Available Dosen Section */}
-        <div className="lg:col-span-1">
-          <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-4">
-              Dosen Tersedia ({regularDosenList.length})
-            </h3>
-            
-            <input
-              type="text"
-              value={searchDosen}
-              onChange={(e) => setSearchDosen(e.target.value)}
-              placeholder="Cari dosen atau keahlian..."
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white mb-4"
-            />
-            
-            <div className="space-y-5 max-h-96 overflow-y-auto hide-scroll mb-6">
-              {regularDosenList.map((d) => (
-                <div
-                  key={d.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, d)}
-                  onDragEnd={handleDragEnd}
-                  className="p-4 min-w-0 w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl cursor-move hover:shadow-lg hover:border-brand-500 dark:hover:border-brand-400 transition-all duration-200 flex flex-col gap-2 sm:flex-row sm:items-center"
-                >
-                  <div className="flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full bg-brand-500">
-                    <span className="text-white text-xl font-bold">
-                      {d.name.charAt(0)}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0 mt-2 sm:mt-0 sm:ml-4">
-                    <div className="font-bold text-base text-gray-800 dark:text-white/90 truncate">{d.name}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">NID: {d.nid}</div>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {d.keahlianArr.map((k, idx) => (
-                        <span key={idx} className={`text-xs px-3 py-1 rounded-full ${k.toLowerCase() === 'standby' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 font-semibold' : 'bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'}`}>{k}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
+        {sortedSemesters.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+              <FontAwesomeIcon
+                icon={faBookOpen}
+                className="w-8 h-8 text-gray-400"
+              />
             </div>
-            {/* Card Dosen Standby */}
-            {standbyDosenList.length > 0 && (
-              <div className="mb-2">
-                <h3 className="text-lg font-semibold text-white dark:text-white/90 mb-2">Dosen Standby ({standbyDosenList.length})</h3>
-                <div className="space-y-5 max-h-96 overflow-y-auto hide-scroll">
-                  {standbyDosenList.map((d) => (
-                    <div
-                      key={d.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, d)}
-                      onDragEnd={handleDragEnd}
-                      className="p-4 min-w-0 w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl cursor-move hover:shadow-lg hover:border-yellow-400 dark:hover:border-yellow-300 transition-all duration-200 flex flex-col gap-2 sm:flex-row sm:items-center"
-                    >
-                      <div className="flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full bg-yellow-400">
-                        <span className="text-white text-xl font-bold">
-                          {d.name.charAt(0)}
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              Belum ada mata kuliah CSR
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Tambahkan mata kuliah CSR untuk memulai penugasan dosen.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {sortedSemesters.map((semester) => {
+              const semesterCSRs = groupedCSR[semester];
+              const availableCount = semesterCSRs.filter(
+                (csr) => csr.status === "available"
+              ).length;
+              const assignedCount = semesterCSRs.filter(
+                (csr) => csr.status === "assigned"
+              ).length;
+              const completedCount = semesterCSRs.filter(
+                (csr) => csr.status === "completed"
+              ).length;
+
+              return (
+                <div
+                  key={semester}
+                  className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-6 border border-gray-200 dark:border-gray-700"
+                >
+                  {/* Semester Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">
+                          {semester}
                         </span>
                       </div>
-                      <div className="flex-1 min-w-0 mt-2 sm:mt-0 sm:ml-4">
-                        <div className="font-bold text-base text-gray-800 dark:text-white/90 truncate">{d.name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">NID: {d.nid}</div>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {d.keahlianArr.map((k, idx) => (
-                            <span key={idx} className={`text-xs px-3 py-1 rounded-full ${k.toLowerCase() === 'standby' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 font-semibold' : 'bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'}`}>{k}</span>
-                          ))}
-                        </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">
+                          Semester {semester}
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {semesterCSRs.length} mata kuliah CSR
+                        </p>
                       </div>
                     </div>
-                  ))}
+
+                    {/* Status Summary */}
+                    <div className="flex items-center gap-4">
+                      {availableCount > 0 && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {availableCount} belum ditugaskan
+                          </span>
+                        </div>
+                      )}
+                      {assignedCount > 0 && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {assignedCount} sudah ditugaskan
+                          </span>
+                        </div>
+                      )}
+                      {completedCount > 0 && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-brand-400"></div>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {completedCount} selesai
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* CSR Cards Grid */}
+                  <div className="grid gap-4">
+                    {semesterCSRs.map((csr) => {
+                      const assignedDosen = getAssignedDosen(csr.id!);
+                      const availableDosen = getDosenByKeahlian(
+                        csr.keahlian_required
+                      );
+
+                      return (
+                        <div
+                          key={csr.id}
+                          className={`p-3 sm:p-5 rounded-xl border transition-all duration-300 ${
+                            csr.status === "available"
+                              ? "border-gray-200 dark:border-white/10 bg-white dark:bg-gray-800/50 hover:shadow-md"
+                              : csr.status === "assigned"
+                              ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20 shadow-lg scale-[1.02]"
+                              : "border-gray-200 dark:border-white/10 bg-white dark:bg-gray-800/50 hover:shadow-md"
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="flex-1">
+                                  <h4 className="font-semibold text-gray-800 dark:text-white/90 text-lg">
+                                    {csr.mata_kuliah_kode}
+                                  </h4>
+                                  <p className="text-gray-600 dark:text-gray-400 text-sm">
+                                    {csr.nama}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
+                                <span className="flex items-center gap-1">
+                                  <FontAwesomeIcon
+                                    icon={faBookOpen}
+                                    className="w-3 h-3"
+                                  />
+                                  {csr.nomor_csr}
+                                </span>
+                                {csr.tanggal_mulai && csr.tanggal_akhir && (
+                                  <span className="flex items-center gap-1">
+                                    <FontAwesomeIcon
+                                      icon={faCalendar}
+                                      className="w-3 h-3"
+                                    />
+                                    {new Date(
+                                      csr.tanggal_mulai
+                                    ).toLocaleDateString("id-ID")}{" "}
+                                    -{" "}
+                                    {new Date(
+                                      csr.tanggal_akhir
+                                    ).toLocaleDateString("id-ID")}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 mb-4">
+                                {csr.keahlian_required.map((k) => (
+                                  <span
+                                    key={k}
+                                    className="bg-brand-50 border border-brand-200 rounded-lg px-3 py-1 flex items-center gap-2 text-xs font-medium text-brand-700"
+                                  >
+                                    {k}
+                                    <span className="ml-1 text-gray-500">
+                                      (
+                                      {
+                                        dosen.filter((d) =>
+                                          (Array.isArray(d.keahlian)
+                                            ? d.keahlian
+                                            : d.keahlian
+                                                .split(",")
+                                                .map((x) => x.trim())
+                                          ).includes(k)
+                                        ).length
+                                      }{" "}
+                                      dosen )
+                                    </span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-row items-center gap-2 sm:ml-4">
+                              <span
+                                className={`text-xs px-3 py-1 rounded-full font-medium ${
+                                  csr.status === "available"
+                                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300"
+                                    : csr.status === "assigned"
+                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+                                    : "bg-brand-100 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300"
+                                }`}
+                              >
+                                {csr.status === "available"
+                                  ? "Belum Ditugaskan"
+                                  : csr.status === "assigned"
+                                  ? "Sudah Ditugaskan"
+                                  : "Selesai"}
+                              </span>
+                              <button
+                                onClick={() => handleEdit(csr)}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 bg-transparent rounded-lg transition"
+                                title="Edit CSR"
+                              >
+                                <FontAwesomeIcon
+                                  icon={faEdit}
+                                  className="w-4 h-4"
+                                />
+                                <span className="hidden sm:inline">Edit</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCsrToDelete(csr);
+                                  setShowDeleteModalCSR(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 bg-transparent rounded-lg transition"
+                                title="Hapus CSR"
+                              >
+                                <FontAwesomeIcon
+                                  icon={faTrash}
+                                  className="w-4 h-4"
+                                />
+                                <span className="hidden sm:inline">Hapus</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Assigned Dosen Section */}
+                          {assignedDosen ? (
+                            <div
+                              className={`border rounded-lg p-4 ${(() => {
+                                const dosenKeahlian = Array.isArray(
+                                  assignedDosen.keahlian
+                                )
+                                  ? assignedDosen.keahlian
+                                  : (assignedDosen.keahlian || "")
+                                      .split(",")
+                                      .map((k) => k.trim());
+                                return dosenKeahlian
+                                  .map((k) => k.toLowerCase())
+                                  .includes("standby")
+                                  ? "bg-yellow-50 border-yellow-200 dark:bg-yellow-500/20 dark:border-yellow-400"
+                                  : "bg-brand-50 border-brand-200 dark:bg-brand-900/20 dark:border-brand-700";
+                              })()}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center ${(() => {
+                                      const dosenKeahlian = Array.isArray(
+                                        assignedDosen.keahlian
+                                      )
+                                        ? assignedDosen.keahlian
+                                        : (assignedDosen.keahlian || "")
+                                            .split(",")
+                                            .map((k) => k.trim());
+                                      return dosenKeahlian
+                                        .map((k) => k.toLowerCase())
+                                        .includes("standby")
+                                        ? "bg-yellow-400"
+                                        : "bg-brand-500";
+                                    })()}`}
+                                  >
+                                    <span className="text-white text-sm font-bold">
+                                      {assignedDosen.name.charAt(0)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <div
+                                      className={`font-medium ${(() => {
+                                        const dosenKeahlian = Array.isArray(
+                                          assignedDosen.keahlian
+                                        )
+                                          ? assignedDosen.keahlian
+                                          : (assignedDosen.keahlian || "")
+                                              .split(",")
+                                              .map((k) => k.trim());
+                                        return dosenKeahlian
+                                          .map((k) => k.toLowerCase())
+                                          .includes("standby")
+                                          ? "text-yellow-800 dark:text-yellow-100"
+                                          : "text-gray-800 dark:text-white/90";
+                                      })()}`}
+                                    >
+                                      {assignedDosen.name}
+                                    </div>
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                      NID: {assignedDosen.nid}
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() =>
+                                    handleRemoveAssignment(csr.id!)
+                                  }
+                                  className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition"
+                                  title="Hapus penugasan"
+                                >
+                                  <FontAwesomeIcon
+                                    icon={faTimes}
+                                    className="w-4 h-4"
+                                  />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => navigate(`/csr/${csr.id}`)}
+                              className="mx-auto my-4 flex items-center gap-2 px-5 py-2 bg-brand-500 text-white rounded-lg font-semibold shadow hover:bg-brand-600 transition"
+                            >
+                              <FontAwesomeIcon
+                                icon={faUsers}
+                                className="w-4 h-4"
+                              />
+                              Lihat & Tugaskan Dosen
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Modal for CSR Form */}
@@ -1152,7 +1133,13 @@ const CSR: React.FC = () => {
                 onClick={handleCloseModal}
                 className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
               >
-                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" className="w-6 h-6">
+                <svg
+                  width="20"
+                  height="20"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  className="w-6 h-6"
+                >
                   <path
                     fillRule="evenodd"
                     clipRule="evenodd"
@@ -1164,7 +1151,9 @@ const CSR: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between pb-4 sm:pb-6">
                   <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">
-                    {editMode ? 'Edit Mata Kuliah CSR' : 'Tambah Nama Mata Kuliah CSR & Keahlian'}
+                    {editMode
+                      ? "Edit Mata Kuliah CSR"
+                      : "Tambah Nama Mata Kuliah CSR & Keahlian"}
                   </h2>
                 </div>
                 {error && (
@@ -1172,7 +1161,12 @@ const CSR: React.FC = () => {
                     {error}
                   </div>
                 )}
-                <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSubmit();
+                  }}
+                >
                   <div className="space-y-4">
                     {/* Dropdown Mata Kuliah Non Blok CSR */}
                     <div>
@@ -1181,14 +1175,16 @@ const CSR: React.FC = () => {
                       </label>
                       <select
                         value={form.mata_kuliah_kode}
-                        onChange={e => handleMataKuliahChange(e.target.value)}
+                        onChange={(e) => handleMataKuliahChange(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         required
                         disabled={editMode}
                       >
                         <option value="">Pilih mata kuliah...</option>
                         {mataKuliahNonBlokCSR.map((mk) => (
-                          <option key={mk.kode} value={mk.kode}>{mk.kode} - {mk.nama}</option>
+                          <option key={mk.kode} value={mk.kode}>
+                            {mk.kode} - {mk.nama}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -1199,20 +1195,29 @@ const CSR: React.FC = () => {
                       </label>
                       <select
                         value={selectedNomorCSR}
-                        onChange={e => handleNomorCSRChange(e.target.value)}
+                        onChange={(e) => handleNomorCSRChange(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         required
                         disabled={!form.mata_kuliah_kode || editMode}
                       >
                         {editMode ? (
-                          <option value={form.nomor_csr}>{form.nomor_csr}</option>
+                          <option value={form.nomor_csr}>
+                            {form.nomor_csr}
+                          </option>
                         ) : (
                           <>
                             <option value="">Pilih CSR...</option>
                             {availableCSR
-                              .filter(csr => !csr.nama || !csr.keahlian_required || csr.keahlian_required.length === 0)
+                              .filter(
+                                (csr) =>
+                                  !csr.nama ||
+                                  !csr.keahlian_required ||
+                                  csr.keahlian_required.length === 0
+                              )
                               .map((csr) => (
-                                <option key={csr.id} value={csr.nomor_csr}>{csr.nomor_csr}</option>
+                                <option key={csr.id} value={csr.nomor_csr}>
+                                  {csr.nomor_csr}
+                                </option>
                               ))}
                           </>
                         )}
@@ -1221,7 +1226,9 @@ const CSR: React.FC = () => {
                     {/* Input tanggal mulai & akhir (readonly) */}
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Tanggal Mulai</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                          Tanggal Mulai
+                        </label>
                         <input
                           type="date"
                           value={toDateInputValue(form.tanggal_mulai || "")}
@@ -1230,7 +1237,9 @@ const CSR: React.FC = () => {
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Tanggal Akhir</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                          Tanggal Akhir
+                        </label>
                         <input
                           type="date"
                           value={toDateInputValue(form.tanggal_akhir || "")}
@@ -1241,81 +1250,18 @@ const CSR: React.FC = () => {
                     </div>
                     {/* Input Nama Mata Kuliah CSR */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Nama Mata Kuliah CSR</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Nama Mata Kuliah CSR
+                      </label>
                       <input
                         type="text"
                         value={form.nama || ""}
-                        onChange={e => setForm({ ...form, nama: e.target.value })}
+                        onChange={(e) =>
+                          setForm({ ...form, nama: e.target.value })
+                        }
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         required
                       />
-                    </div>
-                    {/* Input Keahlian (sudah ada, tidak diubah) */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                        Keahlian yang Diperlukan
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={inputKeahlian}
-                          onChange={e => setInputKeahlian(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              const val = inputKeahlian.trim();
-                              if (val && getAllKeahlian().includes(val) && !form.keahlian_required.includes(val)) {
-                                setForm({ ...form, keahlian_required: [...form.keahlian_required, val] });
-                                setInputKeahlian("");
-                              }
-                            }
-                          }}
-                          placeholder="Cari & tambah keahlian..."
-                          className="w-full mb-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm"
-                          autoComplete="off"
-                        />
-                        {inputKeahlian && (
-                          <div className="absolute left-0 top-full w-full z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg mt-1 max-h-40 overflow-y-auto shadow-lg hide-scroll">
-                            {getAllKeahlian()
-                              .filter(k => !form.keahlian_required.includes(k) && k.toLowerCase().includes(inputKeahlian.toLowerCase()))
-                              .slice(0, 8)
-                              .map((k) => (
-                                <button
-                                  key={k}
-                                  type="button"
-                                  onClick={() => {
-                                    setForm({ ...form, keahlian_required: [...form.keahlian_required, k] });
-                                    setInputKeahlian("");
-                                  }}
-                                  className="block w-full text-left px-4 py-2 text-sm hover:bg-brand-100 dark:hover:bg-brand-900/30 text-gray-700 dark:text-gray-200"
-                                >
-                                  {k}
-                                </button>
-                              ))}
-                            {getAllKeahlian().filter(k => !form.keahlian_required.includes(k) && k.toLowerCase().includes(inputKeahlian.toLowerCase())).length === 0 && (
-                              <div className="px-4 py-2 text-sm text-gray-400">Tidak ditemukan</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {/* Chip/tag untuk keahlian yang sudah dipilih */}
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {(Array.isArray(form.keahlian_required) ? form.keahlian_required : []).map((k) => (
-                          <span key={k} className="flex items-center bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-200 px-3 py-1 rounded-full text-xs font-medium">
-                            {k}
-                            <button
-                              type="button"
-                              onClick={() => setForm(f => ({ ...f, keahlian_required: f.keahlian_required.filter(x => x !== k) }))}
-                              className="ml-2 text-xs text-red-500 hover:text-red-700 focus:outline-none"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                        {form.keahlian_required.length === 0 && (
-                          <span className="text-xs text-gray-400">Belum ada keahlian dipilih</span>
-                        )}
-                      </div>
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end pt-6">
@@ -1333,14 +1279,30 @@ const CSR: React.FC = () => {
                     >
                       {isSaving ? (
                         <>
-                          <svg className="w-5 h-5 mr-2 animate-spin text-white inline-block align-middle" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                          <svg
+                            className="w-5 h-5 mr-2 animate-spin text-white inline-block align-middle"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            ></circle>
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                            ></path>
                           </svg>
                           Menyimpan...
                         </>
                       ) : (
-                        'Simpan'
+                        "Simpan"
                       )}
                     </button>
                   </div>
@@ -1374,8 +1336,18 @@ const CSR: React.FC = () => {
                   onClick={handleCloseMappingModal}
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
@@ -1397,14 +1369,19 @@ const CSR: React.FC = () => {
                   <select
                     name="dosen_id"
                     value={mappingForm.dosen_id}
-                    onChange={(e) => setMappingForm({ ...mappingForm, dosen_id: e.target.value })}
+                    onChange={(e) =>
+                      setMappingForm({
+                        ...mappingForm,
+                        dosen_id: e.target.value,
+                      })
+                    }
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
                     required
                   >
                     <option value="">Pilih dosen...</option>
                     {availableDosen.map((dosen) => (
                       <option key={dosen.id} value={dosen.id}>
-                        {dosen.name} - {dosen.nid} ({dosen.keahlian.join(', ')})
+                        {dosen.name} - {dosen.nid} ({dosen.keahlian.join(", ")})
                       </option>
                     ))}
                   </select>
@@ -1413,7 +1390,9 @@ const CSR: React.FC = () => {
                 {/* Error Message */}
                 {mappingError && (
                   <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                    <p className="text-sm text-red-600 dark:text-red-400">{mappingError}</p>
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      {mappingError}
+                    </p>
                   </div>
                 )}
 
@@ -1448,7 +1427,10 @@ const CSR: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
-            onClick={() => { setShowDeleteModalCSR(false); setCsrToDelete(null); }}
+            onClick={() => {
+              setShowDeleteModalCSR(false);
+              setCsrToDelete(null);
+            }}
           ></motion.div>
           {/* Modal Content dengan animasi */}
           <motion.div
@@ -1460,11 +1442,20 @@ const CSR: React.FC = () => {
           >
             {/* Tombol close bulat kanan atas */}
             <button
-              onClick={() => { setShowDeleteModalCSR(false); setCsrToDelete(null); }}
+              onClick={() => {
+                setShowDeleteModalCSR(false);
+                setCsrToDelete(null);
+              }}
               className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
               aria-label="Tutup"
             >
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" className="w-6 h-6">
+              <svg
+                width="20"
+                height="20"
+                fill="none"
+                viewBox="0 0 24 24"
+                className="w-6 h-6"
+              >
                 <path
                   fillRule="evenodd"
                   clipRule="evenodd"
@@ -1473,13 +1464,20 @@ const CSR: React.FC = () => {
                 />
               </svg>
             </button>
-            <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Hapus Data</h2>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
+              Hapus Data
+            </h2>
             <p className="mb-6 text-gray-700 dark:text-gray-300">
-              Apakah Anda yakin ingin menghapus data mata kuliah <b>{csrToDelete.nama}</b>? Data yang dihapus tidak dapat dikembalikan.
+              Apakah Anda yakin ingin menghapus data mata kuliah{" "}
+              <b>{csrToDelete.nama}</b>? Data yang dihapus tidak dapat
+              dikembalikan.
             </p>
             <div className="flex justify-end gap-2 pt-2">
               <button
-                onClick={() => { setShowDeleteModalCSR(false); setCsrToDelete(null); }}
+                onClick={() => {
+                  setShowDeleteModalCSR(false);
+                  setCsrToDelete(null);
+                }}
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition"
               >
                 Batal
@@ -1491,14 +1489,30 @@ const CSR: React.FC = () => {
               >
                 {isDeleting ? (
                   <>
-                    <svg className="w-5 h-5 mr-2 animate-spin text-white inline-block align-middle" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    <svg
+                      className="w-5 h-5 mr-2 animate-spin text-white inline-block align-middle"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      ></path>
                     </svg>
                     Menghapus...
                   </>
                 ) : (
-                  'Hapus'
+                  "Hapus"
                 )}
               </button>
             </div>
@@ -1520,4 +1534,4 @@ const CSR: React.FC = () => {
   );
 };
 
-export default CSR; 
+export default CSR;

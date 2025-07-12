@@ -4,6 +4,8 @@ import {
   DownloadIcon,
   DocsIcon,
 } from '../icons';
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faClock } from "@fortawesome/free-solid-svg-icons";
 
 interface DosenCSRReport {
   dosen_id: number;
@@ -219,6 +221,7 @@ const ReportingDosen: React.FC = () => {
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">NID</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Keahlian</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Total CSR</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Total Waktu</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Per Semester</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Tanggal Mulai</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Tanggal Akhir</th>
@@ -228,7 +231,7 @@ const ReportingDosen: React.FC = () => {
               {loading ? (
                 Array.from({ length: SKELETON_ROWS }).map((_, idx) => (
                   <tr key={idx}>
-                    {Array.from({ length: 7 }).map((_, colIdx) => (
+                    {Array.from({ length: 8 }).map((_, colIdx) => (
                       <td key={colIdx} className="px-6 py-4">
                         <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse opacity-60 mb-2"></div>
                       </td>
@@ -237,57 +240,88 @@ const ReportingDosen: React.FC = () => {
                 ))
               ) : dosenCsrReport.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">Tidak ada data dosen mengajar CSR.</td>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">Tidak ada data dosen mengajar CSR.</td>
                 </tr>
               ) : (
-                dosenCsrReport.map((dosen, idx) => (
-                  <tr key={dosen.dosen_id} className={idx % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : '' + ' hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-colors'}>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.dosen_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.nid}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
-                      {(() => {
-                        let keahlianArr: string[] = [];
-                        if (Array.isArray(dosen.keahlian)) {
-                          keahlianArr = dosen.keahlian;
-                        } else if (typeof dosen.keahlian === 'string') {
-                          keahlianArr = String(dosen.keahlian).split(',').map((k: string) => k.trim()).filter(Boolean);
-                        } else {
-                          keahlianArr = [];
-                        }
-                        return keahlianArr.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {keahlianArr.map((k, i) => (
-                              <span key={i} className="text-xs px-2 py-1 bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded-full">
-                                {k}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span>-</span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.total_csr}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
-                      <div className="flex flex-col gap-1">
-                        {dosen.per_semester.map((sem) => (
-                          <div key={sem.semester} className="mb-1">
-                            <span className="font-semibold">Semester {sem.semester}:</span> {sem.jumlah} CSR
-                            {sem.blok_csr.length > 0 && (
-                              <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Blok: {sem.blok_csr.join(', ')})</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
-                      {dosen.tanggal_mulai ? new Date(dosen.tanggal_mulai).toLocaleDateString('id-ID') : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
-                      {dosen.tanggal_akhir ? new Date(dosen.tanggal_akhir).toLocaleDateString('id-ID') : '-'}
-                    </td>
-                  </tr>
-                ))
+                dosenCsrReport.map((dosen, idx) => {
+                  // Hitung total waktu: setiap CSR = 5x50 menit = 250 menit
+                  const totalWaktuMenit = dosen.total_csr * 5 * 50; // 5 sesi x 50 menit per CSR
+                  const totalJam = Math.floor(totalWaktuMenit / 60);
+                  const totalMenit = totalWaktuMenit % 60;
+                  
+                  return (
+                    <tr key={dosen.dosen_id} className={idx % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : '' + ' hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-colors'}>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.dosen_name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.nid}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
+                        {(() => {
+                          let keahlianArr: string[] = [];
+                          if (Array.isArray(dosen.keahlian)) {
+                            keahlianArr = dosen.keahlian;
+                          } else if (typeof dosen.keahlian === 'string') {
+                            keahlianArr = String(dosen.keahlian).split(',').map((k: string) => k.trim()).filter(Boolean);
+                          } else {
+                            keahlianArr = [];
+                          }
+                          return keahlianArr.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {keahlianArr.map((k, i) => (
+                                <span key={i} className="text-xs px-2 py-1 bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded-full">
+                                  {k}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span>-</span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.total_csr}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
+                        <div className="flex items-center gap-2">
+                          <FontAwesomeIcon icon={faClock} className="w-4 h-4 text-blue-500" />
+                          <span className="font-medium">
+                            {totalJam > 0 ? `${totalJam}j ${totalMenit}m` : `${totalMenit}m`}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            ({dosen.total_csr} × 5×50 menit)
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
+                        <div className="flex flex-col gap-1">
+                          {dosen.per_semester.map((sem) => {
+                            // Hitung waktu per semester
+                            const waktuPerSemester = sem.jumlah * 5 * 50; // 5 sesi x 50 menit per CSR
+                            const jamPerSemester = Math.floor(waktuPerSemester / 60);
+                            const menitPerSemester = waktuPerSemester % 60;
+                            
+                            return (
+                              <div key={sem.semester} className="mb-1">
+                                <span className="font-semibold">Semester {sem.semester}:</span> {sem.jumlah} CSR
+                                <div className="flex items-center gap-1 mt-1">
+                                  <FontAwesomeIcon icon={faClock} className="w-3 h-3 text-blue-500" />
+                                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                                    {jamPerSemester > 0 ? `${jamPerSemester}j ${menitPerSemester}m` : `${menitPerSemester}m`}
+                                  </span>
+                                </div>
+                                {sem.blok_csr.length > 0 && (
+                                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Blok: {sem.blok_csr.join(', ')})</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
+                        {dosen.tanggal_mulai ? new Date(dosen.tanggal_mulai).toLocaleDateString('id-ID') : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
+                        {dosen.tanggal_akhir ? new Date(dosen.tanggal_akhir).toLocaleDateString('id-ID') : '-'}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

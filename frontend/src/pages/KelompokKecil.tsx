@@ -506,10 +506,12 @@ const KelompokKecil: React.FC = () => {
       for (const kk of kelompokKecilData) {
         await kelompokKecilApi.delete(kk.id);
       }
-      setMahasiswa((prev) => prev.map((m) => ({ ...m, kelompok: undefined })));
+      
+      // Reload all data to refresh mahasiswaInOtherSemesters state
+      await loadData();
+      
       setSelectedMahasiswa([]);
       setShowKelompok(false);
-      setKelompokKecilData([]);
       setHasSavedData(false);
       setHasUnsavedChanges(false);
     } catch (error: any) {

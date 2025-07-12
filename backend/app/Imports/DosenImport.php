@@ -41,6 +41,11 @@ class DosenImport implements ToCollection, WithHeadingRow
                 $rowArray['peran_kurikulum'] = null;
             }
 
+            $rowArray['peran_utama'] = $originalRowArray['peran_utama'] ?? null;
+            $rowArray['matkul_ketua_id'] = $originalRowArray['matkul_ketua_id'] ?? null;
+            $rowArray['matkul_anggota_id'] = $originalRowArray['matkul_anggota_id'] ?? null;
+            $rowArray['peran_kurikulum_mengajar'] = $originalRowArray['peran_kurikulum_mengajar'] ?? null;
+
             $currentRowErrors = [];
             
             // 1. Validasi keberadaan field wajib dan isinya tidak kosong (basic validation)
@@ -52,6 +57,10 @@ class DosenImport implements ToCollection, WithHeadingRow
                 'email' => 'required',
                 'telp' => 'required',
                 'password' => 'required|min:6',
+                'peran_utama' => 'required|in:ketua,anggota,dosen_mengajar',
+                'matkul_ketua_id' => 'nullable|required_if:peran_utama,ketua|exists:mata_kuliah,kode',
+                'matkul_anggota_id' => 'nullable|required_if:peran_utama,anggota|exists:mata_kuliah,kode',
+                'peran_kurikulum_mengajar' => 'nullable|required_if:peran_utama,dosen_mengajar|string',
             ], [
                 'nid.required' => 'NID harus diisi (Baris '.($index+2).')',
                 'nidn.required' => 'NIDN harus diisi (Baris '.($index+2).')',
@@ -61,6 +70,11 @@ class DosenImport implements ToCollection, WithHeadingRow
                 'telp.required' => 'Nomor telepon harus diisi (Baris '.($index+2).')',
                 'password.required' => 'Password harus diisi (Baris '.($index+2).')',
                 'password.min' => 'Password minimal 6 karakter (Baris '.($index+2).')',
+                'peran_utama.required' => 'Peran utama harus diisi (Baris '.($index+2).')',
+                'peran_utama.in' => 'Peran utama tidak valid (Baris '.($index+2).')',
+                'matkul_ketua_id.required_if' => 'Mata kuliah ketua harus diisi jika peran ketua (Baris '.($index+2).')',
+                'matkul_anggota_id.required_if' => 'Mata kuliah anggota harus diisi jika peran anggota (Baris '.($index+2).')',
+                'peran_kurikulum_mengajar.required_if' => 'Peran kurikulum mengajar harus diisi jika peran dosen mengajar (Baris '.($index+2).')',
             ]);
 
             if ($basicValidator->fails()) {
@@ -69,6 +83,7 @@ class DosenImport implements ToCollection, WithHeadingRow
                         $excelFieldName = $field;
                         if ($field === 'name') $excelFieldName = 'nama';
                         if ($field === 'telp') $excelFieldName = 'telepon';
+                        if ($field === 'peran_kurikulum') $excelFieldName = 'peran_dalam_kurikulum';
 
                         $currentRowErrors[] = [
                             'type' => 'required_or_min',
@@ -131,6 +146,25 @@ class DosenImport implements ToCollection, WithHeadingRow
                 }
             }
 
+            // Validasi satu matkul hanya satu ketua
+            if ($rowArray['peran_utama'] === 'ketua' && User::where('matkul_ketua_id', $rowArray['matkul_ketua_id'])->where('peran_utama', 'ketua')->exists()) {
+                $currentRowErrors[] = [
+                    'type' => 'duplicate_ketua',
+                    'field' => 'matkul_ketua_id',
+                    'message' => 'Mata kuliah ini sudah memiliki ketua (Baris '.($index+2).')',
+                    'nid' => $rowArray['nid'] ?? null,
+                ];
+            }
+            // Validasi anggota max 3 per matkul
+            if ($rowArray['peran_utama'] === 'anggota' && User::where('matkul_anggota_id', $rowArray['matkul_anggota_id'])->where('peran_utama', 'anggota')->count() >= 3) {
+                $currentRowErrors[] = [
+                    'type' => 'max_anggota',
+                    'field' => 'matkul_anggota_id',
+                    'message' => 'Mata kuliah ini sudah memiliki 3 anggota (Baris '.($index+2).')',
+                    'nid' => $rowArray['nid'] ?? null,
+                ];
+            }
+
             // 3. Validasi duplikat terhadap database yang sudah ada
             // Gunakan Laravel Validator untuk unique di database
             $dbValidator = Validator::make($rowArray, [
@@ -191,6 +225,10 @@ class DosenImport implements ToCollection, WithHeadingRow
                 'role' => 'dosen',
                 'kompetensi' => $rowArray['kompetensi'],
                 'peran_kurikulum' => $rowArray['peran_kurikulum'],
+                'peran_utama' => $rowArray['peran_utama'],
+                'matkul_ketua_id' => $rowArray['matkul_ketua_id'],
+                'matkul_anggota_id' => $rowArray['matkul_anggota_id'],
+                'peran_kurikulum_mengajar' => $rowArray['peran_kurikulum_mengajar'],
             ]);
         }
     }

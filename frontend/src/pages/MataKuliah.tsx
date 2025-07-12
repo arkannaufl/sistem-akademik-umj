@@ -145,6 +145,7 @@ export default function MataKuliah() {
     blok: null,
     durasiMinggu: null,
     tipe_non_block: 'Non-CSR',
+    peran_dalam_kurikulum: [],
   });
   const [importedFile, setImportedFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
@@ -398,6 +399,7 @@ export default function MataKuliah() {
       tanggalAkhir: mk.tanggal_akhir ? mk.tanggal_akhir.slice(0, 10) : '',
       durasiMinggu: mk.durasi_minggu || null,
       tipe_non_block: mk.tipe_non_block || 'Non-CSR',
+      peran_dalam_kurikulum: Array.isArray(mk.peran_dalam_kurikulum) ? mk.peran_dalam_kurikulum : [],
     });
     setShowModal(true);
     setEditMode(true);
@@ -510,6 +512,7 @@ export default function MataKuliah() {
       blok: null,
       durasiMinggu: null,
       tipe_non_block: 'Non-CSR',
+      peran_dalam_kurikulum: [],
     });
     setEditMode(false);
     setJumlahCSR(1);
@@ -1692,7 +1695,7 @@ export default function MataKuliah() {
                     Peran dalam Kurikulum
                   </label>
                   <Listbox
-                    value={form.peran_dalam_kurikulum || []}
+                    value={Array.isArray(form.peran_dalam_kurikulum) ? form.peran_dalam_kurikulum : []}
                     onChange={val => setForm(f => ({ ...f, peran_dalam_kurikulum: val }))}
                     multiple
                   >
@@ -1700,9 +1703,9 @@ export default function MataKuliah() {
                       <div className="relative">
                         <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
                           <span className="block truncate">
-                            {(form.peran_dalam_kurikulum || []).length === 0
-                              ? "Pilih Peran"
-                              : (form.peran_dalam_kurikulum || []).join(", ")}
+                            {Array.isArray(form.peran_dalam_kurikulum) && form.peran_dalam_kurikulum.length > 0
+                              ? form.peran_dalam_kurikulum.join(", ")
+                              : "Pilih Peran"}
                           </span>
                           <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                             <FontAwesomeIcon

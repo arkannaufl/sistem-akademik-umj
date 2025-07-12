@@ -27,6 +27,7 @@ import PBLDetail from "./pages/PBL-detail";
 import PBLList from "./pages/PBL";
 import PBLGenerate from "./pages/PBLGenerate";
 import MataKuliahKeahlian from "./pages/MataKuliahKeahlian";
+import CSRDetail from "./pages/CSRDetail";
 
 function AppContent() {
   const { isSessionExpired, setSessionExpired } = useSession();
@@ -36,9 +37,9 @@ function AppContent() {
       setSessionExpired(true);
     };
 
-    window.addEventListener('sessionExpired', handleSessionExpired);
+    window.addEventListener("sessionExpired", handleSessionExpired);
     return () => {
-      window.removeEventListener('sessionExpired', handleSessionExpired);
+      window.removeEventListener("sessionExpired", handleSessionExpired);
     };
   }, [setSessionExpired]);
 
@@ -57,6 +58,7 @@ function AppContent() {
               <Route path="/pbl/generate/:blokId" element={<PBLGenerate />} />
               <Route path="/pbl/keahlian" element={<MataKuliahKeahlian />} />
               <Route path="/csr" element={<CSR />} />
+              <Route path="/csr/:csrId" element={<CSRDetail />} />
               <Route path="/dosen" element={<Dosen />} />
               <Route path="/mahasiswa" element={<Mahasiswa />} />
               <Route path="/tim-akademik" element={<TimAkademik />} />
@@ -64,18 +66,34 @@ function AppContent() {
               <Route path="/ruangan" element={<Ruangan />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/peta-akademik" element={<PetaAkademikPage />} />
-              <Route path="/generate/kelompok-besar/:semester" element={<KelompokBesar />} />
+              <Route
+                path="/generate/kelompok-besar/:semester"
+                element={<KelompokBesar />}
+              />
               <Route path="/generate/kelompok" element={<Kelompok />} />
               <Route path="/generate/kelas" element={<Kelas />} />
               <Route path="/reporting/dosen" element={<ReportingDosen />} />
               <Route path="/reporting/histori" element={<Histori />} />
-              <Route path="/generate/kelompok/:semester" element={<KelompokKecil />} />
-              <Route path="/generate/kelas/:semester" element={<KelasDetail />} />
+              <Route
+                path="/generate/kelompok/:semester"
+                element={<KelompokKecil />}
+              />
+              <Route
+                path="/generate/kelas/:semester"
+                element={<KelasDetail />}
+              />
             </Route>
           </Route>
 
           {/* Public Route: Login only, with redirect if already logged in */}
-          <Route path="/login" element={<RedirectIfAuth><SignIn /></RedirectIfAuth>} />
+          <Route
+            path="/login"
+            element={
+              <RedirectIfAuth>
+                <SignIn />
+              </RedirectIfAuth>
+            }
+          />
         </Routes>
         <SessionExpiredModal isOpen={isSessionExpired} />
       </Router>

@@ -201,14 +201,19 @@ class MataKuliahPBLKelompokKecilController extends Controller
         if (!is_array($kodeList) || !$semester) {
             return response()->json(['message' => 'Parameter mata_kuliah_kode (array) dan semester (string) diperlukan'], 400);
         }
+        
+        // OPTIMIZATION: Use single query with whereIn instead of foreach
+        $allMappings = MataKuliahPBLKelompokKecil::where('semester', $semester)
+            ->whereIn('mata_kuliah_kode', $kodeList)
+            ->get()
+            ->groupBy('mata_kuliah_kode');
+        
         $result = [];
         foreach ($kodeList as $kode) {
-            $mappings = MataKuliahPBLKelompokKecil::where('mata_kuliah_kode', $kode)
-                ->where('semester', $semester)
-                ->pluck('nama_kelompok')
-                ->toArray();
+            $mappings = $allMappings->get($kode, collect())->pluck('nama_kelompok')->toArray();
             $result[$kode] = $mappings;
         }
+        
         return response()->json($result);
     }
 
@@ -225,9 +230,30 @@ class MataKuliahPBLKelompokKecilController extends Controller
         if (!is_array($namaList) || !$semester) {
             return response()->json(['message' => 'Parameter nama_kelompok (array) dan semester (string) diperlukan'], 400);
         }
+        
+        // OPTIMIZATION: Use single query with whereIn
         $data = KelompokKecil::where('semester', $semester)
             ->whereIn('nama_kelompok', $namaList)
             ->get();
+            
         return response()->json($data);
+    }
+
+
+    public function batchMappingMultiSemester(Request $request)
+    {
+        $semesterMap = $request->input('semester_map', []);
+        $result = [];
+        foreach ($semesterMap as $semester => $kodeList) {
+            $allMappings = \App\Models\MataKuliahPBLKelompokKecil::where('semester', $semester)
+                ->whereIn('mata_kuliah_kode', $kodeList)
+                ->get()
+                ->groupBy('mata_kuliah_kode');
+            $result[$semester] = [];
+            foreach ($kodeList as $kode) {
+                $result[$semester][$kode] = $allMappings->get($kode, collect())->pluck('nama_kelompok')->toArray();
+            }
+        }
+        return response()->json($result);
     }
 }

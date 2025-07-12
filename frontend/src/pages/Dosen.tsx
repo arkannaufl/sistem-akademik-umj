@@ -21,9 +21,16 @@ type UserDosen = {
   telp: string;
   password?: string;
   role?: string;
-  kompetensi?: string[] | string; // Bisa berupa array atau string
-  peran_kurikulum?: string[] | string; // Bisa berupa array atau string
-  keahlian?: string[] | string; // <--- Tambah ini
+  kompetensi?: string[] | string;
+  peran_kurikulum?: string[] | string;
+  keahlian?: string[] | string;
+  // Tambahan untuk fitur peran utama
+  peran_utama?: "ketua" | "anggota" | "dosen_mengajar";
+  matkul_ketua_nama?: string;
+  matkul_ketua_semester?: number;
+  matkul_anggota_nama?: string;
+  matkul_anggota_semester?: number;
+  peran_kurikulum_mengajar?: string;
 };
 
 export default function Dosen() {
@@ -64,6 +71,13 @@ export default function Dosen() {
   const [filterKeahlian, setFilterKeahlian] = useState<string[]>([]);
   // Tambahkan state untuk daftar peran kurikulum global
   const [peranKurikulumOptions, setPeranKurikulumOptions] = useState<string[]>([]);
+  // Untuk fitur peran utama dosen
+  const [peranUtama, setPeranUtama] = useState<string>("");
+  const [matkulList, setMatkulList] = useState<{ kode: string; nama: string; semester: number }[]>([]);
+  const [matkulKetua, setMatkulKetua] = useState<string>("");
+  const [matkulAnggota, setMatkulAnggota] = useState<string>("");
+  const [peranKurikulumMengajar, setPeranKurikulumMengajar] = useState<string>("");
+  const [activeSemester, setActiveSemester] = useState<string | null>(null);
 
   useEffect(() => {
     if (success) {
@@ -73,6 +87,14 @@ export default function Dosen() {
       return () => clearTimeout(timer);
     }
   }, [success]);
+
+  const isPeranValid = peranUtama === "standby" || (
+    peranUtama !== "" && (
+      (peranUtama === "ketua" && matkulKetua) ||
+      (peranUtama === "anggota" && matkulAnggota) ||
+      (peranUtama === "dosen_mengajar" && peranKurikulumMengajar)
+    )
+  );
 
   // Fungsi untuk download template Excel
   const downloadTemplate = async () => {
@@ -132,32 +154,82 @@ export default function Dosen() {
   }, []);
 
   useEffect(() => {
-    // Extract unique kompetensi from existing data
+    async function fetchSemesterAndMatkul() {
+      try {
+        const tahunRes = await api.get("/tahun-ajaran");
+        const tahunAktif = tahunRes.data.find((t: any) => t.aktif);
+        let semesterAktif = null;
+        if (tahunAktif && tahunAktif.semesters) {
+          const semAktif = tahunAktif.semesters.find((s: any) => s.aktif);
+          semesterAktif = semAktif ? semAktif.jenis : null;
+        }
+        setActiveSemester(semesterAktif);
+        // Ambil matkul sesuai semester aktif
+        const mkRes = await api.get("/mata-kuliah");
+        let mkList = mkRes.data;
+        if (semesterAktif) {
+          mkList = mkList.filter((mk: any) => (semesterAktif === "Ganjil" ? mk.semester % 2 === 1 : mk.semester % 2 === 0));
+        }
+        setMatkulList(mkList.map((mk: any) => ({ kode: mk.kode, nama: mk.nama, semester: mk.semester })));
+      } catch (e) {
+        setMatkulList([]);
+      }
+    }
+    if (showModal) fetchSemesterAndMatkul();
+  }, [showModal]);
+
+  useEffect(() => {
+    if (!showModal) {
+      setPeranUtama("");
+      setMatkulKetua("");
+      setMatkulAnggota("");
+      setPeranKurikulumMengajar("");
+    }
+  }, [showModal]);
+
+  useEffect(() => {
+    // Extract unique kompetensi dari data dosen, handle jika string JSON
     const kompetensiList = Array.from(
       new Set(
-        data.flatMap(d => 
-          typeof d.kompetensi === 'string' 
-            ? d.kompetensi.split(',').map(item => item.trim()).filter(item => item !== '')
-            : Array.isArray(d.kompetensi) 
-              ? d.kompetensi.map(item => item.trim()).filter(item => item !== '')
-              : []
-        )
+        data.flatMap(d => {
+          if (Array.isArray(d.kompetensi)) {
+            return d.kompetensi.map(item => String(item).trim()).filter(item => item !== '');
+          } else if (typeof d.kompetensi === 'string' && d.kompetensi.trim() !== '') {
+            try {
+              const parsed = JSON.parse(d.kompetensi);
+              if (Array.isArray(parsed)) return parsed.map(item => String(item).trim()).filter(item => item !== '');
+            } catch {
+              // Bukan JSON, split biasa
+            }
+            return d.kompetensi.split(',').map(item => item.trim()).filter(item => item !== '');
+          }
+          return [];
+        })
       )
     ).sort();
     setAvailableKompetensi(kompetensiList);
   }, [data]);
 
+
+
   useEffect(() => {
-    // Extract unique keahlian dari data dosen
+    // Extract unique keahlian dari data dosen, handle jika string JSON
     const keahlianList = Array.from(
       new Set(
-        data.flatMap(d =>
-          typeof d.keahlian === 'string'
-            ? d.keahlian.split(',').map(item => item.trim()).filter(item => item !== '')
-            : Array.isArray(d.keahlian)
-              ? d.keahlian.map(item => item.trim()).filter(item => item !== '')
-              : []
-        )
+        data.flatMap(d => {
+          if (Array.isArray(d.keahlian)) {
+            return d.keahlian.map(item => String(item).trim()).filter(item => item !== '');
+          } else if (typeof d.keahlian === 'string' && d.keahlian.trim() !== '') {
+            try {
+              const parsed = JSON.parse(d.keahlian);
+              if (Array.isArray(parsed)) return parsed.map(item => String(item).trim()).filter(item => item !== '');
+            } catch {
+              // Bukan JSON, split biasa
+            }
+            return d.keahlian.split(',').map(item => item.trim()).filter(item => item !== '');
+          }
+          return [];
+        })
       )
     ).sort();
     setAvailableKeahlian(keahlianList);
@@ -248,7 +320,32 @@ const handleAdd = async () => {
   setIsSaving(true);
   setModalError("");
   try {
-    let payload = { ...form };
+    let payload;
+    if (peranUtama === "standby") {
+      payload = {
+        ...form,
+        peran_utama: "standby",
+        matkul_ketua_id: null,
+        matkul_anggota_id: null,
+        peran_kurikulum_mengajar: null,
+        kompetensi: [],
+        keahlian: [],
+      };
+    } else {
+      payload = {
+        ...form,
+        peran_utama: peranUtama,
+        matkul_ketua_id: matkulKetua,
+        matkul_anggota_id: matkulAnggota,
+        peran_kurikulum_mengajar: peranKurikulumMengajar,
+      };
+      // Pastikan kompetensi adalah array
+      payload.kompetensi = Array.isArray(payload.kompetensi) 
+        ? payload.kompetensi.filter(k => k.trim() !== '')
+        : payload.kompetensi 
+          ? payload.kompetensi.split(',').map(k => k.trim()).filter(k => k !== '')
+          : [];
+    }
     
     // Pastikan kompetensi adalah array
     payload.kompetensi = Array.isArray(payload.kompetensi) 
@@ -282,6 +379,12 @@ const handleAdd = async () => {
       await api.post("/users", payload);
       setSuccess("Data dosen berhasil ditambahkan.");
     }
+
+    if (!isPeranValid) {
+      setModalError("Pilih peran utama dan lengkapi opsinya.");
+      setIsSaving(false);
+      return;
+    }
     
     const res = await api.get("/users?role=dosen");
     setData(res.data);
@@ -297,7 +400,46 @@ const handleAdd = async () => {
   }
 };
   const handleEdit = (d: UserDosen) => {
-    setForm({ ...d, password: "" });
+  // Pastikan kompetensi dan keahlian selalu array
+  let kompetensiArr: string[] = [];
+  if (Array.isArray(d.kompetensi)) {
+    kompetensiArr = d.kompetensi;
+  } else if (typeof d.kompetensi === "string" && d.kompetensi.trim() !== "") {
+    try {
+      const parsed = JSON.parse(d.kompetensi);
+      if (Array.isArray(parsed)) kompetensiArr = parsed;
+      else kompetensiArr = d.kompetensi.split(",").map(k => k.trim()).filter(k => k !== "");
+    } catch {
+      kompetensiArr = d.kompetensi.split(",").map(k => k.trim()).filter(k => k !== "");
+    }
+  }
+
+  let keahlianArr: string[] = [];
+  if (Array.isArray(d.keahlian)) {
+    keahlianArr = d.keahlian;
+  } else if (typeof d.keahlian === "string" && d.keahlian.trim() !== "") {
+    try {
+      const parsed = JSON.parse(d.keahlian);
+      if (Array.isArray(parsed)) keahlianArr = parsed;
+      else keahlianArr = d.keahlian.split(",").map(k => k.trim()).filter(k => k !== "");
+    } catch {
+      keahlianArr = d.keahlian.split(",").map(k => k.trim()).filter(k => k !== "");
+    }
+  }
+
+  setForm({ ...d, password: "", kompetensi: kompetensiArr, keahlian: keahlianArr });
+  setPeranUtama(d.peran_utama || "");
+  setMatkulKetua(
+    d.matkul_ketua_nama
+      ? (matkulList.find(mk => mk.nama === d.matkul_ketua_nama)?.kode || "")
+      : ""
+  );
+  setMatkulAnggota(
+    d.matkul_anggota_nama
+      ? (matkulList.find(mk => mk.nama === d.matkul_anggota_nama)?.kode || "")
+      : ""
+  );
+  setPeranKurikulumMengajar(d.peran_kurikulum_mengajar || "");
     setShowModal(true);
     setEditMode(true);
   };
@@ -1078,80 +1220,161 @@ const handleSubmitImport = async () => {
               <table className="min-w-full divide-y divide-gray-100 dark:divide-white/[0.05] text-sm">
                 <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
                   <tr>
-                    {paginatedPreviewData[0] && Object.keys(paginatedPreviewData[0]).map((h) => (
-                      <th key={h} className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">{h}</th>
-                    ))}
+      <th className="px-4 py-4"></th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NID</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NIDN</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Nama</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Username</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Email</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">No. Telepon</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Peran Utama</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Mata Kuliah/Peran Kurikulum</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-center text-xs uppercase tracking-wider dark:text-gray-400">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedPreviewData.length > 0 ? (
-                    paginatedPreviewData.map((row, i) => {
-                      const globalRowIdx = (previewPage - 1) * previewPageSize + i;
-                      return (
-                        <React.Fragment key={row.id || row.nid || `preview-row-${i}`}>
-                          <tr key={row.id || row.nid} className={i % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : ''}>
-                            {Object.entries(row).map(([colKey, v], _j) => {
-                              const isEditing = editingCell && editingCell.row === globalRowIdx && editingCell.key === colKey;
-                              // Cek apakah cell ini error (berdasarkan row index dan field key)
-                              const cellError = cellErrors.find(
-                                err => err.row === globalRowIdx && err.field === colKey
-                              );
-                              return (
-                                <td
-                                  key={colKey}
-                                  className={`px-6 py-4 border-b border-gray-100 dark:border-gray-800 text-gray-800 dark:text-gray-100 whitespace-nowrap cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-700/20 ${isEditing ? 'border-2 border-brand-500' : ''} ${cellError ? 'bg-red-100 dark:bg-red-900/30' : ''}`}
-                                  onClick={() => setEditingCell({ row: globalRowIdx, key: colKey })}
-                                  title={cellError ? cellError.message : ''}
-                                >
-                                  {isEditing ? (
-                                    <input
-                                      className="w-full px-1 border-none outline-none text-xs md:text-sm"
-                                      value={previewData[editingCell.row][editingCell.key] || ""}
-                                      onChange={e => {
-                                        let val = e.target.value;
-                                        if (["nid", "nidn", "telepon"].includes(colKey)) {
-                                          val = val.replace(/[^0-9]/g, "");
-                                        }
-                                        
-                                        let processedValue: string | string[] = val;
-                                        if (colKey === 'peran_dalam_kurikulum') {
-                                            processedValue = val; // Keep as string
-                                        } else if (colKey === 'kompetensi') {
-                                            processedValue = val; // Keep as string
-                                        } else if (["nid", "nidn", "telepon"].includes(colKey)) {
-                                            // These fields still need to be numeric only
-                                            processedValue = val.replace(/[^0-9]/g, "");
+    {loading ? (
+      // Skeleton loading: tampilkan 5 baris skeleton
+      Array.from({ length: 5 }).map((_, idx) => (
+        <tr key={idx} className="animate-pulse">
+          {/* Checkbox */}
+          <td className="px-4 py-4">
+            <div className="w-5 h-5 rounded-md bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* NID */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* NIDN */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Nama */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Username */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-24 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Email */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Telp */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Kompetensi */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Keahlian */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Peran Kurikulum */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Peran Utama */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Matkul/Peran Kurikulum */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Aksi */}
+          <td className="px-6 py-4 text-center">
+            <div className="h-8 w-16 rounded bg-gray-200 dark:bg-gray-700 mx-auto" />
+          </td>
+        </tr>
+      ))
+    ) : paginatedData.length > 0 ? (
+      paginatedData.map((d, idx) => (
+        <tr key={d.nid} className={idx % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : ''}>
+          <td className="px-4 py-4">
+            <button
+              type="button"
+              aria-checked={selectedRows.includes(String(d.id || d.nid))}
+              role="checkbox"
+              onClick={() => {
+                if (selectedRows.includes(String(d.id || d.nid))) {
+                  setSelectedRows(selectedRows.filter(id => id !== String(d.id || d.nid)));
                                         } else {
-                                            processedValue = val;
-                                        }
-
-                                        handleCellEdit(globalRowIdx, colKey, processedValue);
-                                      }}
-                                      onKeyDown={e => {
-                                        if (["nid", "nidn", "telepon"].includes(colKey)) {
-                                          if (!/^[0-9]$/.test(e.key) && !["Backspace", "Delete", "Tab", "Escape", "Enter", "ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
-                                            e.preventDefault();
-                                          }
-                                        }
-                                        if (e.key === 'Enter') setEditingCell(null);
-                                      }}
-                                      onBlur={() => setEditingCell(null)}
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    // Display peran_dalam_kurikulum and kompetensi as comma-separated string if they are arrays, else display as string
-                                    (colKey === 'peran_dalam_kurikulum' || colKey === 'kompetensi') && Array.isArray(v) ? v.join(', ') : v as string
-                                  )}
+                  setSelectedRows([...selectedRows, String(d.id || d.nid)]);
+                }
+              }}
+              className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${selectedRows.includes(String(d.id || d.nid)) ? "bg-brand-500 border-brand-500" : "bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700"} cursor-pointer`}
+            >
+              {selectedRows.includes(String(d.id || d.nid)) && (
+                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                  <polyline points="20 7 11 17 4 10" />
+                </svg>
+              )}
+            </button>
                                 </td>
-                              );
-                            })}
+          <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800 dark:text-white/90 align-middle">{d.nid}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.nidn}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.name}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.username}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.email}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle min-w-[120px]">{d.telp}</td>
+          {/* Kolom Peran Utama */}
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
+            {d.peran_utama === "ketua" && (
+              <span className="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Ketua</span>
+            )}
+            {d.peran_utama === "anggota" && (
+              <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">Anggota</span>
+            )}
+            {d.peran_utama === "dosen_mengajar" && (
+              <span className="inline-block px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">Dosen Mengajar</span>
+            )}
+          </td>
+          {/* Kolom Mata Kuliah/Peran Kurikulum */}
+          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
+            {d.peran_utama === "ketua" && d.matkul_ketua_nama && d.matkul_ketua_semester && (
+              <span>
+                {d.matkul_ketua_nama} (Semester {d.matkul_ketua_semester})
+              </span>
+            )}
+            {d.peran_utama === "anggota" && d.matkul_anggota_nama && d.matkul_anggota_semester && (
+              <span>
+                {d.matkul_anggota_nama} (Semester {d.matkul_anggota_semester})
+              </span>
+            )}
+            {d.peran_utama === "dosen_mengajar" && d.peran_kurikulum_mengajar && (
+              <span>{d.peran_kurikulum_mengajar}</span>
+            )}
+          </td>
+          {/* Kolom Aksi */}
+          <td className="px-6 py-4 whitespace-nowrap text-center align-middle">
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => handleEdit(d)}
+                className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-brand-500 hover:text-brand-700 dark:hover:text-brand-300 transition"
+                title="Edit"
+              >
+                <FontAwesomeIcon icon={faPenToSquare} className="w-5 h-5" />
+                Edit
+              </button>
+              <button
+                onClick={() => handleDelete(d.id!.toString())}
+                className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 transition"
+                title="Delete"
+              >
+                <FontAwesomeIcon icon={faTrash} className="w-5 h-5" />
+                Delete
+              </button>
+            </div>
+          </td>
                           </tr>
-                        </React.Fragment>
-                      );
-                    })
+      ))
                   ) : (
                     <tr>
-                      <td colSpan={paginatedPreviewData[0] ? Object.keys(paginatedPreviewData[0]).length : 1} className="text-center py-8 text-gray-400 dark:text-gray-500">Belum ada data.</td>
+        <td colSpan={10} className="text-center py-8 text-gray-400 dark:text-gray-500">Belum ada data.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1275,86 +1498,84 @@ const handleSubmitImport = async () => {
           <table className="min-w-full divide-y divide-gray-100 dark:divide-white/[0.05] text-sm">
             <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-4">
-                  <button
-                    type="button"
-                    aria-checked={filteredData.length > 0 && filteredData.every(d => selectedRows.includes(String(d.id || d.nid)))}
-                    role="checkbox"
-                    onClick={() => {
-                      if (filteredData.length > 0 && filteredData.every(d => selectedRows.includes(String(d.id || d.nid)))) {
-                        setSelectedRows([]);
-                      } else {
-                        setSelectedRows(filteredData.map(d => String(d.id || d.nid)));
-                      }
-                    }}
-                    className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${filteredData.length > 0 && filteredData.every(d => selectedRows.includes(String(d.id || d.nid))) ? "bg-brand-500 border-brand-500" : "bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700"} cursor-pointer`}
-                  >
-                    {filteredData.length > 0 && filteredData.every(d => selectedRows.includes(String(d.id || d.nid))) && (
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                        <polyline points="20 7 11 17 4 10" />
-                      </svg>
-                    )}
-                  </button>
-                </th>
+      <th className="px-4 py-4"></th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NID</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NIDN</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Nama</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Username</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Email</th>
-                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Nomor Telepon</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">No. Telepon</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Kompetensi</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Keahlian</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Peran dalam Kurikulum</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Peran Utama</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Mata Kuliah/Peran Kurikulum</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-center text-xs uppercase tracking-wider dark:text-gray-400">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {isSaving ? (
-                Array.from({ length: pageSize }).map((_, idx) => (
-                  <tr key={idx}>
+    {loading ? (
+      // Skeleton loading: tampilkan 5 baris skeleton
+      Array.from({ length: 5 }).map((_, idx) => (
+        <tr key={idx} className="animate-pulse">
+          {/* Checkbox */}
                     <td className="px-4 py-4">
-                      <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+            <div className="w-5 h-5 rounded-md bg-gray-200 dark:bg-gray-700" />
                     </td>
-                    {Array.from({ length: 10 }).map((_, colIdx) => (
-                      <td key={colIdx} className="px-6 py-4">
-                        <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          {/* NID */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
                       </td>
-                    ))}
-                  </tr>
-                ))
-              ) : isDeleting && selectedRows.length > 0 ? (
-                Array.from({ length: pageSize }).map((_, idx) => (
-                  <tr key={idx}>
-                    <td className="px-4 py-4">
-                      <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          {/* NIDN */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
                     </td>
-                    {Array.from({ length: 10 }).map((_, colIdx) => (
-                      <td key={colIdx} className="px-6 py-4">
-                        <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          {/* Nama */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
                       </td>
-                    ))}
-                  </tr>
-                ))
-              ) : loading ? (
-                Array.from({ length: 5 }).map((_, idx) => (
-                  <tr key={idx}>
-                    <td className="px-4 py-4">
-                      <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          {/* Username */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-24 rounded bg-gray-200 dark:bg-gray-700" />
                     </td>
-                    {Array.from({ length: 10 }).map((_, colIdx) => (
-                      <td key={colIdx} className="px-6 py-4">
-                        <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse opacity-80"></div>
+          {/* Email */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
                       </td>
-                    ))}
+          {/* Telp */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Kompetensi */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Keahlian */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Peran Kurikulum */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Peran Utama */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Matkul/Peran Kurikulum */}
+          <td className="px-6 py-4">
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </td>
+          {/* Aksi */}
+          <td className="px-6 py-4 text-center">
+            <div className="h-8 w-16 rounded bg-gray-200 dark:bg-gray-700 mx-auto" />
+          </td>
                   </tr>
                 ))
               ) : paginatedData.length > 0 ? (
                 paginatedData.map((d, idx) => (
                   <tr key={d.nid} className={idx % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : ''}>
                     <td className="px-4 py-4">
-                      {(loading || isSaving) ? (
-                        <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                      ) : (
                         <button
                           type="button"
                           aria-checked={selectedRows.includes(String(d.id || d.nid))}
@@ -1374,17 +1595,85 @@ const handleSubmitImport = async () => {
                             </svg>
                           )}
                         </button>
-                      )}
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800 dark:text-white/90 align-middle">{d.nid || "-"}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.nidn || "-"}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.name || "-"}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.username || "-"}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.email || "-"}</td>
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle min-w-[120px]">{d.telp || "-"}</td>
+          {/* Kolom Kompetensi */}
+          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
+            {(() => {
+              let val = d.kompetensi;
+              if (!val) return "-";
+              if (Array.isArray(val)) return val.join(', ');
+              try {
+                const arr = JSON.parse(val);
+                return Array.isArray(arr) ? arr.join(', ') : String(val);
+              } catch {
+                return String(val);
+              }
+            })()}
+          </td>
+          {/* Kolom Keahlian */}
+          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
+            {(() => {
+              let val = d.keahlian;
+              if (!val) return "-";
+              if (Array.isArray(val)) return val.join(', ');
+              try {
+                const arr = JSON.parse(val);
+                return Array.isArray(arr) ? arr.join(', ') : String(val);
+              } catch {
+                return String(val);
+              }
+            })()}
+          </td>
+          {/* Kolom Peran dalam Kurikulum */}
+          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[300px]">
+            {(() => {
+              let val = d.peran_kurikulum;
+              if (!val) return "-";
+              if (Array.isArray(val)) return val.join(', ');
+              try {
+                const arr = JSON.parse(val);
+                return Array.isArray(arr) ? arr.join(', ') : String(val);
+              } catch {
+                return String(val);
+              }
+            })()}
+          </td>
+          {/* Kolom Peran Utama */}
+          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
+            {d.peran_utama === "ketua" && (
+              <span className="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Ketua</span>
+            )}
+            {d.peran_utama === "anggota" && (
+              <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">Anggota</span>
+            )}
+            {d.peran_utama === "dosen_mengajar" && (
+              <span className="inline-block px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">Dosen Mengajar</span>
+            )}
+            {!d.peran_utama && "-"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800 dark:text-white/90 align-middle">{d.nid}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.nidn}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.username}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle min-w-[160px]">{d.telp}</td>
-                    <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">{typeof d.kompetensi === 'string' ? d.kompetensi : d.kompetensi?.join(', ') || ""}</td>
-                    <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">{typeof d.keahlian === 'string' ? d.keahlian : d.keahlian?.join(', ') || ""}</td>
-                    <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[400px]">{typeof d.peran_kurikulum === 'string' ? d.peran_kurikulum : d.peran_kurikulum?.join(', ') || ""}</td>
+          {/* Kolom Mata Kuliah/Peran Kurikulum */}
+          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
+            {d.peran_utama === "ketua" && d.matkul_ketua_nama && d.matkul_ketua_semester && (
+              <span>
+                {d.matkul_ketua_nama} (Semester {d.matkul_ketua_semester})
+              </span>
+            )}
+            {d.peran_utama === "anggota" && d.matkul_anggota_nama && d.matkul_anggota_semester && (
+              <span>
+                {d.matkul_anggota_nama} (Semester {d.matkul_anggota_semester})
+              </span>
+            )}
+            {d.peran_utama === "dosen_mengajar" && d.peran_kurikulum_mengajar && (
+              <span>{d.peran_kurikulum_mengajar}</span>
+            )}
+          </td>
+          {/* Kolom Aksi */}
                     <td className="px-6 py-4 whitespace-nowrap text-center align-middle">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -1409,7 +1698,7 @@ const handleSubmitImport = async () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="text-center py-8 text-gray-400 dark:text-gray-500">Belum ada data.</td>
+        <td colSpan={13} className="text-center py-8 text-gray-400 dark:text-gray-500">Belum ada data.</td>
                 </tr>
               )}
             </tbody>
@@ -1618,7 +1907,78 @@ const handleSubmitImport = async () => {
                       />
                     </div>
                   </div>
-                  {/* Kompetensi & Keahlian */}
+                  <div className="mb-4">
+                  <div className="mb-4">
+  <label className="block text-sm font-medium text-gray-300 mb-2">Peran Utama</label>
+  <div className="flex gap-3">
+    {[
+      { value: "ketua", label: "Ketua" },
+      { value: "anggota", label: "Anggota" },
+      { value: "dosen_mengajar", label: "Dosen Mengajar" },
+      { value: "standby", label: "Standby" },
+    ].map(opt => (
+      <label
+        key={opt.value}
+        className={`
+          flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition
+          border-2
+          ${peranUtama === opt.value
+            ? "border-brand-500 bg-brand-900/30 text-brand-400"
+            : "border-gray-700 bg-gray-800 text-gray-300 hover:border-brand-700"}
+          ${editMode ? "opacity-60 pointer-events-none" : ""}
+        `}
+      >
+        <input
+          type="radio"
+          name="peran_utama"
+          value={opt.value}
+          checked={peranUtama === opt.value}
+          onChange={() => setPeranUtama(opt.value)}
+          disabled={editMode}
+          className="hidden"
+        />
+        <span className="font-semibold">{opt.label}</span>
+      </label>
+    ))}
+  </div>
+</div>
+</div>
+{peranUtama === "ketua" && (
+  <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Mata Kuliah (Ketua)</label>
+    <select className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base hide-scroll" value={matkulKetua} onChange={e => setMatkulKetua(e.target.value)} disabled={editMode}>
+      <option value="">Pilih Mata Kuliah</option>
+      {matkulList.map(mk => (
+        <option key={mk.kode} value={mk.kode}>{mk.nama} (Semester {mk.semester})</option>
+      ))}
+    </select>
+  </div>
+)}
+{peranUtama === "anggota" && (
+  <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Mata Kuliah (Anggota)</label>
+    <select className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base hide-scroll" value={matkulAnggota} onChange={e => setMatkulAnggota(e.target.value)} disabled={editMode}>
+      <option value="">Pilih Mata Kuliah</option>
+      {matkulList.map(mk => (
+        <option key={mk.kode} value={mk.kode}>{mk.nama} (Semester {mk.semester})</option>
+      ))}
+    </select>
+  </div>
+)}
+{peranUtama === "dosen_mengajar" && (
+  <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Peran dalam Kurikulum (Dosen Mengajar)</label>
+    <select className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base hide-scroll" value={peranKurikulumMengajar} onChange={e => setPeranKurikulumMengajar(e.target.value)} disabled={editMode}>
+      <option value="">Pilih Peran Kurikulum</option>
+      {peranKurikulumOptions.map(opt => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </select>
+  </div>
+)}
+
+{/* Field kompetensi & keahlian hanya muncul jika bukan standby */}
+{peranUtama !== "standby" && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Kompetensi */}
                     <div className="mb-4">
@@ -1839,43 +2199,7 @@ const handleSubmitImport = async () => {
                       </div>
                     </div>
                   </div>
-                  {/* Peran dalam Kurikulum full width */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Peran dalam Kurikulum</label>
-                    <Combobox
-                      value={Array.isArray(form.peran_kurikulum) ? form.peran_kurikulum : (form.peran_kurikulum || '').split(',').map(k => k.trim()).filter(k => k !== '')}
-                      onChange={val => setForm(prev => ({ ...prev, peran_kurikulum: val }))}
-                      multiple
-                    >
-                      {({ open }) => (
-                        <div className="relative">
-                          <Combobox.Input
-                            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
-                            displayValue={(selected: string[]) => selected.join(', ')}
-                            onChange={() => {}}
-                            placeholder="Cari atau tambah peran..."
-                          />
-                          <Combobox.Options className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll">
-                            {peranKurikulumOptions.length === 0 ? (
-                              <Combobox.Option value="" disabled className="text-gray-400 px-4 py-2.5">Belum ada peran</Combobox.Option>
-                            ) : (
-                              peranKurikulumOptions.filter(opt => !((Array.isArray(form.peran_kurikulum) ? form.peran_kurikulum : (form.peran_kurikulum || '').split(',').map(k => k.trim()).filter(k => k !== '')).includes(opt))).map(opt => (
-                                <Combobox.Option key={opt} value={opt} className={({ active, selected }) => `cursor-pointer select-none px-4 py-2.5 ${active ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white' : 'text-gray-900 dark:text-gray-100'}`}>{opt}</Combobox.Option>
-                              ))
-                            )}
-                          </Combobox.Options>
-                        </div>
-                      )}
-                    </Combobox>
-                    <div className="flex gap-2 mt-3 flex-wrap">
-                      {(Array.isArray(form.peran_kurikulum) ? form.peran_kurikulum : (form.peran_kurikulum || '').split(',').map(k => k.trim()).filter(k => k !== '')).map(peran => (
-                        <span key={peran} className="px-3 py-1 rounded bg-blue-100 text-blue-800 text-xs flex items-center gap-1">
-                          {peran}
-                          <button type="button" onClick={() => setForm(f => ({ ...f, peran_kurikulum: (Array.isArray(f.peran_kurikulum) ? f.peran_kurikulum : (f.peran_kurikulum || '').split(',').map(k => k.trim()).filter(k => k !== '')).filter((p: string) => p !== peran) }))} className="ml-1 text-red-500 hover:text-red-700">&times;</button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+)}
                   {/* Form Actions */}
                   <div className="flex justify-end gap-4 pt-4">
                     <button
@@ -1909,8 +2233,7 @@ const handleSubmitImport = async () => {
                             <path
                               className="opacity-75"
                               fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                            ></path>
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                           </svg>
                           Menyimpan...
                         </>

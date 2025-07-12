@@ -102,22 +102,50 @@ class MataKuliahSeeder extends Seeder
             ];
             shuffle($topikPBL);
             for ($i = 1; $i <= $jumlahPBL; $i++) {
-                // List keahlian global (bisa diambil dari UserSeeder, disalin di sini agar konsisten)
-                $globalKeahlian = [
-                    'Kardiologi', 'Pendidikan', 'Anatomi', 'Bedah', 'Biostatistik', 'Epidemiologi',
-                    'Patologi', 'Laboratorium', 'Farmakologi', 'Konsultasi Obat', 'Mikrobiologi', 'Bakteriologi',
-                    'Fisiologi', 'Olahraga', 'Parasitologi', 'Infeksi', 'Histologi', 'Mikroskopi',
-                    'Imunologi', 'Alergi', 'Gizi Klinik', 'Nutrisi', 'Kesehatan Masyarakat', 'Promosi Kesehatan',
-                    'Kedokteran Forensik', 'Hukum Medis', 'Radiologi', 'CT Scan', 'EKG', 'EEG', 'Spirometri', 'Endoskopi', 'Transfusi Darah'
+                // Mapping keahlian berdasarkan mata kuliah untuk perfect match
+                $keahlianMapping = [
+                    'Dasar-dasar Kedokteran' => ['Anatomi', 'Fisiologi', 'Biokimia Dasar'],
+                    'Anatomi Dasar' => ['Anatomi', 'Histologi', 'Mikroskopi'],
+                    'Fisiologi Dasar' => ['Fisiologi', 'Biokimia', 'Sistem Tubuh'],
+                    'Biokimia Dasar' => ['Biokimia', 'Metabolisme', 'Enzim'],
+                    'Sistem Muskuloskeletal' => ['Anatomi', 'Bedah', 'Radiologi'],
+                    'Sistem Saraf' => ['Neurologi', 'Anatomi', 'Fisiologi'],
+                    'Sistem Kardiovaskular' => ['Kardiologi', 'Fisiologi', 'EKG'],
+                    'Sistem Pernafasan' => ['Pulmonologi', 'Fisiologi', 'Spirometri'],
+                    'Sistem Pencernaan' => ['Gastroenterologi', 'Fisiologi', 'Endoskopi'],
+                    'Sistem Endokrin' => ['Endokrinologi', 'Fisiologi', 'Metabolisme'],
+                    'Sistem Reproduksi' => ['Ginekologi', 'Anatomi', 'Fisiologi'],
+                    'Sistem Urinaria' => ['Nefrologi', 'Fisiologi', 'Anatomi'],
+                    'Sistem Imun' => ['Imunologi', 'Mikrobiologi', 'Infeksi'],
+                    'Sistem Hematologi' => ['Hematologi', 'Patologi', 'Transfusi Darah'],
+                    'Kulit dan Jaringan Subkutan' => ['Dermatologi', 'Anatomi', 'Patologi'],
+                    'Metabolisme Tubuh' => ['Biokimia', 'Endokrinologi', 'Nutrisi'],
+                    'Infeksi dan Imunologi' => ['Infeksi', 'Imunologi', 'Mikrobiologi'],
+                    'Farmakologi Dasar' => ['Farmakologi', 'Farmasi', 'Konsultasi Obat'],
+                    'Patologi Anatomi' => ['Patologi', 'Anatomi', 'Mikroskopi'],
+                    'Patologi Klinik' => ['Patologi', 'Laboratorium', 'Diagnostik'],
+                    'Penyakit Dalam' => ['Penyakit Dalam', 'Diagnostik', 'Konsultasi'],
+                    'Bedah Dasar' => ['Bedah', 'Anatomi', 'Radiologi'],
+                    'Ilmu Anak' => ['Pediatri', 'Penyakit Dalam', 'Nutrisi'],
+                    'Ilmu Kebidanan' => ['Ginekologi', 'Kebidanan', 'Anatomi'],
+                    'Psikiatri Dasar' => ['Psikiatri', 'Konsultasi', 'Pengajaran'],
+                    'Ilmu Kesehatan Masyarakat' => ['Kesehatan Masyarakat', 'Epidemiologi', 'Promosi Kesehatan'],
+                    'Dermatologi' => ['Dermatologi', 'Anatomi', 'Patologi'],
+                    'Ilmu Penyakit Mata' => ['Oftalmologi', 'Anatomi', 'Radiologi'],
                 ];
-                shuffle($globalKeahlian);
-                $keahlianRequired = array_slice($globalKeahlian, 0, rand(2,3));
+                
+                // Assign keahlian sesuai mata kuliah
+                $matkulName = $mk->nama;
+                $keahlianRequired = isset($keahlianMapping[$matkulName]) ? $keahlianMapping[$matkulName] : ['Anatomi', 'Fisiologi', 'Biokimia'];
                 PBL::create([
                     'mata_kuliah_kode' => $mk->kode,
                     'modul_ke' => $i,
                     'nama_modul' => 'PBL ' . $i . ': ' . $topikPBL[$i - 1],
                 ]);
             }
+            
+            // Update mata kuliah dengan keahlian_required
+            $mk->update(['keahlian_required' => json_encode($keahlianRequired)]);
         }
 
         // Insert Non Blok setelahnya

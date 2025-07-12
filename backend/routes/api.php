@@ -129,8 +129,10 @@ Route::get('/pbl-kelompok-kecil/list', [MataKuliahPBLKelompokKecilController::cl
 
 // Batch mapping kelompok kecil untuk banyak mata kuliah sekaligus
 Route::post('/mata-kuliah/pbl-kelompok-kecil/batch', [\App\Http\Controllers\MataKuliahPBLKelompokKecilController::class, 'batchMapping']);
+// Batch mapping kelompok kecil untuk banyak semester sekaligus
+Route::post('/mata-kuliah/pbl-kelompok-kecil/batch-multi-semester', [\App\Http\Controllers\MataKuliahPBLKelompokKecilController::class, 'batchMappingMultiSemester']);
 // Batch detail kelompok kecil berdasarkan array nama_kelompok dan semester
-Route::post('/kelompok-kecil/batch-detail', [\App\Http\Controllers\MataKuliahPBLKelompokKecilController::class, 'batchKelompokDetail']);
+Route::post('/kelompok-kecil/batch-detail', [\App\Http\Controllers\KelompokKecilController::class, 'batchDetail']);
 
 // Assignment dosen ke PBL
 Route::post('/pbls/{pbl}/assign-dosen', [App\Http\Controllers\MataKuliahPBLController::class, 'assignDosen']);

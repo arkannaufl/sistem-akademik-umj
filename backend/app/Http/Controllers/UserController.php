@@ -25,7 +25,26 @@ class UserController extends Controller
         if ($request->has('semester')) {
             $query->where('semester', $request->semester);
         }
-        return response()->json($query->get());
+        $users = $query->get();
+        // Tambahan: jika role dosen, tambahkan field peran utama detail
+        if ($request->role === 'dosen') {
+            $users = $users->map(function ($user) {
+                $userArr = $user->toArray();
+                if ($user->peran_utama === 'ketua' && $user->matkulKetua) {
+                    $userArr['matkul_ketua_nama'] = $user->matkulKetua->nama;
+                    $userArr['matkul_ketua_semester'] = $user->matkulKetua->semester;
+                }
+                if ($user->peran_utama === 'anggota' && $user->matkulAnggota) {
+                    $userArr['matkul_anggota_nama'] = $user->matkulAnggota->nama;
+                    $userArr['matkul_anggota_semester'] = $user->matkulAnggota->semester;
+                }
+                if ($user->peran_utama === 'dosen_mengajar') {
+                    $userArr['peran_kurikulum_mengajar'] = $user->peran_kurikulum_mengajar;
+                }
+                return $userArr;
+            });
+        }
+        return response()->json($users);
     }
 
     // POST /users
@@ -63,6 +82,10 @@ class UserController extends Controller
             'keahlian' => 'nullable',
             'peran_kurikulum' => 'nullable|array',
             'semester' => 'nullable|integer|min:1|max:8',
+            'peran_utama' => 'required|in:ketua,anggota,dosen_mengajar,standby',
+            'matkul_ketua_id' => 'nullable|required_if:peran_utama,ketua|exists:mata_kuliah,kode',
+            'matkul_anggota_id' => 'nullable|required_if:peran_utama,anggota|exists:mata_kuliah,kode',
+            'peran_kurikulum_mengajar' => 'nullable|required_if:peran_utama,dosen_mengajar|string',
         ]);
         $validated['password'] = Hash::make($validated['password']);
 
@@ -74,6 +97,19 @@ class UserController extends Controller
         // Convert peran_kurikulum from string to array if it's a string
         if (isset($validated['peran_kurikulum']) && is_string($validated['peran_kurikulum'])) {
             $validated['peran_kurikulum'] = array_map('trim', explode(',', $validated['peran_kurikulum']));
+        }
+
+        // Validasi satu dosen hanya satu peran utama
+        if (User::where('nid', $request->nid)->where('peran_utama', '!=', null)->exists()) {
+            return response()->json(['message' => 'Dosen hanya boleh punya satu peran utama.'], 422);
+        }
+        // Validasi satu matkul hanya satu ketua
+        if ($request->peran_utama === 'ketua' && User::where('matkul_ketua_id', $request->matkul_ketua_id)->where('peran_utama', 'ketua')->exists()) {
+            return response()->json(['message' => 'Mata kuliah ini sudah memiliki ketua.'], 422);
+        }
+        // Validasi anggota max 3 per matkul
+        if ($request->peran_utama === 'anggota' && User::where('matkul_anggota_id', $request->matkul_anggota_id)->where('peran_utama', 'anggota')->count() >= 3) {
+            return response()->json(['message' => 'Mata kuliah ini sudah memiliki 3 anggota.'], 422);
         }
 
         $user = User::create($validated);
@@ -127,6 +163,10 @@ class UserController extends Controller
             'kompetensi' => 'nullable',
             'peran_kurikulum' => 'nullable|array',
             'semester' => 'nullable|integer|min:1|max:8',
+            'peran_utama' => 'sometimes|required|in:ketua,anggota,dosen_mengajar',
+            'matkul_ketua_id' => 'nullable|required_if:peran_utama,ketua|exists:mata_kuliah,kode',
+            'matkul_anggota_id' => 'nullable|required_if:peran_utama,anggota|exists:mata_kuliah,kode',
+            'peran_kurikulum_mengajar' => 'nullable|required_if:peran_utama,dosen_mengajar|string',
         ]);
         if (!empty($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
@@ -142,6 +182,16 @@ class UserController extends Controller
         // Convert peran_kurikulum from string to array if it's a string
         if (isset($validated['peran_kurikulum']) && is_string($validated['peran_kurikulum'])) {
             $validated['peran_kurikulum'] = array_map('trim', explode(',', $validated['peran_kurikulum']));
+        }
+
+        // Jika update peran utama, validasi ulang
+        if (isset($validated['peran_utama'])) {
+            if ($validated['peran_utama'] === 'ketua' && User::where('matkul_ketua_id', $validated['matkul_ketua_id'])->where('peran_utama', 'ketua')->where('id', '!=', $id)->exists()) {
+                return response()->json(['message' => 'Mata kuliah ini sudah memiliki ketua.'], 422);
+            }
+            if ($validated['peran_utama'] === 'anggota' && User::where('matkul_anggota_id', $validated['matkul_anggota_id'])->where('peran_utama', 'anggota')->where('id', '!=', $id)->count() >= 3) {
+                return response()->json(['message' => 'Mata kuliah ini sudah memiliki 3 anggota.'], 422);
+            }
         }
 
         $user->update($validated);
