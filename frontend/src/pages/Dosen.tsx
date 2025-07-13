@@ -73,7 +73,7 @@ export default function Dosen() {
   const [peranKurikulumOptions, setPeranKurikulumOptions] = useState<string[]>([]);
   // Untuk fitur peran utama dosen
   const [peranUtama, setPeranUtama] = useState<string>("");
-  const [matkulList, setMatkulList] = useState<{ kode: string; nama: string; semester: number }[]>([]);
+  const [matkulList, setMatkulList] = useState<{ kode: string; nama: string; semester: number; blok?: number; jenis?: string }[]>([]);
   const [matkulKetua, setMatkulKetua] = useState<string>("");
   const [matkulAnggota, setMatkulAnggota] = useState<string>("");
   const [peranKurikulumMengajar, setPeranKurikulumMengajar] = useState<string>("");
@@ -170,7 +170,13 @@ export default function Dosen() {
         if (semesterAktif) {
           mkList = mkList.filter((mk: any) => (semesterAktif === "Ganjil" ? mk.semester % 2 === 1 : mk.semester % 2 === 0));
         }
-        setMatkulList(mkList.map((mk: any) => ({ kode: mk.kode, nama: mk.nama, semester: mk.semester })));
+        setMatkulList(mkList.map((mk: any) => ({ 
+          kode: mk.kode, 
+          nama: mk.nama, 
+          semester: mk.semester, 
+          blok: mk.blok,
+          jenis: mk.jenis
+        })));
       } catch (e) {
         setMatkulList([]);
       }
@@ -1338,11 +1344,19 @@ const handleSubmitImport = async () => {
             {d.peran_utama === "ketua" && d.matkul_ketua_nama && d.matkul_ketua_semester && (
               <span>
                 {d.matkul_ketua_nama} (Semester {d.matkul_ketua_semester})
+                {(() => {
+                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_ketua_nama);
+                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
+                })()}
               </span>
             )}
             {d.peran_utama === "anggota" && d.matkul_anggota_nama && d.matkul_anggota_semester && (
               <span>
                 {d.matkul_anggota_nama} (Semester {d.matkul_anggota_semester})
+                {(() => {
+                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_anggota_nama);
+                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
+                })()}
               </span>
             )}
             {d.peran_utama === "dosen_mengajar" && d.peran_kurikulum_mengajar && (
@@ -1662,11 +1676,19 @@ const handleSubmitImport = async () => {
             {d.peran_utama === "ketua" && d.matkul_ketua_nama && d.matkul_ketua_semester && (
               <span>
                 {d.matkul_ketua_nama} (Semester {d.matkul_ketua_semester})
+                {(() => {
+                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_ketua_nama);
+                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
+                })()}
               </span>
             )}
             {d.peran_utama === "anggota" && d.matkul_anggota_nama && d.matkul_anggota_semester && (
               <span>
                 {d.matkul_anggota_nama} (Semester {d.matkul_anggota_semester})
+                {(() => {
+                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_anggota_nama);
+                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
+                })()}
               </span>
             )}
             {d.peran_utama === "dosen_mengajar" && d.peran_kurikulum_mengajar && (
@@ -1945,35 +1967,319 @@ const handleSubmitImport = async () => {
 </div>
 {peranUtama === "ketua" && (
   <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Mata Kuliah (Ketua)</label>
-    <select className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base hide-scroll" value={matkulKetua} onChange={e => setMatkulKetua(e.target.value)} disabled={editMode}>
-      <option value="">Pilih Mata Kuliah</option>
-      {matkulList.map(mk => (
-        <option key={mk.kode} value={mk.kode}>{mk.nama} (Semester {mk.semester})</option>
-      ))}
-    </select>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+      Mata Kuliah (Ketua) 
+      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">• Hanya mata kuliah Blok yang tersedia</span>
+    </label>
+    <Listbox value={matkulKetua} onChange={(value) => setMatkulKetua(value)}>
+      {({ open }) => (
+        <div className="relative">
+          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+            <span className="block truncate">
+              {(() => {
+                const selectedMatkul = matkulList.find(mk => mk.kode === matkulKetua);
+                return selectedMatkul ? `Blok ${selectedMatkul.blok}: ${selectedMatkul.nama}` : "Pilih Mata Kuliah";
+              })()}
+            </span>
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <FontAwesomeIcon
+                icon={faChevronDown}
+                className="h-5 w-5 text-gray-400"
+                aria-hidden="true"
+              />
+            </span>
+          </Listbox.Button>
+          <Transition
+            show={open}
+            as={"div"}
+            leave="transition ease-in duration-100"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+            className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+          >
+            <Listbox.Options static>
+              {(() => {
+                const blokMataKuliah = matkulList
+                  .filter(mk => mk.jenis === 'Blok')
+                  .sort((a, b) => {
+                    if (a.semester !== b.semester) return a.semester - b.semester;
+                    return (a.blok || 0) - (b.blok || 0);
+                  });
+                
+                if (blokMataKuliah.length === 0) {
+                  return (
+                    <Listbox.Option
+                      className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500"
+                      value=""
+                      disabled
+                    >
+                      Belum ada mata kuliah Blok
+                    </Listbox.Option>
+                  );
+                }
+                
+                // Group by semester
+                const groupedBySemester = blokMataKuliah.reduce((acc, mk) => {
+                  if (!acc[mk.semester]) acc[mk.semester] = [];
+                  acc[mk.semester].push(mk);
+                  return acc;
+                }, {} as Record<number, typeof blokMataKuliah>);
+                
+                return Object.entries(groupedBySemester).map(([semester, mataKuliah]) => (
+                  <div key={semester}>
+                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700">
+                      Semester {semester}
+                    </div>
+                    {mataKuliah.map(mk => (
+                      <Listbox.Option
+                        key={mk.kode}
+                        className={({ active }) =>
+                          `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                            ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                            : 'text-gray-900 dark:text-gray-100'
+                          }`
+                        }
+                        value={mk.kode}
+                      >
+                        {({ selected }) => (
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`block truncate ${selected ? 'font-medium' : 'font-normal'
+                                }`}
+                            >
+                              Blok {mk.blok}: {mk.nama}
+                            </span>
+                            {selected && (
+                              <span className="text-brand-500">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Listbox.Option>
+                    ))}
+                  </div>
+                ));
+              })()}
+            </Listbox.Options>
+          </Transition>
+        </div>
+      )}
+    </Listbox>
+    {matkulKetua && (
+      <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          Ketua mata kuliah terpilih
+        </span>
+      </div>
+    )}
   </div>
 )}
 {peranUtama === "anggota" && (
   <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Mata Kuliah (Anggota)</label>
-    <select className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base hide-scroll" value={matkulAnggota} onChange={e => setMatkulAnggota(e.target.value)} disabled={editMode}>
-      <option value="">Pilih Mata Kuliah</option>
-      {matkulList.map(mk => (
-        <option key={mk.kode} value={mk.kode}>{mk.nama} (Semester {mk.semester})</option>
-      ))}
-    </select>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+      Mata Kuliah (Anggota)
+      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">• Hanya mata kuliah Blok yang tersedia</span>
+    </label>
+    <Listbox value={matkulAnggota} onChange={(value) => setMatkulAnggota(value)}>
+      {({ open }) => (
+        <div className="relative">
+          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+            <span className="block truncate">
+              {(() => {
+                const selectedMatkul = matkulList.find(mk => mk.kode === matkulAnggota);
+                return selectedMatkul ? `Blok ${selectedMatkul.blok}: ${selectedMatkul.nama}` : "Pilih Mata Kuliah";
+              })()}
+            </span>
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <FontAwesomeIcon
+                icon={faChevronDown}
+                className="h-5 w-5 text-gray-400"
+                aria-hidden="true"
+              />
+            </span>
+          </Listbox.Button>
+          <Transition
+            show={open}
+            as={"div"}
+            leave="transition ease-in duration-100"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+            className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+          >
+            <Listbox.Options static>
+              {(() => {
+                const blokMataKuliah = matkulList
+                  .filter(mk => mk.jenis === 'Blok')
+                  .sort((a, b) => {
+                    if (a.semester !== b.semester) return a.semester - b.semester;
+                    return (a.blok || 0) - (b.blok || 0);
+                  });
+                
+                if (blokMataKuliah.length === 0) {
+                  return (
+                    <Listbox.Option
+                      className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500"
+                      value=""
+                      disabled
+                    >
+                      Belum ada mata kuliah Blok
+                    </Listbox.Option>
+                  );
+                }
+                
+                // Group by semester
+                const groupedBySemester = blokMataKuliah.reduce((acc, mk) => {
+                  if (!acc[mk.semester]) acc[mk.semester] = [];
+                  acc[mk.semester].push(mk);
+                  return acc;
+                }, {} as Record<number, typeof blokMataKuliah>);
+                
+                return Object.entries(groupedBySemester).map(([semester, mataKuliah]) => (
+                  <div key={semester}>
+                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700">
+                      Semester {semester}
+                    </div>
+                    {mataKuliah.map(mk => (
+                      <Listbox.Option
+                        key={mk.kode}
+                        className={({ active }) =>
+                          `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                            ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                            : 'text-gray-900 dark:text-gray-100'
+                          }`
+                        }
+                        value={mk.kode}
+                      >
+                        {({ selected }) => (
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`block truncate ${selected ? 'font-medium' : 'font-normal'
+                                }`}
+                            >
+                              Blok {mk.blok}: {mk.nama}
+                            </span>
+                            {selected && (
+                              <span className="text-brand-500">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Listbox.Option>
+                    ))}
+                  </div>
+                ));
+              })()}
+            </Listbox.Options>
+          </Transition>
+        </div>
+      )}
+    </Listbox>
+    {matkulAnggota && (
+      <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          Anggota mata kuliah terpilih
+        </span>
+      </div>
+    )}
   </div>
 )}
 {peranUtama === "dosen_mengajar" && (
   <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Peran dalam Kurikulum (Dosen Mengajar)</label>
-    <select className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base hide-scroll" value={peranKurikulumMengajar} onChange={e => setPeranKurikulumMengajar(e.target.value)} disabled={editMode}>
-      <option value="">Pilih Peran Kurikulum</option>
-      {peranKurikulumOptions.map(opt => (
-        <option key={opt} value={opt}>{opt}</option>
-      ))}
-    </select>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+      Peran dalam Kurikulum (Dosen Mengajar)
+      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">• Pilih satu peran kurikulum</span>
+    </label>
+    <Listbox value={peranKurikulumMengajar} onChange={(value) => setPeranKurikulumMengajar(value)}>
+      {({ open }) => (
+        <div className="relative">
+          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+            <span className="block truncate">
+              {peranKurikulumMengajar || "Pilih Peran Kurikulum"}
+            </span>
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <FontAwesomeIcon
+                icon={faChevronDown}
+                className="h-5 w-5 text-gray-400"
+                aria-hidden="true"
+              />
+            </span>
+          </Listbox.Button>
+          <Transition
+            show={open}
+            as={"div"}
+            leave="transition ease-in duration-100"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+            className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+          >
+            <Listbox.Options static>
+              {peranKurikulumOptions.length === 0 ? (
+                <Listbox.Option
+                  className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500"
+                  value=""
+                  disabled
+                >
+                  Belum ada peran kurikulum
+                </Listbox.Option>
+              ) : (
+                peranKurikulumOptions.map((peran) => (
+                  <Listbox.Option
+                    key={peran}
+                    className={({ active }) =>
+                      `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                        ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                        : 'text-gray-900 dark:text-gray-100'
+                      }`
+                    }
+                    value={peran}
+                  >
+                    {({ selected }) => (
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`block truncate ${selected ? 'font-medium' : 'font-normal'
+                            }`}
+                        >
+                          {peran}
+                        </span>
+                        {selected && (
+                          <span className="text-brand-500">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </Listbox.Option>
+                ))
+              )}
+            </Listbox.Options>
+          </Transition>
+        </div>
+      )}
+    </Listbox>
+    {peranKurikulumMengajar && (
+      <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          Peran kurikulum terpilih
+        </span>
+      </div>
+    )}
   </div>
 )}
 

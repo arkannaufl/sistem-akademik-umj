@@ -606,8 +606,8 @@ const CSR: React.FC = () => {
     return (
       <div className="mx-auto py-8 px-2 md:px-0">
         {/* Skeleton Summary Cards */}
-        <div className="flex justify-center mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-fit">
+        <div className="mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             {Array.from({ length: 2 }).map((_, i) => (
               <div
                 key={i}
@@ -615,9 +615,9 @@ const CSR: React.FC = () => {
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700" />
-                  <div className="flex-1">
-                    <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div>
+                    <div className="h-7 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                    <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
                   </div>
                 </div>
               </div>
@@ -697,8 +697,8 @@ const CSR: React.FC = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="flex justify-center mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-fit">
+      <div className="mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
           <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
@@ -906,10 +906,8 @@ const CSR: React.FC = () => {
                                 <div className="flex-1">
                                   <h4 className="font-semibold text-gray-800 dark:text-white/90 text-lg">
                                     {csr.mata_kuliah_kode}
+                                    {csr.mata_kuliah?.nama ? ` - ${csr.mata_kuliah.nama}` : ""}
                                   </h4>
-                                  <p className="text-gray-600 dark:text-gray-400 text-sm">
-                                    {csr.nama}
-                                  </p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
@@ -1086,16 +1084,18 @@ const CSR: React.FC = () => {
                               </div>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => navigate(`/csr/${csr.id}`)}
-                              className="mx-auto my-4 flex items-center gap-2 px-5 py-2 bg-brand-500 text-white rounded-lg font-semibold shadow hover:bg-brand-600 transition"
-                            >
-                              <FontAwesomeIcon
-                                icon={faUsers}
-                                className="w-4 h-4"
-                              />
-                              Lihat & Tugaskan Dosen
-                            </button>
+                            <div className="flex justify-start mt-4">
+                              <button
+                                onClick={() => navigate(`/csr/${csr.id}`)}
+                                className="flex items-center gap-2 px-5 py-2 bg-brand-500 text-white rounded-lg font-medium text-sm shadow hover:bg-brand-600 transition"
+                              >
+                                <FontAwesomeIcon
+                                  icon={faUsers}
+                                  className="w-4 h-4"
+                                />
+                                Lihat & Tugaskan Dosen
+                              </button>
+                            </div>
                           )}
                         </div>
                       );

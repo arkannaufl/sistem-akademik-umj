@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class ReportingController extends Controller
 {
@@ -150,7 +151,7 @@ class ReportingController extends Controller
         ]);
     }
 
-    public function dosenCsrReport()
+    public function dosenCsrReport(Request $request)
     {
         // Ambil data mapping dosen ke CSR beserta semester & blok
         $mappings = \App\Models\CSRMapping::with(['dosen', 'csr'])->get();
@@ -222,6 +223,137 @@ class ReportingController extends Controller
             return $d;
         }, array_values($result));
 
-        return response()->json(['data' => $result]);
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 10);
+        $result = collect($result);
+        $paginated = new LengthAwarePaginator(
+            $result->forPage($page, $perPage)->values(),
+            $result->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+        return response()->json($paginated);
+    }
+
+    public function dosenPblReport(Request $request)
+    {
+        // Ambil data mapping dosen ke PBL beserta semester & blok
+        $mappings = \App\Models\PBLMapping::with(['dosen', 'pbl.mataKuliah'])->get();
+
+        $result = [];
+        foreach ($mappings as $mapping) {
+            if (!$mapping->dosen || !$mapping->pbl || !$mapping->pbl->mataKuliah) continue;
+            
+            $dosenId = $mapping->dosen->id;
+            $dosenName = $mapping->dosen->name;
+            $nid = $mapping->dosen->nid;
+            $keahlian = $mapping->dosen->keahlian ?? [];
+            $pbl = $mapping->pbl;
+            $mataKuliah = $pbl->mataKuliah;
+            $semester = $mataKuliah->semester;
+            $blok = $mataKuliah->blok;
+            $modulKe = $pbl->modul_ke;
+            $namaModul = $pbl->nama_modul;
+            $tanggal_mulai = $mataKuliah->tanggal_mulai ? $mataKuliah->tanggal_mulai->format('Y-m-d') : null;
+            $tanggal_akhir = $mataKuliah->tanggal_akhir ? $mataKuliah->tanggal_akhir->format('Y-m-d') : null;
+
+            // Setiap modul PBL = 5x50 menit = 250 menit
+            $waktuPerModul = 250; // menit
+            $sesiPerModul = 5; // sesi
+
+            if (!isset($result[$dosenId])) {
+                $result[$dosenId] = [
+                    'dosen_id' => $dosenId,
+                    'dosen_name' => $dosenName,
+                    'nid' => $nid,
+                    'keahlian' => $keahlian,
+                    'peran_utama' => $mapping->dosen->peran_utama ?? 'standby',
+                    'total_pbl' => 0,
+                    'total_sesi' => 0,
+                    'total_waktu_menit' => 0,
+                    'per_semester' => [],
+                    'all_tanggal_mulai' => [],
+                    'all_tanggal_akhir' => [],
+                ];
+            }
+            $result[$dosenId]['total_pbl'] += 1;
+            $result[$dosenId]['total_sesi'] += $sesiPerModul;
+            $result[$dosenId]['total_waktu_menit'] += $waktuPerModul;
+            $result[$dosenId]['all_tanggal_mulai'][] = $tanggal_mulai;
+            $result[$dosenId]['all_tanggal_akhir'][] = $tanggal_akhir;
+            
+            // Group by semester
+            $found = false;
+            foreach ($result[$dosenId]['per_semester'] as &$sem) {
+                if ($sem['semester'] == $semester) {
+                    $sem['jumlah'] += 1;
+                    $sem['total_sesi'] += $sesiPerModul;
+                    $sem['total_waktu_menit'] += $waktuPerModul;
+                    $sem['modul_pbl'][] = [
+                        'blok' => $blok,
+                        'modul_ke' => $modulKe,
+                        'nama_modul' => $namaModul,
+                        'mata_kuliah_kode' => $mataKuliah->kode,
+                        'mata_kuliah_nama' => $mataKuliah->nama,
+                        'waktu_menit' => $waktuPerModul,
+                        'jumlah_sesi' => $sesiPerModul,
+                    ];
+                    $sem['tanggal_mulai'][] = $tanggal_mulai;
+                    $sem['tanggal_akhir'][] = $tanggal_akhir;
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) {
+                $result[$dosenId]['per_semester'][] = [
+                    'semester' => $semester,
+                    'jumlah' => 1,
+                    'total_sesi' => $sesiPerModul,
+                    'total_waktu_menit' => $waktuPerModul,
+                    'modul_pbl' => [[
+                        'blok' => $blok,
+                        'modul_ke' => $modulKe,
+                        'nama_modul' => $namaModul,
+                        'mata_kuliah_kode' => $mataKuliah->kode,
+                        'mata_kuliah_nama' => $mataKuliah->nama,
+                        'waktu_menit' => $waktuPerModul,
+                        'jumlah_sesi' => $sesiPerModul,
+                    ]],
+                    'tanggal_mulai' => [$tanggal_mulai],
+                    'tanggal_akhir' => [$tanggal_akhir],
+                ];
+            }
+        }
+        
+        // Reset array keys dan hitung tanggal mulai/akhir terawal/terakhir
+        $result = array_map(function($d) {
+            $allMulai = array_filter($d['all_tanggal_mulai']);
+            $allAkhir = array_filter($d['all_tanggal_akhir']);
+            $d['tanggal_mulai'] = $allMulai ? min($allMulai) : null;
+            $d['tanggal_akhir'] = $allAkhir ? max($allAkhir) : null;
+            unset($d['all_tanggal_mulai'], $d['all_tanggal_akhir']);
+            
+            // Untuk setiap per_semester, ambil tanggal terawal/terakhir di semester tsb
+            foreach ($d['per_semester'] as &$sem) {
+                $mulai = array_filter($sem['tanggal_mulai']);
+                $akhir = array_filter($sem['tanggal_akhir']);
+                $sem['tanggal_mulai'] = $mulai ? min($mulai) : null;
+                $sem['tanggal_akhir'] = $akhir ? max($akhir) : null;
+            }
+            return $d;
+        }, array_values($result));
+
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 10);
+        $result = collect($result);
+        $paginated = new LengthAwarePaginator(
+            $result->forPage($page, $perPage)->values(),
+            $result->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+        return response()->json($paginated);
     }
 }

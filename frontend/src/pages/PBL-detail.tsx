@@ -92,6 +92,7 @@ export default function PBL() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [blokMataKuliah, setBlokMataKuliah] = useState<MataKuliah[]>([]);
   const [filterSemester, setFilterSemester] = useState("semua");
@@ -160,6 +161,10 @@ export default function PBL() {
     [pblId: number]: Dosen[];
   }>({});
 
+  // Tambahkan state untuk real-time sync dengan reporting
+  const [reportingData, setReportingData] = useState<any>(null);
+  const [isUpdatingReporting, setIsUpdatingReporting] = useState(false);
+
   const [searchDosen, setSearchDosen] = useState("");
   // Tambahkan state untuk pagination modal mahasiswa
   const [pageMahasiswaModal, setPageMahasiswaModal] = useState(1);
@@ -217,6 +222,7 @@ export default function PBL() {
       : (d.keahlian || "").split(",").map((k) => k.trim()),
   }));
 
+  // Dosen standby: memiliki keahlian "standby"
   const standbyDosenList = dosenWithKeahlian.filter(
     (d) =>
       d.keahlianArr.some((k) => k.toLowerCase().includes("standby")) &&
@@ -228,6 +234,7 @@ export default function PBL() {
         ))
   );
   
+  // Dosen regular: tidak memiliki keahlian "standby"
   const availableDosenList = dosenWithKeahlian.filter(
     (d) =>
       !d.keahlianArr.some((k) => k.toLowerCase().includes("standby")) &&
@@ -256,6 +263,15 @@ export default function PBL() {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  useEffect(() => {
+    if (warning) {
+      const timer = setTimeout(() => {
+        setWarning(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [warning]);
 
   async function fetchAll() {
     setLoading(true);
@@ -771,6 +787,27 @@ export default function PBL() {
     }
   }
 
+  // Function untuk update reporting data secara real-time
+  const updateReportingData = async () => {
+    if (isUpdatingReporting) return; // Prevent multiple simultaneous updates
+    
+    setIsUpdatingReporting(true);
+    try {
+      // Update reporting data untuk PBL
+      const reportingRes = await api.get('/reporting/dosen-pbl');
+      setReportingData(reportingRes.data?.data || []);
+      
+      // Optional: Trigger event untuk update di halaman lain
+      window.dispatchEvent(new CustomEvent('pbl-assignment-updated', {
+        detail: { timestamp: Date.now() }
+      }));
+    } catch (error) {
+      console.error('Failed to update reporting data:', error);
+    } finally {
+      setIsUpdatingReporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full mx-auto">
@@ -968,8 +1005,8 @@ export default function PBL() {
                 Sistem Penugasan Dosen
               </h4>
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                Dosen di-assign per semester secara merata. Drag & drop hanya
-                bisa dilakukan antar dosen dalam semester yang sama.
+                Dosen reguler hanya bisa di-drag & drop antar modul dalam semester yang sama dan sesuai keahlian. <br />
+                <span className="font-semibold">Dosen standby</span> dapat di-assign ke modul manapun tanpa batasan keahlian atau semester.
               </p>
             </div>
           </div>
@@ -1123,6 +1160,17 @@ export default function PBL() {
             {error}
           </motion.div>
         )}
+        {warning && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-yellow-100 border text-yellow-700 p-3 rounded-lg mb-6"
+          >
+            <div className="font-semibold mb-2">Warning:</div>
+            <div>{warning}</div>
+          </motion.div>
+        )}
       </AnimatePresence>
       {/* Main Content: Grid 2 kolom */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1260,7 +1308,8 @@ export default function PBL() {
                                         setError("Dosen sudah ada di PBL ini.");
                                         return;
                                       }
-                                      // Validasi keahlian berdasarkan mata kuliah
+                                      
+                                      // Validasi keahlian berdasarkan mata kuliah - sama seperti PBLGenerate.tsx
                                       const dosenKeahlian = Array.isArray(
                                         draggedDosen.keahlian
                                       )
@@ -1268,17 +1317,93 @@ export default function PBL() {
                                         : (draggedDosen.keahlian || "")
                                             .split(",")
                                             .map((k) => k.trim());
-                                      const isStandby = dosenKeahlian
-                                        .map((k) => k.toLowerCase())
-                                        .includes("standby");
-                                      const match = (
-                                        mk.keahlian_required || []
-                                      ).some((k) => dosenKeahlian.includes(k));
-                                      if (!match && !isStandby) {
-                                        setError(
-                                          "Keahlian dosen tidak sesuai dengan kebutuhan mata kuliah ini."
+                                      const requiredKeahlian = mk.keahlian_required || [];
+                                      
+                                      // Check if dosen is standby
+                                      const isStandby = dosenKeahlian.some(k => k.toLowerCase().includes('standby'));
+                                      
+                                      // If dosen is standby, skip keahlian validation
+                                      if (!isStandby) {
+                                        // More flexible keahlian matching - sama seperti PBLGenerate.tsx
+                                        const keahlianMatch = requiredKeahlian.some(req => 
+                                          dosenKeahlian.some(dosenKeahlian => {
+                                            const reqLower = req.toLowerCase();
+                                            const dosenKeahlianLower = dosenKeahlian.toLowerCase();
+                                            return dosenKeahlianLower.includes(reqLower) || 
+                                                   reqLower.includes(dosenKeahlianLower) ||
+                                                   reqLower.split(' ').some(word => dosenKeahlianLower.includes(word)) ||
+                                                   dosenKeahlianLower.split(' ').some(word => reqLower.includes(word));
+                                          })
                                         );
-                                        return;
+
+                                        if (!keahlianMatch) {
+                                          setError("Keahlian dosen tidak sesuai dengan kebutuhan mata kuliah ini.");
+                                          return;
+                                        }
+                                      }
+
+                                      // Validasi peran_utama - sama seperti PBLGenerate.tsx
+                                      let isPerfectMatch = false;
+                                      let matchReason = '';
+
+                                      if (draggedDosen.peran_utama === 'ketua') {
+                                        if (draggedDosen.matkul_ketua_nama && draggedDosen.matkul_ketua_semester) {
+                                          // More flexible matching for ketua
+                                          const matkulName = draggedDosen.matkul_ketua_nama.toLowerCase();
+                                          const mkName = mk.nama.toLowerCase();
+                                          const mkKode = mk.kode.toLowerCase();
+                                          
+                                          // Check if this dosen is ketua for this specific mata kuliah and semester
+                                          if ((matkulName.includes(mkName) || mkName.includes(matkulName) ||
+                                               matkulName.includes(mkKode) || mkKode.includes(matkulName) ||
+                                               mkName.split(' ').some(word => matkulName.includes(word)) ||
+                                               matkulName.split(' ').some(word => mkName.includes(word))) &&
+                                              draggedDosen.matkul_ketua_semester === mk.semester) {
+                                            isPerfectMatch = true;
+                                            matchReason = `Ketua untuk ${mk.nama} Semester ${mk.semester}`;
+                                          }
+                                        }
+                                      } else if (draggedDosen.peran_utama === 'anggota') {
+                                        if (draggedDosen.matkul_anggota_nama && draggedDosen.matkul_anggota_semester) {
+                                          // More flexible matching for anggota
+                                          const matkulName = draggedDosen.matkul_anggota_nama.toLowerCase();
+                                          const mkName = mk.nama.toLowerCase();
+                                          const mkKode = mk.kode.toLowerCase();
+                                          
+                                          // Check if this dosen is anggota for this specific mata kuliah and semester
+                                          if ((matkulName.includes(mkName) || mkName.includes(matkulName) ||
+                                               matkulName.includes(mkKode) || mkKode.includes(matkulName) ||
+                                               mkName.split(' ').some(word => matkulName.includes(word)) ||
+                                               matkulName.split(' ').some(word => mkName.includes(word))) &&
+                                              draggedDosen.matkul_anggota_semester === mk.semester) {
+                                            isPerfectMatch = true;
+                                            matchReason = `Anggota untuk ${mk.nama} Semester ${mk.semester}`;
+                                          }
+                                        }
+                                      } else if (draggedDosen.peran_utama === 'dosen_mengajar') {
+                                        if (draggedDosen.peran_kurikulum_mengajar) {
+                                          // More flexible matching for dosen mengajar
+                                          const peranKurikulum = draggedDosen.peran_kurikulum_mengajar.toLowerCase();
+                                          const mkName = mk.nama.toLowerCase();
+                                          const mkKode = mk.kode.toLowerCase();
+                                          
+                                          // Check if this dosen's peran_kurikulum_mengajar matches the mata kuliah
+                                          if (peranKurikulum.includes(mkName) || mkName.includes(peranKurikulum) ||
+                                              peranKurikulum.includes(mkKode) || mkKode.includes(peranKurikulum) ||
+                                              mkName.split(' ').some(word => peranKurikulum.includes(word)) ||
+                                              peranKurikulum.split(' ').some(word => mkName.includes(word))) {
+                                            isPerfectMatch = true;
+                                            matchReason = `Dosen Mengajar untuk ${mk.nama}`;
+                                          }
+                                        }
+                                      }
+
+                                      // Jika tidak ada perfect match dan bukan standby, berikan warning tapi tetap izinkan
+                                      if (!isPerfectMatch && !isStandby) {
+                                        const warningMsg = `Dosen ${draggedDosen.name} tidak memiliki peran yang sesuai untuk ${mk.nama} (${mk.kode}). Keahlian sesuai tetapi peran tidak cocok.`;
+                                        setWarning(warningMsg);
+                                        // Clear warning after 5 seconds
+                                        setTimeout(() => setWarning(null), 5000);
                                       }
                                       setIsMovingDosen(true);
                                       try {
@@ -1313,8 +1438,14 @@ export default function PBL() {
                                           return updated;
                                         });
                                         setSuccess(
-                                          `Dosen ${draggedDosen.name} berhasil di-assign ke PBL ini.`
+                                          isStandby
+                                            ? `Dosen ${draggedDosen.name} (Standby) berhasil di-assign ke PBL ini.`
+                                            : isPerfectMatch 
+                                              ? `Dosen ${draggedDosen.name} berhasil di-assign ke PBL ini. ${matchReason}`
+                                              : `Dosen ${draggedDosen.name} berhasil di-assign ke PBL ini (keahlian sesuai, peran tidak cocok).`
                                         );
+                                        // Update reporting data secara real-time
+                                        await updateReportingData();
                                       } catch (err) {
                                         setError("Gagal assign dosen");
                                       } finally {
@@ -1404,14 +1535,11 @@ export default function PBL() {
                                         </div>
                                         <div className="flex flex-wrap gap-2">
                                           {assigned.map((dosen) => {
-                                            // Pastikan keahlianArr selalu array string
-                                            const keahlianArr =
-                                              dosen.keahlianArr ||
-                                              (Array.isArray(dosen.keahlian)
-                                                ? dosen.keahlian
-                                                : (dosen.keahlian || "")
-                                                    .split(",")
-                                                    .map((k) => k.trim()));
+                                            // Cek apakah dosen standby
+                                            const isStandby = Array.isArray(dosen.keahlian)
+                                              ? dosen.keahlian.some(k => k.toLowerCase().includes('standby'))
+                                              : (dosen.keahlian || '').toLowerCase().includes('standby');
+
                                             let badgeBg = "bg-green-100 dark:bg-green-900/40";
                                             let circleBg = "bg-green-500";
                                             let textColor = "text-green-700 dark:text-green-200";
@@ -1432,66 +1560,63 @@ export default function PBL() {
                                               textColor = "text-purple-700 dark:text-purple-200";
                                               initial = "M";
                                             }
+                                            if (isStandby) {
+                                              badgeBg = "bg-yellow-100 dark:bg-yellow-900/40";
+                                              circleBg = "bg-yellow-400";
+                                              textColor = "text-yellow-800 dark:text-yellow-200";
+                                              initial = "S";
+                                            }
                                             return (
-                                              <div
-                                                key={dosen.id}
-                                                className={`flex items-center gap-2 px-3 py-1 rounded-full ${badgeBg} cursor-move transition-all duration-200 hover:scale-105 ${
-                                                  draggedDosen?.id === dosen.id ? "scale-105" : ""
-                                                }`}
-                                                draggable
-                                                onDragStart={() => {
-                                                  setDraggedDosen(dosen);
-                                                  setDraggedFromPBLId(pbl.id!);
-                                                }}
-                                                onDragEnd={() => {
-                                                  setDraggedDosen(null);
-                                                  setDraggedFromPBLId(null);
-                                                }}
-                                              >
+                                              <div key={dosen.id} className={`flex items-center gap-2 px-3 py-1 rounded-full ${badgeBg}`}>
                                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${circleBg}`}>
-                                                  <span className="text-white text-xs font-bold">
-                                                    {initial}
-                                                  </span>
+                                                  <span className="text-white text-xs font-bold">{initial}</span>
                                                 </div>
                                                 <span className={`text-xs font-medium ${textColor}`}>
                                                   {dosen.name}
-                                                </span>
-                                                <button
-                                                  className="ml-2 p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-full transition"
-                                                  title="Hapus penugasan"
-                                                  onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    try {
-                                                      await api.delete(
-                                                        `/pbls/${pbl.id}/unassign-dosen/${dosen.id}`
-                                                      );
-                                                      // Fetch assigned dosen batch hanya untuk pbl.id
-                                                      const res = await api.post(
-                                                        "/pbls/assigned-dosen-batch",
-                                                        { pbl_ids: [pbl.id] }
-                                                      );
-                                                      const pblIdNum = Number(pbl.id);
-                                                      if (isFinite(pblIdNum)) {
-                                                        setAssignedDosen((prev) => ({
-                                                          ...prev,
-                                                          [pblIdNum]:
-                                                            res.data && res.data[pblIdNum]
-                                                              ? res.data[pblIdNum]
-                                                              : [],
-                                                        }));
+                                                  {isStandby && (
+                                                    <span className="ml-2 px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 text-[10px] font-semibold">
+                                                      Dosen Standby
+                                                    </span>
+                                                  )}
+                                                  <button
+                                                    className="ml-2 p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-full transition"
+                                                    title="Hapus penugasan"
+                                                    onClick={async (e) => {
+                                                      e.stopPropagation();
+                                                      try {
+                                                        await api.delete(
+                                                          `/pbls/${pbl.id}/unassign-dosen/${dosen.id}`
+                                                        );
+                                                        // Fetch assigned dosen batch hanya untuk pbl.id
+                                                        const res = await api.post(
+                                                          "/pbls/assigned-dosen-batch",
+                                                          { pbl_ids: [pbl.id] }
+                                                        );
+                                                        const pblIdNum = Number(pbl.id);
+                                                        if (isFinite(pblIdNum)) {
+                                                          setAssignedDosen((prev) => ({
+                                                            ...prev,
+                                                            [pblIdNum]:
+                                                              res.data && res.data[pblIdNum]
+                                                                ? res.data[pblIdNum]
+                                                                : [],
+                                                          }));
+                                                        }
+                                                        // Tambahan: refresh seluruh data agar dosen yang di-unassign langsung muncul di list tersedia/standby
+                                                        await fetchAllRef.current();
+                                                        setSuccess(`Dosen ${dosen.name} berhasil di-unassign.`);
+                                                        // Update reporting data secara real-time
+                                                        await updateReportingData();
+                                                      } catch (err) {
+                                                        // Fix linter: safely access error message
+                                                        const errorMsg = (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data && typeof err.response.data.message === 'string') ? err.response.data.message : 'Gagal unassign dosen';
+                                                        setError(String(errorMsg));
                                                       }
-                                                      // Tambahan: refresh seluruh data agar dosen yang di-unassign langsung muncul di list tersedia/standby
-                                                      await fetchAllRef.current();
-                                                      setSuccess(`Dosen ${dosen.name} berhasil di-unassign.`);
-                                                    } catch (err: any) {
-                                                      setError(
-                                                        err?.response?.data?.message || "Gagal unassign dosen"
-                                                      );
-                                                    }
-                                                  }}
-                                                >
-                                                  <FontAwesomeIcon icon={faTimes} className="w-3 h-3" />
-                                                </button>
+                                                    }}
+                                                  >
+                                                    <FontAwesomeIcon icon={faTimes} className="w-3 h-3" />
+                                                  </button>
+                                                </span>
                                               </div>
                                             );
                                           })}
@@ -1504,6 +1629,9 @@ export default function PBL() {
                                         </div>
                                         <div className="text-xs text-gray-400 dark:text-gray-500 mb-2">
                                           Hanya dosen dari semester yang sama yang dapat di-assign
+                                        </div>
+                                        <div className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
+                                          Dosen standby dapat di-assign ke modul manapun
                                         </div>
                                         {availableDosen.length > 0 ? (
                                           <div className="text-xs text-gray-400 dark:text-gray-500">

@@ -1609,10 +1609,16 @@ export default function MataKuliah() {
                       {pblList.map((pbl, idx) => (
                         <div key={idx} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-sm">
                           <input
-                            type="text"
+                            type="number"
+                            min={1}
+                            step={1}
                             placeholder="Modul Ke"
                             value={pbl.modul_ke}
-                            onChange={e => setPblList(list => list.map((c, i) => i === idx ? { ...c, modul_ke: e.target.value } : c))}
+                            onChange={e => {
+                              // Hanya izinkan angka
+                              const val = e.target.value.replace(/[^0-9]/g, '');
+                              setPblList(list => list.map((c, i) => i === idx ? { ...c, modul_ke: val } : c));
+                            }}
                             className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white font-medium text-base focus:outline-none focus:ring-2 focus:ring-brand-500 transition placeholder:text-gray-400 dark:placeholder:text-gray-500"
                           />
                           <input

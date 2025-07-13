@@ -17,7 +17,7 @@ class CSRController extends Controller
     public function index()
     {
         try {
-            $csrs = CSR::with('dosen')->get();
+            $csrs = CSR::with(['dosen', 'mataKuliah'])->get();
             return response()->json(['data' => $csrs]);
         } catch (\Exception $e) {
             Log::error('Error fetching CSR data: ' . $e->getMessage());

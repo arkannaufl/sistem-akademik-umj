@@ -63,6 +63,7 @@ Route::middleware('auth:sanctum')->prefix('reporting')->group(function () {
     Route::get('/summary', [ReportingController::class, 'summary']);
     Route::get('/export', [ReportingController::class, 'export']);
     Route::get('/dosen-csr', [ReportingController::class, 'dosenCsrReport']);
+    Route::get('/dosen-pbl', [ReportingController::class, 'dosenPblReport']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {

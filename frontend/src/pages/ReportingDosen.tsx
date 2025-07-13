@@ -6,6 +6,7 @@ import {
 } from '../icons';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faClock } from "@fortawesome/free-solid-svg-icons";
+import { faChevronDown, faChevronUp } from "@fortawesome/free-solid-svg-icons";
 
 interface DosenCSRReport {
   dosen_id: number;
@@ -24,11 +25,43 @@ interface DosenCSRReport {
   tanggal_akhir?: string;
 }
 
+interface DosenPBLReport {
+  dosen_id: number;
+  dosen_name: string;
+  nid: string;
+  keahlian?: string[];
+  total_pbl: number;
+  total_sesi: number;
+  total_waktu_menit: number;
+  per_semester: Array<{
+    semester: number;
+    jumlah: number;
+    total_sesi: number;
+    total_waktu_menit: number;
+    modul_pbl: Array<{
+      blok: number;
+      modul_ke: string;
+      nama_modul: string;
+      mata_kuliah_kode: string;
+      mata_kuliah_nama: string;
+      waktu_menit: number;
+      jumlah_sesi: number;
+    }>;
+    tanggal_mulai?: string;
+    tanggal_akhir?: string;
+  }>;
+  tanggal_mulai?: string;
+  tanggal_akhir?: string;
+}
+
 const SKELETON_ROWS = 6;
 
 const ReportingDosen: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'csr' | 'pbl'>('csr');
   const [allDosenCsrReport, setAllDosenCsrReport] = useState<DosenCSRReport[]>([]);
   const [dosenCsrReport, setDosenCsrReport] = useState<DosenCSRReport[]>([]);
+  const [allDosenPblReport, setAllDosenPblReport] = useState<DosenPBLReport[]>([]);
+  const [dosenPblReport, setDosenPblReport] = useState<DosenPBLReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     search: '',
@@ -39,21 +72,23 @@ const ReportingDosen: React.FC = () => {
   const [pagination, setPagination] = useState({
     current_page: 1,
     last_page: 1,
-    per_page: 15,
+    per_page: 10,
     total: 0,
   });
+  const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
 
-  useEffect(() => {
-    const fetchDosenCsrReport = async () => {
+  // Pindahkan ke luar agar bisa dipanggil event listener
+  const fetchDosenReport = async () => {
       try {
         setLoading(true);
         const params = new URLSearchParams({
           page: pagination.current_page.toString(),
           per_page: pagination.per_page.toString(),
         });
-        const response = await axios.get(`/reporting/dosen-csr?${params}`);
+      let response;
+      if (activeTab === 'csr') {
+        response = await axios.get(`/reporting/dosen-csr?${params}`);
         let data = Array.isArray(response.data.data) ? response.data.data : [];
-        // Cari tanggal mulai/akhir terawal/terakhir dari semua blok CSR yang diajar dosen
         data = data.map((d: DosenCSRReport) => {
           let allTanggalMulai: string[] = [];
           let allTanggalAkhir: string[] = [];
@@ -69,6 +104,32 @@ const ReportingDosen: React.FC = () => {
         });
         setAllDosenCsrReport(data);
         setDosenCsrReport(data);
+      } else {
+        response = await axios.get(`/reporting/dosen-pbl?${params}`);
+        let data = Array.isArray(response.data.data) ? response.data.data : [];
+        data = data.map((d: DosenPBLReport) => {
+          if (typeof d.keahlian === 'string') {
+            try {
+              d.keahlian = JSON.parse(d.keahlian);
+            } catch {
+              d.keahlian = [];
+            }
+          }
+          let allTanggalMulai: string[] = [];
+          let allTanggalAkhir: string[] = [];
+          d.per_semester.forEach(sem => {
+            if (Array.isArray(sem.tanggal_mulai)) allTanggalMulai.push(...sem.tanggal_mulai);
+            else if (sem.tanggal_mulai) allTanggalMulai.push(sem.tanggal_mulai);
+            if (Array.isArray(sem.tanggal_akhir)) allTanggalAkhir.push(...sem.tanggal_akhir);
+            else if (sem.tanggal_akhir) allTanggalAkhir.push(sem.tanggal_akhir);
+          });
+          d.tanggal_mulai = allTanggalMulai.length > 0 ? allTanggalMulai.sort()[0] : undefined;
+          d.tanggal_akhir = allTanggalAkhir.length > 0 ? allTanggalAkhir.sort().reverse()[0] : undefined;
+          return d;
+        });
+        setAllDosenPblReport(data);
+        setDosenPblReport(data);
+      }
         setPagination({
           current_page: response.data.current_page || 1,
           last_page: response.data.last_page || 1,
@@ -76,19 +137,40 @@ const ReportingDosen: React.FC = () => {
           total: response.data.total || 0,
         });
       } catch (error) {
+      if (activeTab === 'csr') {
         setAllDosenCsrReport([]);
         setDosenCsrReport([]);
+      } else {
+        setAllDosenPblReport([]);
+        setDosenPblReport([]);
+      }
       } finally {
         setLoading(false);
       }
     };
-    fetchDosenCsrReport();
+
+  useEffect(() => {
+    fetchDosenReport();
     // eslint-disable-next-line
-  }, [pagination.current_page, pagination.per_page]);
+  }, [activeTab, pagination.current_page, pagination.per_page]);
+
+  // Tambahkan event listener untuk real-time sync dengan PBL-detail.tsx
+  useEffect(() => {
+    const handlePblAssignmentUpdate = () => {
+      if (activeTab === 'pbl') {
+        fetchDosenReport();
+      }
+    };
+    window.addEventListener('pbl-assignment-updated', handlePblAssignmentUpdate);
+    return () => {
+      window.removeEventListener('pbl-assignment-updated', handlePblAssignmentUpdate);
+    };
+  }, [activeTab]);
 
   // Search & filter
   useEffect(() => {
     const q = filters.search.toLowerCase();
+    if (activeTab === 'csr') {
     let filtered = allDosenCsrReport;
     if (filters.semester) {
       filtered = filtered.filter(d => d.per_semester.some(sem => String(sem.semester) === filters.semester));
@@ -109,7 +191,29 @@ const ReportingDosen: React.FC = () => {
       });
     }
     setDosenCsrReport(filtered);
-  }, [filters, allDosenCsrReport]);
+    } else {
+      let filtered = allDosenPblReport;
+      if (filters.semester) {
+        filtered = filtered.filter(d => d.per_semester.some(sem => String(sem.semester) === filters.semester));
+      }
+      if (filters.start_date) {
+        filtered = filtered.filter(d => d.tanggal_mulai && d.tanggal_mulai >= filters.start_date);
+      }
+      if (filters.end_date) {
+        filtered = filtered.filter(d => d.tanggal_akhir && d.tanggal_akhir <= filters.end_date);
+      }
+      if (q) {
+        filtered = filtered.filter(d => {
+          const nama = d.dosen_name.toLowerCase();
+          const nid = d.nid.toLowerCase();
+          const keahlianArr = Array.isArray(d.keahlian) ? d.keahlian : typeof d.keahlian === 'string' ? String(d.keahlian).split(',').map((k: string) => k.trim()) : [];
+          const keahlianStr = keahlianArr.join(',').toLowerCase();
+          return nama.includes(q) || nid.includes(q) || keahlianStr.includes(q);
+        });
+      }
+      setDosenPblReport(filtered);
+    }
+  }, [filters, allDosenCsrReport, allDosenPblReport, activeTab]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -123,17 +227,42 @@ const ReportingDosen: React.FC = () => {
   const handleExport = async () => {
     try {
       const params = new URLSearchParams(filters);
-      const response = await axios.get(`/reporting/dosen-csr/export?${params}`);
+      const endpoint = activeTab === 'csr' ? 'dosen-csr' : 'dosen-pbl';
+      const response = await axios.get(`/reporting/${endpoint}/export?${params}`);
       const blob = new Blob([JSON.stringify(response.data.data, null, 2)], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = response.data.filename || 'dosen-csr-report.json';
+      a.download = response.data.filename || `dosen-${activeTab}-report.json`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {}
+  };
+
+  const getCurrentReportData = () => {
+    return activeTab === 'csr' ? dosenCsrReport : dosenPblReport;
+  };
+
+  const getCurrentAllReportData = () => {
+    return activeTab === 'csr' ? allDosenCsrReport : allDosenPblReport;
+  };
+
+  const getTotalField = () => {
+    return activeTab === 'csr' ? 'total_csr' : 'total_pbl';
+  };
+
+  const getTitle = () => {
+    return activeTab === 'csr' ? 'CSR' : 'PBL';
+  };
+
+  const getDescription = () => {
+    return activeTab === 'csr' ? 'Laporan dosen mengajar CSR per semester' : 'Laporan dosen mengajar PBL per semester';
+  };
+
+  const toggleExpand = (dosenId: number) => {
+    setExpandedRows((prev) => ({ ...prev, [dosenId]: !prev[dosenId] }));
   };
 
   return (
@@ -142,7 +271,7 @@ const ReportingDosen: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Reporting Dosen</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Laporan dosen mengajar CSR per semester</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">{getDescription()}</p>
         </div>
         <button
           onClick={handleExport}
@@ -151,6 +280,34 @@ const ReportingDosen: React.FC = () => {
           <DownloadIcon className="w-5 h-5" />
           Export Data .JSON
         </button>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex justify-center mb-6">
+        <div className="flex space-x-2 bg-white dark:bg-gray-800 rounded-full shadow-lg p-1 w-fit mx-auto border border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => setActiveTab('csr')}
+            className={`flex-1 px-6 py-2 text-base font-semibold rounded-full transition-colors ${
+              activeTab === 'csr'
+                ? 'bg-brand-500 text-white shadow'
+                : 'text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400'
+            }`}
+            style={{ minWidth: 100 }}
+          >
+            CSR
+          </button>
+          <button
+            onClick={() => setActiveTab('pbl')}
+            className={`flex-1 px-6 py-2 text-base font-semibold rounded-full transition-colors ${
+              activeTab === 'pbl'
+                ? 'bg-brand-500 text-white shadow'
+                : 'text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400'
+            }`}
+            style={{ minWidth: 100 }}
+          >
+            PBL
+          </button>
+        </div>
       </div>
 
       {/* Filter Section */}
@@ -183,7 +340,7 @@ const ReportingDosen: React.FC = () => {
               className="w-full md:w-44 h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               <option value="">Semua Semester</option>
-              {Array.from(new Set(allDosenCsrReport.flatMap(d => d.per_semester.map(sem => sem.semester)))).sort((a, b) => a - b).map(sem => (
+              {Array.from(new Set(getCurrentAllReportData().flatMap(d => d.per_semester.map(sem => sem.semester)))).sort((a, b) => a - b).map(sem => (
                 <option key={sem} value={sem}>Semester {sem}</option>
               ))}
             </select>
@@ -218,9 +375,10 @@ const ReportingDosen: React.FC = () => {
             <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Nama Dosen</th>
-                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">NID</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Peran</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Keahlian</th>
-                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Total CSR</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Total Modul PBL</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Total PBL</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Total Waktu</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Per Semester</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Tanggal Mulai</th>
@@ -231,29 +389,88 @@ const ReportingDosen: React.FC = () => {
               {loading ? (
                 Array.from({ length: SKELETON_ROWS }).map((_, idx) => (
                   <tr key={idx}>
-                    {Array.from({ length: 8 }).map((_, colIdx) => (
+                    {Array.from({ length: 9 }).map((_, colIdx) => (
                       <td key={colIdx} className="px-6 py-4">
                         <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse opacity-60 mb-2"></div>
                       </td>
                     ))}
                   </tr>
                 ))
-              ) : dosenCsrReport.length === 0 ? (
+              ) : getCurrentReportData().length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">Tidak ada data dosen mengajar CSR.</td>
+                  <td colSpan={10} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">Tidak ada data dosen mengajar {getTitle()}.</td>
                 </tr>
               ) : (
-                dosenCsrReport.map((dosen, idx) => {
-                  // Hitung total waktu: setiap CSR = 5x50 menit = 250 menit
-                  const totalWaktuMenit = dosen.total_csr * 5 * 50; // 5 sesi x 50 menit per CSR
+                getCurrentReportData().map((dosen, idx) => {
+                  // Gunakan type narrowing
+                  let totalWaktuMenit = 0;
+                  let totalModulPbl = 0;
+                  let totalPbl = 0;
+                  let totalSesi = 0;
+                  if (activeTab === 'pbl') {
+                    const d = dosen as DosenPBLReport;
+                    totalWaktuMenit = d.total_waktu_menit;
+                    // total modul PBL = jumlah seluruh modul_pbl di semua semester
+                    totalModulPbl = d.per_semester.reduce((acc, sem) => acc + (sem.modul_pbl ? sem.modul_pbl.length : 0), 0);
+                    // total PBL = jumlah unique mata_kuliah_kode di seluruh modul_pbl
+                    const mkSet = new Set<string>();
+                    d.per_semester.forEach(sem => {
+                      sem.modul_pbl.forEach(modul => {
+                        mkSet.add(modul.mata_kuliah_kode);
+                      });
+                    });
+                    totalPbl = mkSet.size;
+                    totalSesi = d.total_sesi;
+                  } else {
+                    const d = dosen as DosenCSRReport;
+                    totalWaktuMenit = d.total_csr * 5 * 50;
+                    totalModulPbl = d.total_csr; // CSR tidak relevan, tetap isi agar tidak error
+                    totalPbl = d.total_csr;
+                    totalSesi = d.total_csr * 5;
+                  }
                   const totalJam = Math.floor(totalWaktuMenit / 60);
                   const totalMenit = totalWaktuMenit % 60;
-                  
                   return (
-                    <tr key={dosen.dosen_id} className={idx % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : '' + ' hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-colors'}>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.dosen_name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.nid}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
+                    <React.Fragment key={dosen.dosen_id}>
+                      <tr className={
+                        'group border-b-4 border-gray-200 dark:border-gray-800 ' +
+                        (idx % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : '') +
+                        ' hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-colors'
+                      }>
+                        {/* Nama dosen besar dan bold */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-base font-semibold text-gray-900 dark:text-white mb-1">{dosen.dosen_name}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">NID: {dosen.nid}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(() => {
+                            // Ambil peran utama dari dosen
+                            let peran: string = 'standby';
+                            if (typeof (dosen as any).peran_utama === 'string' && (dosen as any).peran_utama) {
+                              peran = (dosen as any).peran_utama;
+                            }
+                            let badgeClass = 'bg-gray-200 text-gray-700';
+                            let label = 'Standby';
+                            if (peran === 'ketua') {
+                              badgeClass = 'bg-blue-100 text-blue-700';
+                              label = 'Ketua';
+                            } else if (peran === 'anggota') {
+                              badgeClass = 'bg-green-100 text-green-700';
+                              label = 'Anggota';
+                            } else if (peran === 'dosen_mengajar') {
+                              badgeClass = 'bg-yellow-100 text-yellow-700';
+                              label = 'Dosen Mengajar';
+                            } else if (peran && peran.toLowerCase() === 'standby') {
+                              badgeClass = 'bg-gray-200 text-gray-700';
+                              label = 'Standby';
+                            }
+                            return (
+                              <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {/* Badge keahlian seragam seperti di PBLGenerate.tsx */}
                         {(() => {
                           let keahlianArr: string[] = [];
                           if (Array.isArray(dosen.keahlian)) {
@@ -264,11 +481,9 @@ const ReportingDosen: React.FC = () => {
                             keahlianArr = [];
                           }
                           return keahlianArr.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
+                              <div className="flex flex-wrap gap-2">
                               {keahlianArr.map((k, i) => (
-                                <span key={i} className="text-xs px-2 py-1 bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded-full">
-                                  {k}
-                                </span>
+                                  <span key={i} className="bg-gray-700 text-white dark:bg-gray-700 dark:text-white px-3 py-1 rounded-full text-xs font-medium">{k}</span>
                               ))}
                             </div>
                           ) : (
@@ -276,37 +491,103 @@ const ReportingDosen: React.FC = () => {
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{dosen.total_csr}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
-                        <div className="flex items-center gap-2">
-                          <FontAwesomeIcon icon={faClock} className="w-4 h-4 text-blue-500" />
-                          <span className="font-medium">
-                            {totalJam > 0 ? `${totalJam}j ${totalMenit}m` : `${totalMenit}m`}
-                          </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            ({dosen.total_csr} × 5×50 menit)
-                          </span>
-                        </div>
-                      </td>
+                        {/* Total Modul PBL */}
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90 text-center font-semibold text-base">{totalModulPbl}</td>
+                        {/* Total PBL */}
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90 text-center font-semibold text-base">{totalPbl}</td>
+                        {/* Total Waktu */}
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <FontAwesomeIcon icon={faClock} className="w-4 h-4 text-blue-500" />
+                              <span className="font-medium text-base">
+                                {totalJam > 0 ? `${totalJam}j ${totalMenit}m` : `${totalMenit}m`}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">({totalSesi} sesi, {activeTab === 'pbl' ? `${totalModulPbl} modul` : `${totalPbl} × 5×50 menit`})</span>
+                          </div>
+                        </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
                         <div className="flex flex-col gap-1">
-                          {dosen.per_semester.map((sem) => {
-                            // Hitung waktu per semester
-                            const waktuPerSemester = sem.jumlah * 5 * 50; // 5 sesi x 50 menit per CSR
+                            {dosen.per_semester.map((sem, i) => {
+                              let waktuPerSemester = 0;
+                              let countPerSemester = 0;
+                              let sesiPerSemester = 0;
+                              if (activeTab === 'pbl') {
+                                const s = sem as DosenPBLReport['per_semester'][0];
+                                waktuPerSemester = s.total_waktu_menit;
+                                countPerSemester = s.jumlah;
+                                sesiPerSemester = s.total_sesi;
+                              } else {
+                                const s = sem as DosenCSRReport['per_semester'][0];
+                                waktuPerSemester = s.jumlah * 5 * 50;
+                                countPerSemester = s.jumlah;
+                                sesiPerSemester = s.jumlah * 5;
+                              }
                             const jamPerSemester = Math.floor(waktuPerSemester / 60);
                             const menitPerSemester = waktuPerSemester % 60;
-                            
                             return (
                               <div key={sem.semester} className="mb-1">
-                                <span className="font-semibold">Semester {sem.semester}:</span> {sem.jumlah} CSR
-                                <div className="flex items-center gap-1 mt-1">
-                                  <FontAwesomeIcon icon={faClock} className="w-3 h-3 text-blue-500" />
-                                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                                    {jamPerSemester > 0 ? `${jamPerSemester}j ${menitPerSemester}m` : `${menitPerSemester}m`}
-                                  </span>
-                                </div>
-                                {sem.blok_csr.length > 0 && (
-                                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Blok: {sem.blok_csr.join(', ')})</span>
+                                  <button
+                                    className="flex items-center gap-2 font-semibold text-brand-600 dark:text-brand-400 focus:outline-none"
+                                    onClick={() => toggleExpand(dosen.dosen_id * 100 + sem.semester)}
+                                    aria-expanded={!!expandedRows[dosen.dosen_id * 100 + sem.semester]}
+                                  >
+                                    <FontAwesomeIcon icon={expandedRows[dosen.dosen_id * 100 + sem.semester] ? faChevronUp : faChevronDown} className="w-3 h-3" />
+                                    Semester {sem.semester}: {countPerSemester} {getTitle()} / {sesiPerSemester} sesi
+                                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">{jamPerSemester > 0 ? `${jamPerSemester}j ${menitPerSemester}m` : `${menitPerSemester}m`}</span>
+                                  </button>
+                                  {/* Collapsible detail modul */}
+                                  {activeTab === 'csr' && (sem as DosenCSRReport['per_semester'][0]).blok_csr && (sem as DosenCSRReport['per_semester'][0]).blok_csr.length > 0 && expandedRows[dosen.dosen_id * 100 + sem.semester] && (
+                                    <span className="ml-6 text-xs text-gray-500 dark:text-gray-400 block">Blok: {(sem as DosenCSRReport['per_semester'][0]).blok_csr.join(', ')}</span>
+                                  )}
+                                  {activeTab === 'pbl' && (sem as DosenPBLReport['per_semester'][0]).modul_pbl && (sem as DosenPBLReport['per_semester'][0]).modul_pbl.length > 0 && expandedRows[dosen.dosen_id * 100 + sem.semester] && (
+                                    <div className="ml-6 text-xs text-gray-700 dark:text-gray-300 space-y-2">
+                                      {/* Group by blok + kode MK, lalu tampilkan modul di bawahnya */}
+                                      {(() => {
+                                        const modulPbl = (sem as DosenPBLReport['per_semester'][0]).modul_pbl;
+                                        // Group by blok + kode MK
+                                        const blokMap: Record<string, { blok: number, kode: string, nama: string, sesi: number, waktu: number, modul: number, modulList: {modul_ke: string, nama_modul: string}[] }> = {};
+                                        modulPbl.forEach(modul => {
+                                          const key = `${modul.blok}__${modul.mata_kuliah_kode}`;
+                                          if (!blokMap[key]) {
+                                            blokMap[key] = {
+                                              blok: modul.blok,
+                                              kode: modul.mata_kuliah_kode,
+                                              nama: modul.mata_kuliah_nama,
+                                              sesi: 0,
+                                              waktu: 0,
+                                              modul: 0,
+                                              modulList: [],
+                                            };
+                                          }
+                                          blokMap[key].sesi += modul.jumlah_sesi;
+                                          blokMap[key].waktu += modul.waktu_menit;
+                                          blokMap[key].modul += 1;
+                                          blokMap[key].modulList.push({ modul_ke: modul.modul_ke, nama_modul: modul.nama_modul });
+                                        });
+                                        return Object.values(blokMap).sort((a, b) => a.blok - b.blok).map((blok, idx) => {
+                                          const jam = Math.floor(blok.waktu / 60);
+                                          const menit = blok.waktu % 60;
+                                          return (
+                                            <div key={idx}>
+                                              <div className="flex items-center gap-2">
+                                                <span>
+                                                  • Blok {blok.blok}: {blok.kode} — {blok.modul} modul, {blok.sesi} sesi, {jam > 0 ? `${jam}j` : ''} {menit > 0 ? `${menit}m` : ''}
+                                                </span>
+                                              </div>
+                                              <div className="ml-6 text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                                                {blok.modulList.sort((a, b) => Number(a.modul_ke) - Number(b.modul_ke)).map((modul, mIdx) => (
+                                                  <div key={mIdx}>
+                                                    - Modul {modul.modul_ke} ({modul.nama_modul})
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          );
+                                        });
+                                      })()}
+                                    </div>
                                 )}
                               </div>
                             );
@@ -314,12 +595,13 @@ const ReportingDosen: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
-                        {dosen.tanggal_mulai ? new Date(dosen.tanggal_mulai).toLocaleDateString('id-ID') : '-'}
+                          {dosen.tanggal_mulai ? new Date(dosen.tanggal_mulai).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">
-                        {dosen.tanggal_akhir ? new Date(dosen.tanggal_akhir).toLocaleDateString('id-ID') : '-'}
+                          {dosen.tanggal_akhir ? new Date(dosen.tanggal_akhir).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       </td>
                     </tr>
+                    </React.Fragment>
                   );
                 })
               )}
@@ -345,7 +627,7 @@ const ReportingDosen: React.FC = () => {
             </div>
             <div className="flex gap-1">
               <button
-                onClick={() => handlePageChange(pagination.current_page - 1)}
+                onClick={() => setPagination(prev => ({ ...prev, current_page: prev.current_page - 1 }))}
                 disabled={pagination.current_page === 1}
                 className="px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition disabled:opacity-50"
               >
@@ -354,7 +636,7 @@ const ReportingDosen: React.FC = () => {
               {Array.from({ length: pagination.last_page }, (_, i) => (
                 <button
                   key={i}
-                  onClick={() => handlePageChange(i + 1)}
+                  onClick={() => setPagination(prev => ({ ...prev, current_page: i + 1 }))}
                   className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 ${
                     pagination.current_page === i + 1
                       ? 'bg-brand-500 text-white'
@@ -365,7 +647,7 @@ const ReportingDosen: React.FC = () => {
                 </button>
               ))}
               <button
-                onClick={() => handlePageChange(pagination.current_page + 1)}
+                onClick={() => setPagination(prev => ({ ...prev, current_page: prev.current_page + 1 }))}
                 disabled={pagination.current_page === pagination.last_page}
                 className="px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition disabled:opacity-50"
               >
