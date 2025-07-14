@@ -43,9 +43,9 @@ class CSRController extends Controller
             $parts = explode('.', $request->nomor_csr);
             $semester = (int) $parts[0];
             $blok = (int) $parts[1];
-            
+
             $mataKuliahBlok = \App\Models\MataKuliah::where('kode', 'MKB' . $semester . '0' . $blok)->first();
-            
+
             if ($mataKuliahBlok) {
                 $request->merge([
                     'tanggal_mulai' => $mataKuliahBlok->tanggal_mulai,
@@ -100,9 +100,9 @@ class CSRController extends Controller
             $parts = explode('.', $request->nomor_csr);
             $semester = (int) $parts[0];
             $blok = (int) $parts[1];
-            
+
             $mataKuliahBlok = \App\Models\MataKuliah::where('kode', 'MKB' . $semester . '0' . $blok)->first();
-            
+
             if ($mataKuliahBlok) {
                 $request->merge([
                     'tanggal_mulai' => $mataKuliahBlok->tanggal_mulai,
@@ -120,21 +120,21 @@ class CSRController extends Controller
 
             // Buat deskripsi detail perubahan
             $changes = [];
-            
+
             // Cek perubahan nama
             if ($oldName !== $csr->nama) {
                 $oldNameDisplay = $oldName ?: '(kosong)';
                 $newNameDisplay = $csr->nama ?: '(kosong)';
                 $changes[] = "nama: {$oldNameDisplay} → {$newNameDisplay}";
             }
-            
+
             // Cek perubahan nomor CSR
             if ($oldNomor !== $csr->nomor_csr) {
                 $oldNomorDisplay = $oldNomor ?: '(kosong)';
                 $newNomorDisplay = $csr->nomor_csr ?: '(kosong)';
                 $changes[] = "nomor: {$oldNomorDisplay} → {$newNomorDisplay}";
             }
-            
+
             // Cek perubahan keahlian
             $oldKeahlianStr = is_array($oldKeahlian) ? implode(', ', $oldKeahlian) : $oldKeahlian;
             $newKeahlianStr = is_array($csr->keahlian_required) ? implode(', ', $csr->keahlian_required) : $csr->keahlian_required;
@@ -207,12 +207,12 @@ class CSRController extends Controller
             $semester = $csr->semester;
             $blok = $csr->blok;
             // Cari PBL dengan semester dan blok yang sama
-            $pbl = \App\Models\PBL::whereHas('mataKuliah', function($q) use ($semester, $blok) {
+            $pbl = \App\Models\PBL::whereHas('mataKuliah', function ($q) use ($semester, $blok) {
                 $q->where('semester', $semester)->where('blok', $blok);
             })->first();
             if (!$pbl) {
                 return response()->json([
-                    'message' => 'Tidak ditemukan PBL blok '.$blok.' semester '.$semester.' yang sesuai untuk CSR ini.'
+                    'message' => 'Tidak ditemukan PBL blok ' . $blok . ' semester ' . $semester . ' yang sesuai untuk CSR ini.'
                 ], 422);
             }
             $pblMapping = \App\Models\PBLMapping::where('pbl_id', $pbl->id)
@@ -220,7 +220,7 @@ class CSRController extends Controller
                 ->first();
             if (!$pblMapping) {
                 return response()->json([
-                    'message' => 'Dosen ini hanya bisa ditempatkan di CSR '.$csr->nomor_csr.' karena sudah di PBL blok '.$blok.' semester '.$semester
+                    'message' => 'Dosen ini hanya bisa ditempatkan di CSR ' . $csr->nomor_csr . ' karena sudah di PBL blok ' . $blok . ' semester ' . $semester
                 ], 422);
             }
 
@@ -279,7 +279,7 @@ class CSRController extends Controller
     {
         try {
             $mapping = CSRMapping::with(['csr', 'dosen'])->findOrFail($mappingId);
-            
+
             $dosenName = $mapping->dosen->name;
             $csrName = $mapping->csr->nama;
 
@@ -312,15 +312,15 @@ class CSRController extends Controller
         try {
             $csr = CSR::findOrFail($csrId);
             $assignedDosenIds = CSRMapping::pluck('dosen_id')->toArray();
-            
+
             $availableDosen = User::where('role', 'dosen')
                 ->whereNotIn('id', $assignedDosenIds)
                 ->get()
                 ->filter(function ($dosen) use ($csr) {
-                    $dosenKeahlian = is_array($dosen->keahlian) 
-                        ? $dosen->keahlian 
+                    $dosenKeahlian = is_array($dosen->keahlian)
+                        ? $dosen->keahlian
                         : explode(',', $dosen->keahlian);
-                    
+
                     return collect($csr->keahlian_required)
                         ->intersect($dosenKeahlian)
                         ->isNotEmpty();
@@ -365,4 +365,4 @@ class CSRController extends Controller
         $csrs = CSR::whereIn('mata_kuliah_kode', $kodeList)->get();
         return response()->json(['data' => $csrs]);
     }
-} 
+}

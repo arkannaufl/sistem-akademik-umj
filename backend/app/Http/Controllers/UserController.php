@@ -113,7 +113,7 @@ class UserController extends Controller
         }
 
         $user = User::create($validated);
-        
+
         // Log activity
         ActivityLogService::logCreate(
             'USER',
@@ -121,7 +121,7 @@ class UserController extends Controller
             $validated,
             $request
         );
-        
+
         return response()->json($user, 201);
     }
 
@@ -130,7 +130,7 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
         $oldData = $user->toArray();
-        
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string',
             'username' => [
@@ -195,7 +195,7 @@ class UserController extends Controller
         }
 
         $user->update($validated);
-        
+
         // Log activity
         ActivityLogService::logUpdate(
             'USER',
@@ -204,7 +204,7 @@ class UserController extends Controller
             $validated,
             $request
         );
-        
+
         return response()->json($user);
     }
 
@@ -213,14 +213,14 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
         $oldData = $user->toArray();
-        
+
         // Reset login status and delete all tokens
         $user->is_logged_in = 0;
         $user->current_token = null;
         $user->save();
         $user->tokens()->delete();
         $user->delete();
-        
+
         // Log activity
         ActivityLogService::logDelete(
             'USER',
@@ -228,7 +228,7 @@ class UserController extends Controller
             $oldData,
             request()
         );
-        
+
         return response()->json(['message' => 'User deleted']);
     }
 
@@ -373,4 +373,4 @@ class UserController extends Controller
             ], 422);
         }
     }
-} 
+}

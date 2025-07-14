@@ -76,11 +76,9 @@ const CSR: React.FC = () => {
   const [filterSemester, setFilterSemester] = useState("semua");
   const [filterStatus, setFilterStatus] = useState("semua");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchDosen, setSearchDosen] = useState("");
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
-  const [showMappingModal, setShowMappingModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedCSR, setSelectedCSR] = useState<CSR | null>(null);
 
@@ -88,10 +86,13 @@ const CSR: React.FC = () => {
   const [dosen, setDosen] = useState<Dosen[]>([]);
   const [mappings, setMappings] = useState<CSRMapping[]>([]);
   const [csrs, setCsrs] = useState<CSR[]>([]);
-  const [availableDosen, setAvailableDosen] = useState<User[]>([]);
   const [mataKuliah, setMataKuliah] = useState<
     Array<{ kode: string; nama: string }>
   >([]);
+  const [availableCSR, setAvailableCSR] = useState<CSR[]>([]);
+  const [selectedNomorCSR, setSelectedNomorCSR] = useState<string>("");
+  const [showDeleteModalCSR, setShowDeleteModalCSR] = useState(false);
+  const [csrToDelete, setCsrToDelete] = useState<CSR | null>(null);
 
   // Form states
   const [form, setForm] = useState({
@@ -103,26 +104,9 @@ const CSR: React.FC = () => {
     tanggal_akhir: "",
   });
 
-  const [mappingForm, setMappingForm] = useState({
-    csr_id: "",
-    dosen_id: "",
-  });
-
   // Notification states
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mappingError, setMappingError] = useState("");
-
-  // Tambah state di atas (dalam komponen CSR):
-  const [inputKeahlian, setInputKeahlian] = useState("");
-
-  // Tambah state di atas (dalam komponen CSR):
-  const [showDeleteModalCSR, setShowDeleteModalCSR] = useState(false);
-  const [csrToDelete, setCsrToDelete] = useState<CSR | null>(null);
-
-  // Tambahkan state baru di atas:
-  const [availableCSR, setAvailableCSR] = useState<any[]>([]);
-  const [selectedNomorCSR, setSelectedNomorCSR] = useState<string>("");
 
   // Tambahkan state loading untuk modal
   const [isSaving, setIsSaving] = useState(false);
@@ -157,8 +141,12 @@ const CSR: React.FC = () => {
       setDosen(dosenResponse.data);
       setCsrs(csrResponse.data.data);
       setMataKuliah(mataKuliahResponse.data);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Gagal memuat data");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Gagal mengambil data");
+      }
       // Set empty arrays as fallback
       setMappings([]);
       setDosen([]);
@@ -194,7 +182,12 @@ const CSR: React.FC = () => {
       } else {
         setActiveSemesterJenis(null);
       }
-    } catch (e) {
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Gagal mengambil semester aktif");
+      }
       setActiveSemesterJenis(null);
     }
   };
@@ -223,37 +216,6 @@ const CSR: React.FC = () => {
       return false;
     return true;
   });
-
-  // Filter dosen
-  const filteredDosen = dosen.filter((d) => {
-    const q = searchDosen.toLowerCase();
-    // Cari di nama, nid, dan keahlian
-    const keahlianArr = Array.isArray(d.keahlian)
-      ? d.keahlian
-      : d.keahlian.split(",").map((k) => k.trim());
-    const matchNama = d.name.toLowerCase().includes(q);
-    const matchNid = d.nid.toLowerCase().includes(q);
-    const matchKeahlian = keahlianArr.some((k) => k.toLowerCase().includes(q));
-    if (searchDosen && !(matchNama || matchNid || matchKeahlian)) return false;
-    return true;
-  });
-
-  // Get available dosen (not assigned to any CSR)
-  const getAvailableDosen = () => {
-    if (!Array.isArray(mappings)) return filteredDosen;
-    const assignedDosenIds = mappings.map((m) => m.dosen_id);
-    return filteredDosen.filter((d) => !assignedDosenIds.includes(d.id));
-  };
-
-  // Get dosen by keahlian
-  const getDosenByKeahlian = (keahlianRequired: string[]) => {
-    return getAvailableDosen().filter((d) => {
-      const dosenKeahlian = Array.isArray(d.keahlian)
-        ? d.keahlian
-        : d.keahlian.split(",").map((k) => k.trim());
-      return keahlianRequired.some((k) => dosenKeahlian.includes(k));
-    });
-  };
 
   // Get assigned dosen for CSR
   const getAssignedDosen = (csrId: number) => {
@@ -296,61 +258,16 @@ const CSR: React.FC = () => {
       } else {
         setError("Pilih CSR yang valid untuk diedit.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("handleSubmit error:", err);
-      if (err?.response?.data?.errors) {
-        const errors = err.response.data.errors;
-        const messages = Object.values(errors).flat().join(" ");
-        setError(messages);
+      if (err instanceof Error) {
+        setError(err.message);
       } else {
-        setError(err?.response?.data?.message || "Gagal menyimpan data");
+        setError("Gagal menyimpan data");
       }
     } finally {
       setIsSaving(false);
       console.log("handleSubmit finally, isSaving:", isSaving);
-    }
-  };
-
-  // Handle dosen assignment
-  const handleAssignDosen = async (csrId: number, dosenId: number) => {
-    try {
-      const res = await api.post("/csr-mappings", {
-        csr_id: csrId,
-        dosen_id: dosenId,
-      });
-      setSuccess("Dosen berhasil ditugaskan");
-      // Update state lokal mappings dan csrs agar animasi langsung terlihat
-      setMappings((prev) => [...prev, res.data.data]);
-      setCsrs((prev) =>
-        prev.map((csr) =>
-          csr.id === csrId ? { ...csr, status: "assigned" } : csr
-        )
-      );
-      // Jangan fetchData di sini, biar tidak reload page
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Gagal menugaskan dosen");
-    }
-  };
-
-  // Handle remove dosen assignment
-  const handleRemoveAssignment = async (csrId: number) => {
-    try {
-      if (!Array.isArray(mappings)) return;
-      const mapping = mappings.find((m) => m.csr_id === csrId);
-      if (mapping) {
-        await api.delete(`/csr-mappings/${mapping.id}`);
-        setSuccess("Penugasan dosen berhasil dihapus");
-        // Update state lokal mappings dan csrs agar animasi langsung terlihat
-        setMappings((prev) => prev.filter((m) => m.csr_id !== csrId));
-        setCsrs((prev) =>
-          prev.map((csr) =>
-            csr.id === csrId ? { ...csr, status: "available" } : csr
-          )
-        );
-        // Jangan fetchData di sini, biar tidak reload page
-      }
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Gagal menghapus penugasan");
     }
   };
 
@@ -361,25 +278,17 @@ const CSR: React.FC = () => {
       await api.delete(`/csr/${csrId}`);
       setSuccess("Data CSR berhasil dihapus");
       fetchData();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Gagal menghapus data");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Gagal menghapus data");
+      }
     } finally {
       setIsDeleting(false);
       setShowDeleteModalCSR(false);
       setCsrToDelete(null);
     }
-  };
-
-  // Get unique keahlian from dosen
-  const getAllKeahlian = () => {
-    const allKeahlian = new Set<string>();
-    dosen.forEach((d) => {
-      const keahlian = Array.isArray(d.keahlian)
-        ? d.keahlian
-        : d.keahlian.split(",").map((k) => k.trim());
-      keahlian.forEach((k) => allKeahlian.add(k));
-    });
-    return Array.from(allKeahlian).sort();
   };
 
   // Get semester options
@@ -393,60 +302,6 @@ const CSR: React.FC = () => {
   ).sort();
 
   // CSR functions
-  const handleOpenMappingModal = async (csr: CSR) => {
-    setSelectedCSR(csr);
-    setMappingForm({ csr_id: csr.id.toString(), dosen_id: "" });
-
-    try {
-      const response = await api.get(`/csr/${csr.id}/available-dosen`);
-      setAvailableDosen(response.data.data);
-    } catch (error) {
-      console.error("Error fetching available dosen:", error);
-    }
-
-    setShowMappingModal(true);
-  };
-
-  const handleMappingSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMappingError("");
-
-    try {
-      await api.post("/csr-mappings", {
-        ...mappingForm,
-        dosen_id: parseInt(mappingForm.dosen_id),
-      });
-      setSuccess("Dosen berhasil ditugaskan");
-      setShowMappingModal(false);
-      setMappingForm({ csr_id: "", dosen_id: "" });
-      setSelectedCSR(null);
-      fetchData();
-    } catch (error: any) {
-      setMappingError(error.response?.data?.message || "Terjadi kesalahan");
-    }
-  };
-
-  const handleRemoveMapping = async (mappingId: number) => {
-    if (
-      window.confirm("Apakah Anda yakin ingin menghapus penugasan dosen ini?")
-    ) {
-      try {
-        await api.delete(`/csr-mappings/${mappingId}`);
-        setSuccess("Penugasan dosen berhasil dihapus");
-        fetchData();
-      } catch (error: any) {
-        console.error("Error removing mapping:", error);
-      }
-    }
-  };
-
-  const handleCloseMappingModal = () => {
-    setShowMappingModal(false);
-    setMappingForm({ csr_id: "", dosen_id: "" });
-    setSelectedCSR(null);
-    setMappingError("");
-  };
-
   const handleEdit = (csr: CSR) => {
     setSelectedCSR(csr);
     setForm({
@@ -473,7 +328,6 @@ const CSR: React.FC = () => {
     });
     setEditMode(false);
     setSelectedCSR(null);
-    setMappingError("");
   };
 
   // Handle mata kuliah selection
@@ -486,7 +340,12 @@ const CSR: React.FC = () => {
       try {
         const res = await api.get(`/mata-kuliah/${kode}/csrs`);
         setAvailableCSR(Array.isArray(res.data) ? res.data : []);
-      } catch {
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("Gagal mengambil data CSR");
+        }
         setAvailableCSR([]);
       }
     }
@@ -513,9 +372,14 @@ const CSR: React.FC = () => {
   };
 
   // Pada filter mataKuliahNonBlokCSR, gunakan any agar tidak error property
-  const mataKuliahNonBlokCSR = (mataKuliah as any[]).filter(
-    (mk) => mk.jenis === "Non Blok" && mk.tipe_non_block === "CSR"
-  );
+  const mataKuliahNonBlokCSR = (
+    mataKuliah as unknown as {
+      kode: string;
+      nama: string;
+      jenis: string;
+      tipe_non_block: string;
+    }[]
+  ).filter((mk) => mk.jenis === "Non Blok" && mk.tipe_non_block === "CSR");
 
   // Group CSR by semester
   const groupedCSR = filteredCSR.reduce((acc, csr) => {
@@ -527,38 +391,6 @@ const CSR: React.FC = () => {
   const sortedSemesters = Object.keys(groupedCSR)
     .map(Number)
     .sort((a, b) => a - b);
-
-  // Tambahkan helper untuk memisahkan dosen standby dan dosen biasa
-  const dosenWithKeahlian = getAvailableDosen().map((d) => ({
-    ...d,
-    keahlianArr: Array.isArray(d.keahlian)
-      ? d.keahlian
-      : d.keahlian.split(",").map((k) => k.trim()),
-  }));
-  // Tambahkan helper untuk mengambil semua dosen yang sudah di-assign ke CSR
-  const assignedDosenIds = mappings.map((m) => m.dosen_id);
-  const standbyDosenList = dosenWithKeahlian.filter(
-    (d) =>
-      d.keahlianArr.map((k) => k.toLowerCase()).includes("standby") &&
-      !assignedDosenIds.includes(d.id) &&
-      (!searchDosen ||
-        d.name.toLowerCase().includes(searchDosen.toLowerCase()) ||
-        d.nid.toLowerCase().includes(searchDosen.toLowerCase()) ||
-        d.keahlianArr.some((k) =>
-          k.toLowerCase().includes(searchDosen.toLowerCase())
-        ))
-  );
-  const regularDosenList = dosenWithKeahlian.filter(
-    (d) =>
-      !d.keahlianArr.map((k) => k.toLowerCase()).includes("standby") &&
-      !assignedDosenIds.includes(d.id) &&
-      (!searchDosen ||
-        d.name.toLowerCase().includes(searchDosen.toLowerCase()) ||
-        d.nid.toLowerCase().includes(searchDosen.toLowerCase()) ||
-        d.keahlianArr.some((k) =>
-          k.toLowerCase().includes(searchDosen.toLowerCase())
-        ))
-  );
 
   // Center the summary cards (real)
   <div className="flex justify-center mb-8">
@@ -885,9 +717,6 @@ const CSR: React.FC = () => {
                   <div className="grid gap-4">
                     {semesterCSRs.map((csr) => {
                       const assignedDosen = getAssignedDosen(csr.id!);
-                      const availableDosen = getDosenByKeahlian(
-                        csr.keahlian_required
-                      );
 
                       return (
                         <div
@@ -906,7 +735,9 @@ const CSR: React.FC = () => {
                                 <div className="flex-1">
                                   <h4 className="font-semibold text-gray-800 dark:text-white/90 text-lg">
                                     {csr.mata_kuliah_kode}
-                                    {csr.mata_kuliah?.nama ? ` - ${csr.mata_kuliah.nama}` : ""}
+                                    {csr.mata_kuliah?.nama
+                                      ? ` - ${csr.mata_kuliah.nama}`
+                                      : ""}
                                   </h4>
                                 </div>
                               </div>
@@ -1071,7 +902,13 @@ const CSR: React.FC = () => {
                                 </div>
                                 <button
                                   onClick={() =>
-                                    handleRemoveAssignment(csr.id!)
+                                    // handleRemoveMapping(
+                                    //   mappings.find((m) => m.csr_id === csr.id)
+                                    //     ?.id || 0
+                                    // )
+                                    console.log(
+                                      "Remove mapping not implemented"
+                                    )
                                   }
                                   className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition"
                                   title="Hapus penugasan"
@@ -1313,111 +1150,6 @@ const CSR: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Mapping Modal */}
-      <AnimatePresence>
-        {showMappingModal && selectedCSR && (
-          <div className="fixed inset-0 z-[100000] flex items-center justify-center">
-            <div
-              className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
-              onClick={handleCloseMappingModal}
-            ></div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="relative w-full max-w-md mx-auto bg-white dark:bg-gray-900 rounded-3xl p-8 shadow-lg z-[100001]"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-black dark:text-white">
-                  Tugaskan Dosen
-                </h2>
-                <button
-                  onClick={handleCloseMappingModal}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="mb-4">
-                <h3 className="text-lg font-medium text-black dark:text-white mb-2">
-                  {selectedCSR.nama}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Pilih dosen yang sesuai dengan keahlian yang diperlukan
-                </p>
-              </div>
-
-              <form onSubmit={handleMappingSubmit}>
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Pilih Dosen
-                  </label>
-                  <select
-                    name="dosen_id"
-                    value={mappingForm.dosen_id}
-                    onChange={(e) =>
-                      setMappingForm({
-                        ...mappingForm,
-                        dosen_id: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    required
-                  >
-                    <option value="">Pilih dosen...</option>
-                    {availableDosen.map((dosen) => (
-                      <option key={dosen.id} value={dosen.id}>
-                        {dosen.name} - {dosen.nid} ({dosen.keahlian.join(", ")})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Error Message */}
-                {mappingError && (
-                  <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                    <p className="text-sm text-red-600 dark:text-red-400">
-                      {mappingError}
-                    </p>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={handleCloseMappingModal}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-opacity-90"
-                  >
-                    Tugaskan
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {/* Modal Konfirmasi Hapus CSR */}
       {showDeleteModalCSR && csrToDelete && (
         <div className="fixed inset-0 z-[100000] flex items-center justify-center">
@@ -1519,17 +1251,6 @@ const CSR: React.FC = () => {
           </motion.div>
         </div>
       )}
-
-      {/* Hide scrollbar utility */}
-      <style>{`
-        .hide-scroll {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .hide-scroll::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
     </div>
   );
 };

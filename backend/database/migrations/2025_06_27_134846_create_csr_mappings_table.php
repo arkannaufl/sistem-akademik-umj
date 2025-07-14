@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('csr_id')->constrained('csrs')->onDelete('cascade');
             $table->foreignId('dosen_id')->constrained('users')->onDelete('cascade');
             $table->timestamps();
-            
+
             // Memastikan satu dosen hanya bisa mengajar satu mata kuliah CSR
             $table->unique('dosen_id');
         });
@@ -29,4 +29,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('csr_mappings');
     }
-}; 
+};
