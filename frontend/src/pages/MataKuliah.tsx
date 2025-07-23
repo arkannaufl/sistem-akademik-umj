@@ -1,10 +1,11 @@
 import { useState, ChangeEvent, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFileExcel, faPenToSquare, faTrash, faDownload, faChevronDown } from "@fortawesome/free-solid-svg-icons";
+import { faFileExcel, faPenToSquare, faTrash, faDownload, faChevronDown, faEye } from "@fortawesome/free-solid-svg-icons";
 import { AnimatePresence, motion } from "framer-motion";
 import api from '../api/axios';
 import * as XLSX from 'xlsx';
 import { Listbox, Transition } from '@headlessui/react';
+import { useNavigate } from 'react-router-dom';
 
 // Komponen input kustom untuk DatePickerz
 interface CustomInputProps {
@@ -185,6 +186,7 @@ export default function MataKuliah() {
   // Tambahkan state untuk daftar peran kurikulum global
   const [peranKurikulumInput, setPeranKurikulumInput] = useState('');
   const [peranKurikulumList, setPeranKurikulumList] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   const mataKuliahToDelete = data.find(mk => mk.kode === selectedDeleteKode);
 
@@ -850,6 +852,17 @@ export default function MataKuliah() {
     });
   };
 
+  // Tambahkan fungsi handleView
+  const handleView = (mk: MataKuliah) => {
+    if (mk.jenis === 'Blok') {
+      navigate(`/mata-kuliah/blok/${mk.kode}`);
+    } else if (mk.jenis === 'Non Blok' && mk.tipe_non_block === 'CSR') {
+      navigate(`/mata-kuliah/non-blok-csr/${mk.kode}`);
+    } else {
+      navigate(`/mata-kuliah/non-blok-non-csr/${mk.kode}`);
+    }
+  };
+
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Daftar Mata Kuliah</h1>
@@ -1286,6 +1299,14 @@ export default function MataKuliah() {
                         >
                           <FontAwesomeIcon icon={faTrash} className="w-4 h-4 sm:w-5 sm:h-5" />
                           <span className="hidden sm:inline">Delete</span>
+                        </button>
+                        <button
+                          onClick={() => handleView(mk)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 transition"
+                          title="Lihat"
+                        >
+                          <FontAwesomeIcon icon={faEye} className="w-4 h-4 sm:w-5 sm:h-5" />
+                          <span className="hidden sm:inline">Lihat</span>
                         </button>
                       </div>
                     </td>

@@ -27,6 +27,13 @@ import PBLDetail from "./pages/PBL-detail";
 import PBLList from "./pages/PBL";
 import PBLGenerate from "./pages/PBLGenerate";
 import MataKuliahKeahlian from "./pages/MataKuliahKeahlian";
+import DetailBlok from "./pages/DetailBlok";
+import DetailNonBlokCSR from "./pages/DetailNonBlokCSR";
+import DetailNonBlokNonCSR from "./pages/DetailNonBlokNonCSR";
+import PetaBlok from "./pages/PetaBlok";
+import PilihPetaBlok from "./pages/PilihPetaBlok";
+import PenilaianPBLPage from "./pages/PenilaianPBLPage";
+import PenilaianJurnalPage from "./pages/PenilaianJurnalPage";
 
 function AppContent() {
   const { isSessionExpired, setSessionExpired } = useSession();
@@ -52,6 +59,11 @@ function AppContent() {
             <Route element={<AppLayout />}>
               <Route index path="/" element={<TahunAjaran />} />
               <Route path="/mata-kuliah" element={<MataKuliah />} />
+              <Route path="/mata-kuliah/blok/:kode" element={<DetailBlok />} />
+              <Route path="/mata-kuliah/non-blok-csr/:kode" element={<DetailNonBlokCSR />} />
+              <Route path="/mata-kuliah/non-blok-non-csr/:kode" element={<DetailNonBlokNonCSR />} />
+              <Route path="/penilaian-pbl/:kode_blok/:kelompok/:pertemuan" element={<PenilaianPBLPage />} />
+              <Route path="/penilaian-jurnal/:kode_blok/:kelompok/:pertemuan/:rowIndex" element={<PenilaianJurnalPage />} />
               <Route path="/pbl" element={<PBLList />} />
               <Route path="/pbl/blok/:blokId" element={<PBLDetail />} />
               <Route path="/pbl/generate/:blokId" element={<PBLGenerate />} />
@@ -64,6 +76,8 @@ function AppContent() {
               <Route path="/ruangan" element={<Ruangan />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/peta-akademik" element={<PetaAkademikPage />} />
+              <Route path="/peta-blok" element={<PilihPetaBlok />} />
+              <Route path="/peta-blok/:semester/:blok" element={<PetaBlok />} />
               <Route path="/generate/kelompok-besar/:semester" element={<KelompokBesar />} />
               <Route path="/generate/kelompok" element={<Kelompok />} />
               <Route path="/generate/kelas" element={<Kelas />} />

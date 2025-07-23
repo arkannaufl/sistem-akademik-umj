@@ -48,6 +48,7 @@ const navItems: NavItem[] = [
       { name: "PBL", path: "/pbl" },
       { name: "CSR", path: "/csr" },
       { name: "Peta Akademik", path: "/peta-akademik" },
+      { name: "Peta Blok", path: "/peta-blok" }, // Tambahkan menu baru di sini
     ],
   },
   {
