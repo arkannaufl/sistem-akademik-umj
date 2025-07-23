@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class CSR extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'csrs';
 
@@ -47,19 +49,6 @@ class CSR extends Model
         return $this->belongsTo(MataKuliah::class, 'mata_kuliah_kode', 'kode');
     }
 
-    // Relasi ke dosen melalui mapping
-    public function dosen()
-    {
-        return $this->belongsToMany(User::class, 'csr_mappings', 'csr_id', 'dosen_id')
-                    ->withTimestamps();
-    }
-
-    // Relasi ke mapping
-    public function mappings()
-    {
-        return $this->hasMany(CSRMapping::class, 'csr_id');
-    }
-
     // Scope untuk mata kuliah yang tersedia
     public function scopeAvailable($query)
     {
@@ -76,5 +65,13 @@ class CSR extends Model
     public function scopeCompleted($query)
     {
         return $query->where('status', 'completed');
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn(string $eventName) => "CSR {$this->nomor_csr} ({$this->nama}) pada Mata Kuliah {$this->mata_kuliah_kode} telah di-{$eventName}");
     }
 }

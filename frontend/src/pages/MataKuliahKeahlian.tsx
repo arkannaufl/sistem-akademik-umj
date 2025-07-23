@@ -215,19 +215,61 @@ export default function MataKuliahKeahlian() {
     return (
       <div className="w-full mx-auto">
         <div className="mb-8">
-          <div className="h-8 w-80 bg-gray-200 dark:bg-gray-700 rounded mb-2 animate-pulse" />
-          <div className="h-4 w-96 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="h-8 w-80 bg-gray-700 dark:bg-gray-800 rounded mb-2 animate-pulse" />
+          <div className="h-4 w-96 bg-gray-700 dark:bg-gray-800 rounded animate-pulse" />
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+            <div key={i} className="bg-gray-800 dark:bg-gray-900 border border-gray-700 dark:border-gray-800 rounded-xl p-6">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                <div className="w-12 h-12 rounded-full bg-gray-700 dark:bg-gray-800 animate-pulse" />
                 <div className="flex-1">
-                  <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2 animate-pulse" />
-                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                  <div className="h-6 w-16 bg-gray-700 dark:bg-gray-800 rounded mb-2 animate-pulse" />
+                  <div className="h-4 w-24 bg-gray-700 dark:bg-gray-800 rounded animate-pulse" />
                 </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Skeleton search input */}
+        <div className="bg-gray-800 dark:bg-gray-900 border border-gray-700 dark:border-gray-800 rounded-xl p-6 mb-6">
+          <div className="h-10 w-full bg-gray-700 dark:bg-gray-800 rounded animate-pulse" />
+        </div>
+        {/* Skeleton list mata kuliah */}
+        <div className="space-y-6">
+          {Array.from({ length: 2 }).map((_, sIdx) => (
+            <div key={sIdx} className="bg-gray-800 dark:bg-gray-900 border border-gray-700 dark:border-gray-800 rounded-xl p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center" />
+                <div>
+                  <div className="h-6 w-32 bg-gray-700 dark:bg-gray-800 rounded mb-2 animate-pulse" />
+                  <div className="h-4 w-24 bg-gray-700 dark:bg-gray-800 rounded animate-pulse" />
+                </div>
+              </div>
+              <div className="space-y-4">
+                {Array.from({ length: 2 }).map((_, mkIdx) => (
+                  <div key={mkIdx} className="p-4 bg-gray-700 dark:bg-gray-800/30 border border-gray-700 dark:border-gray-800 rounded-lg">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="h-5 w-48 bg-gray-800 dark:bg-gray-900 rounded mb-2 animate-pulse" />
+                        <div className="h-4 w-32 bg-gray-800 dark:bg-gray-900 rounded mb-2 animate-pulse" />
+                        {/* Keahlian Section Skeleton */}
+                        <div className="mt-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="h-4 w-32 bg-gray-800 dark:bg-gray-900 rounded animate-pulse" />
+                            <div className="h-6 w-16 bg-gray-700 dark:bg-gray-800 rounded animate-pulse" />
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {Array.from({ length: 3 }).map((_, kIdx) => (
+                              <span key={kIdx} className="h-6 w-20 bg-gray-800 dark:bg-gray-900 rounded-full animate-pulse" />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}

@@ -7,7 +7,7 @@ use App\Models\KelompokKecil;
 use App\Models\MataKuliah;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Services\ActivityLogService;
+use Illuminate\Support\Facades\Auth;
 
 class MataKuliahPBLKelompokKecilController extends Controller
 {
@@ -69,7 +69,12 @@ class MataKuliahPBLKelompokKecilController extends Controller
                 }
             }
         });
-        ActivityLogService::logCreate('MATA_KULIAH_PBL_KELOMPOK', "Menambahkan mapping kelompok untuk mata kuliah {$mataKuliahKode}");
+
+        // Log aktivitas mapping kelompok
+        activity()
+            ->causedBy(Auth::user())
+            ->log("Menambahkan mapping kelompok untuk mata kuliah {$mataKuliahKode} dengan " . count($namaKelompokList) . " kelompok");
+
         return response()->json(['message' => 'Mapping kelompok berhasil disimpan']);
     }
 

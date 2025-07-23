@@ -7,6 +7,8 @@ import {
   faBookOpen,
   faUsers,
   faGraduationCap,
+  faEdit,
+  faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 
 interface CSR {
@@ -23,6 +25,16 @@ interface CSR {
   blok?: number;
   created_at: string;
   updated_at: string;
+  mata_kuliah?: {
+    kode: string;
+    nama: string;
+    semester: number;
+    periode: string;
+    jenis: string;
+    tanggal_mulai?: string;
+    tanggal_akhir?: string;
+    [key: string]: any;
+  };
 }
 
 interface User {
@@ -33,6 +45,7 @@ interface User {
   email: string;
   keahlian: string[];
   role: string;
+  csr_assignment_count: number; // Added for badge
 }
 
 const CSRDetail: React.FC = () => {
@@ -43,11 +56,6 @@ const CSRDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [keahlianList, setKeahlianList] = useState<string[]>([]);
   const [newKeahlian, setNewKeahlian] = useState("");
-  const [assignedDosen, setAssignedDosen] = useState<Record<string, User[]>>(
-    {}
-  );
-  const [draggedDosen, setDraggedDosen] = useState<User | null>(null);
-  const [dragOverKeahlian, setDragOverKeahlian] = useState<string | null>(null);
 
   // After dosenByKeahlian is set, compute standby dosen from all available dosen
   const [standbyDosen, setStandbyDosen] = useState<User[]>([]);
@@ -57,20 +65,111 @@ const CSRDetail: React.FC = () => {
   // Add state for searchDosen
   const [searchDosen, setSearchDosen] = useState("");
 
-  useEffect(() => {
-    fetchCSR();
-  }, [csrId]);
+  // Fetch mapping dosen dari backend
+  const [mapping, setMapping] = useState<{[keahlian: string]: User[]}>({});
+  const [draggedDosenId, setDraggedDosenId] = useState<number | null>(null);
+
+  // Pada state:
+  const [editKeahlian, setEditKeahlian] = useState<string | null>(null);
+  const [editKeahlianValue, setEditKeahlianValue] = useState("");
+
+  const [showDeleteKeahlianModal, setShowDeleteKeahlianModal] = useState(false);
+  const [keahlianToDelete, setKeahlianToDelete] = useState<string | null>(null);
+  const [isDeletingKeahlian, setIsDeletingKeahlian] = useState(false);
+
+  const [dosenPBLBySemester, setDosenPBLBySemester] = useState<{ [semester: number]: User[] }>({});
+  const [loadingDosenPBL, setLoadingDosenPBL] = useState(false);
+
+  // Tambahkan state untuk search dosen PBL
+  const [searchDosenPBL, setSearchDosenPBL] = useState("");
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      // Fetch CSR details
+      const csrRes = await api.get(`/csr/${csrId}`);
+      const csrData = csrRes.data.data;
+      setCsr(csrData);
+      setKeahlianList(csrData.keahlian_required || []);
+
+      // Fetch all dosen
+      const dosenRes = await api.get("/users?role=dosen");
+      const dosenList: User[] = dosenRes.data.map((d: any) => ({
+        ...d,
+        keahlian: Array.isArray(d.keahlian) ? d.keahlian : (d.keahlian || "").split(",").map((k: string) => k.trim()).filter(Boolean),
+        // ... other properties if needed
+      }));
+      setRegularDosen(dosenList.filter(d => !d.keahlian.map(k => k.toLowerCase()).includes("standby")));
+      setStandbyDosen(dosenList.filter(d => d.keahlian.map(k => k.toLowerCase()).includes("standby")));
+      
+      // Fetch CSR mappings
+      await fetchMapping();
+
+      // Fetch Dosen PBL
+      setLoadingDosenPBL(true);
+      const pblRes = await api.get("/pbls/all");
+      const data = pblRes.data || {};
+      const semesterPblIds: { [semester: number]: number[] } = {};
+      Object.values(data).forEach((item: any) => {
+        const mk = item.mata_kuliah;
+        const semester = mk.semester;
+        (item.pbls || []).forEach((pbl: any) => {
+          if (!semesterPblIds[semester]) semesterPblIds[semester] = [];
+          semesterPblIds[semester].push(pbl.id);
+        });
+      });
+      const allPblIds = Object.values(semesterPblIds).flat();
+      if (allPblIds.length > 0) {
+        const assignedRes = await api.post("/pbls/assigned-dosen-batch", { pbl_ids: allPblIds });
+        const assignedDosen: { [pblId: number]: User[] } = assignedRes.data || {};
+        const dosenBySemester: { [semester: number]: User[] } = {};
+        Object.entries(semesterPblIds).forEach(([semester, pblIds]) => {
+          const dosenSet = new Map<number, User>();
+          pblIds.forEach((pblId: number) => {
+            (assignedDosen[pblId] || []).forEach((dosen: User) => {
+              dosenSet.set(dosen.id, dosen);
+            });
+          });
+          dosenBySemester[Number(semester)] = Array.from(dosenSet.values());
+        });
+        setDosenPBLBySemester(dosenBySemester);
+      } else {
+        setDosenPBLBySemester({});
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Gagal memuat data");
+    } finally {
+      setLoading(false);
+      setLoadingDosenPBL(false);
+    }
+  };
 
   useEffect(() => {
-    if (csr) {
-      // For now, just set all to empty array
-      const map: Record<string, User[]> = {};
-      keahlianList.forEach((k) => {
-        map[k] = [];
+    fetchAllData();
+  }, [csrId]);
+
+  // Tambahkan setelah fetchCSR
+  const fetchMapping = async () => {
+    if (!csrId) return;
+    try {
+      const res = await api.get(`/csr/${csrId}/mappings`);
+      const map: {[keahlian: string]: User[]} = {};
+      (csr?.keahlian_required || []).forEach(k => { map[k] = []; });
+      res.data.data.forEach((m: any) => {
+        if (m.keahlian && map[m.keahlian] && m.dosen) {
+          if (!map[m.keahlian].some((d) => d.id === m.dosen.id)) {
+            map[m.keahlian].push(m.dosen);
+          }
+        }
       });
-      setAssignedDosen(map);
+      setMapping(map);
+    } catch {
+      setMapping({});
     }
-  }, [csr, keahlianList]);
+  };
+
+  // Fetch mapping setiap kali csr/keahlian berubah
+  useEffect(() => { fetchMapping(); }, [csr, csrId]);
 
   useEffect(() => {
     if (success) {
@@ -99,17 +198,23 @@ const CSRDetail: React.FC = () => {
         const dosenList: User[] = res.data.map((d: any) => ({
           ...d,
           keahlian:
-            typeof d.keahlian === "string"
-              ? JSON.parse(d.keahlian)
-              : d.keahlian,
+            Array.isArray(d.keahlian)
+              ? d.keahlian
+              : typeof d.keahlian === "string"
+                ? d.keahlian.split(",").map((k: string) => k.trim()).filter(Boolean)
+                : [],
           kompetensi:
-            typeof d.kompetensi === "string"
-              ? JSON.parse(d.kompetensi)
-              : d.kompetensi,
+            Array.isArray(d.kompetensi)
+              ? d.kompetensi
+              : typeof d.kompetensi === "string"
+                ? d.kompetensi.split(",").map((k: string) => k.trim()).filter(Boolean)
+                : [],
           peran_kurikulum:
-            typeof d.peran_kurikulum === "string"
-              ? JSON.parse(d.peran_kurikulum)
-              : d.peran_kurikulum,
+            Array.isArray(d.peran_kurikulum)
+              ? d.peran_kurikulum
+              : typeof d.peran_kurikulum === "string"
+                ? d.peran_kurikulum.split(",").map((k: string) => k.trim()).filter(Boolean)
+                : [],
         }));
         setRegularDosen(
           dosenList.filter(
@@ -127,13 +232,61 @@ const CSRDetail: React.FC = () => {
               d.keahlian.map((k: string) => k.toLowerCase()).includes("standby")
           )
         );
-      } catch {
+      } catch (e) {
+        console.error('Gagal fetch dosen', e);
         setRegularDosen([]);
         setStandbyDosen([]);
       }
     };
     fetchAllDosen();
   }, []);
+
+  useEffect(() => {
+    const fetchDosenPBL = async () => {
+      setLoadingDosenPBL(true);
+      try {
+        // 1. Ambil semua PBL (GET /pbls/all)
+        const pblRes = await api.get("/pbls/all");
+        const data = pblRes.data || {};
+        // 2. Kelompokkan PBL per semester
+        const semesterPblIds: { [semester: number]: number[] } = {};
+        Object.values(data).forEach((item: any) => {
+          const mk = item.mata_kuliah;
+          const semester = mk.semester;
+          (item.pbls || []).forEach((pbl: any) => {
+            if (!semesterPblIds[semester]) semesterPblIds[semester] = [];
+            semesterPblIds[semester].push(pbl.id);
+          });
+        });
+        // 3. Fetch assigned dosen batch
+        const allPblIds = Object.values(semesterPblIds).flat();
+        if (allPblIds.length === 0) {
+          setDosenPBLBySemester({});
+          setLoadingDosenPBL(false);
+          return;
+        }
+        const assignedRes = await api.post("/pbls/assigned-dosen-batch", { pbl_ids: allPblIds });
+        const assignedDosen: { [pblId: number]: User[] } = assignedRes.data || {};
+        // 4. Kelompokkan dosen per semester
+        const dosenBySemester: { [semester: number]: User[] } = {};
+        Object.entries(semesterPblIds).forEach(([semester, pblIds]) => {
+          const dosenSet = new Map<number, User>();
+          pblIds.forEach((pblId: number) => {
+            (assignedDosen[pblId] || []).forEach((dosen: User) => {
+              dosenSet.set(dosen.id, dosen);
+            });
+          });
+          dosenBySemester[Number(semester)] = Array.from(dosenSet.values());
+        });
+        setDosenPBLBySemester(dosenBySemester);
+      } catch (e) {
+        setDosenPBLBySemester({});
+      } finally {
+        setLoadingDosenPBL(false);
+      }
+    };
+    fetchDosenPBL();
+  }, [csrId]);
 
   const fetchCSR = async () => {
     setLoading(true);
@@ -171,45 +324,79 @@ const CSRDetail: React.FC = () => {
     }
   };
 
-  const handleDropDosen = (keahlian: string) => {
-    if (!draggedDosen) return;
-    setAssignedDosen((prev) => {
-      const already = prev[keahlian]?.some((d) => d.id === draggedDosen.id);
-      if (already) return prev;
-      return { ...prev, [keahlian]: [...(prev[keahlian] || []), draggedDosen] };
-    });
-    setDraggedDosen(null);
-    setDragOverKeahlian(null);
-  };
-
-  const handleRemoveAssigned = (keahlian: string, dosenId: number) => {
-    setAssignedDosen((prev) => ({
-      ...prev,
-      [keahlian]: prev[keahlian].filter((d) => d.id !== dosenId),
-    }));
-  };
-
+  // Tambah keahlian
   const handleAddKeahlian = async () => {
-    if (!newKeahlian.trim()) return;
-    const updated = [...keahlianList, newKeahlian.trim()];
-    setKeahlianList(updated);
-    setAssignedDosen((prev) => ({ ...prev, [newKeahlian.trim()]: [] }));
-    setNewKeahlian("");
-    // TODO: Save to backend
+    if (!newKeahlian.trim() || !csr) return;
+    // Validasi duplikat (case-insensitive, trim)
+    const newK = newKeahlian.trim().toLowerCase();
+    const exists = csr.keahlian_required.some(k => k.trim().toLowerCase() === newK);
+    if (exists) {
+      setError("Keahlian sudah ada, tidak boleh terduplikat.");
+      return;
+    }
+    // Pastikan nama tidak null
+    const nama = csr.nama || (csr.mata_kuliah && csr.mata_kuliah.nama) || "";
+    if (!nama) {
+      setError("Nama CSR belum diisi. Silakan isi nama CSR terlebih dahulu.");
+      return;
+    }
+    const updated = [...csr.keahlian_required, newKeahlian.trim()];
+    try {
+      await api.put(`/csr/${csr.id}`, { ...csr, nama, keahlian_required: updated });
+      setNewKeahlian("");
+      setSuccess("Keahlian berhasil ditambahkan");
+      await fetchAllData();
+    } catch (err) {
+      setError("Gagal menambah keahlian");
+    }
   };
 
+  // Hapus keahlian
   const handleRemoveKeahlian = async (k: string) => {
-    const updated = keahlianList.filter((x) => x !== k);
-    setKeahlianList(updated);
-    setAssignedDosen((prev) => {
-      const copy = { ...prev };
-      delete copy[k];
-      return copy;
-    });
-    // TODO: Save to backend
+    if (!csr) return;
+    // Pastikan nama tidak null
+    const nama = csr.nama || (csr.mata_kuliah && csr.mata_kuliah.nama) || "";
+    if (!nama) {
+      setError("Nama CSR belum diisi. Silakan isi nama CSR terlebih dahulu.");
+      return;
+    }
+    const updated = csr.keahlian_required.filter((x) => x !== k);
+    try {
+      await api.put(`/csr/${csr.id}`, { ...csr, nama, keahlian_required: updated });
+      setSuccess("Keahlian berhasil dihapus");
+      await fetchAllData();
+    } catch (err) {
+      setError("Gagal menghapus keahlian");
+    }
   };
 
-  // TODO: handle edit keahlian, assign dosen per slot, drag-and-drop, save changes
+  // Assign dosen ke keahlian (mapping dosen ke CSR)
+  const handleAssignDosen = async (dosenId: number, keahlian: string) => {
+    if (!csr) return;
+    try {
+      await api.post(`/csr/${csr.id}/mappings`, { dosen_id: dosenId, keahlian });
+      setSuccess("Dosen berhasil ditugaskan");
+      await fetchAllData(); // Refresh all data
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || "Gagal menugaskan dosen";
+      setError(msg);
+      await fetchAllData(); // Refresh on error to revert
+    }
+  };
+
+  // Unassign dosen dari CSR
+  type HandleRemoveAssigned = (dosenId: number, keahlian: string) => Promise<void>;
+  const handleRemoveAssigned: HandleRemoveAssigned = async (dosenId, keahlian) => {
+    if (!csr) return;
+    try {
+      await api.delete(`/csr/${csr.id}/mappings/${dosenId}/${encodeURIComponent(keahlian)}`);
+      setSuccess("Penugasan dosen dihapus");
+      await fetchAllData(); // Refresh all data
+    } catch (err) {
+      setError("Gagal menghapus penugasan dosen");
+      await fetchAllData(); // Refresh on error to revert
+    }
+  };
 
   // Filtered dosen logic (mirroring CSR.tsx)
   const filteredRegularDosen = regularDosen.filter((d) => {
@@ -231,23 +418,35 @@ const CSRDetail: React.FC = () => {
 
   // Calculate dosen assignment counts across all keahlian
   const dosenAssignmentCount: Record<number, number> = {};
-  Object.values(assignedDosen).forEach((arr) => {
+  Object.values(mapping).forEach((arr) => {
     arr.forEach((d) => {
       dosenAssignmentCount[d.id] = (dosenAssignmentCount[d.id] || 0) + 1;
     });
   });
 
+  // Filter dosen PBL by search
+  const filteredDosenPBLBySemester: { [semester: number]: User[] } = {};
+  Object.entries(dosenPBLBySemester).forEach(([semester, dosenList]) => {
+    filteredDosenPBLBySemester[Number(semester)] = dosenList.filter((d) => {
+      const q = searchDosenPBL.toLowerCase();
+      return (
+        d.name.toLowerCase().includes(q) ||
+        d.nid.toLowerCase().includes(q) ||
+        (Array.isArray(d.keahlian)
+          ? d.keahlian.some((k) => k.toLowerCase().includes(q))
+          : false)
+      );
+    });
+  });
+
   if (loading)
     return (
-      <div
-        className="if (is_array($matkul->peran_dalam_kurikulum)) {
-    $peranKurikulumList = $matkul->peran_dalam_kurikulum;
-} elseif (is_string($matkul->peran_dalam_kurikulum)) {
-    $peranKurikulumList = json_decode($matkul->peran_dalam_kurikulum, true) ?? [];
-} else {
-    $peranKurikulumList = [];
-} mx-auto py-8 px-2 md:px-0"
-      >
+      <div className="mx-auto py-8 px-2 md:px-0">
+        {/* Skeleton Header */}
+        <div className="mb-6">
+          <div className="h-8 w-64 bg-gray-700 dark:bg-gray-800 rounded mb-2 animate-pulse" />
+          <div className="h-5 w-32 bg-gray-700 dark:bg-gray-800 rounded animate-pulse" />
+        </div>
         {/* Skeleton Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -256,69 +455,160 @@ const CSRDetail: React.FC = () => {
               className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6 animate-pulse"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700" />
+                <div className="w-12 h-12 rounded-full bg-gray-700 dark:bg-gray-800" />
                 <div className="flex-1">
-                  <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-6 w-16 bg-gray-700 dark:bg-gray-800 rounded mb-2" />
+                  <div className="h-4 w-24 bg-gray-700 dark:bg-gray-800 rounded" />
                 </div>
               </div>
             </div>
           ))}
         </div>
-        {/* Skeleton Main Content */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Skeleton Keahlian Table (Left) */}
-          <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-xl p-8 relative overflow-visible animate-pulse">
-            {/* Header & Description */}
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700" />
-              <div className="h-7 w-40 bg-gray-200 dark:bg-gray-700 rounded" />
-            </div>
-            <div className="h-4 w-64 bg-gray-200 dark:bg-gray-700 rounded mb-6 mt-2" />
-            {/* Input + Buttons Row */}
-            <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-stretch mb-6">
-              <div className="h-[52px] bg-gray-100 dark:bg-gray-800 rounded-xl flex-1" />
-              <div className="h-[52px] w-[130px] bg-gray-200 dark:bg-gray-700 rounded-lg" />
-              <div className="h-[52px] w-[180px] bg-gray-200 dark:bg-gray-700 rounded-lg" />
-            </div>
-            {/* Keahlian List Skeleton */}
-            <ul className="space-y-5">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <li
-                  key={i}
-                  className="flex flex-col gap-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30 rounded-xl p-4"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-5 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
-                    <div className="h-4 w-10 bg-gray-200 dark:bg-gray-700 rounded ml-auto" />
-                    <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
-                  </div>
-                  <div className="border-2 border-dashed rounded-lg p-3 min-h-[60px] bg-white dark:bg-gray-900" />
-                </li>
-              ))}
-            </ul>
-          </div>
-          {/* Skeleton Dosen List (Right) */}
-          <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-lg p-8 animate-pulse">
-            <div className="h-6 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-4" />
-            <div className="h-10 w-full bg-gray-100 dark:bg-gray-800 rounded mb-6" />
-            <div className="space-y-3 max-h-80 overflow-y-auto hide-scroll mb-6">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow p-4 min-w-0 w-full flex flex-col gap-2 sm:flex-row sm:items-center"
-                >
-                  <div className="flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full bg-gray-200 dark:bg-gray-700" />
-                  <div className="flex-1 min-w-0 mt-2 sm:mt-0 sm:ml-4">
-                    <div className="h-5 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                    <div className="h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded mb-1" />
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
-                      <div className="h-4 w-10 bg-gray-200 dark:bg-gray-700 rounded-full" />
+        {/* Skeleton Main Content: 3 columns */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+          {/* Kiri: Keahlian yang Dibutuhkan */}
+          <div className="md:col-span-6">
+            <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-xl p-8 animate-pulse">
+              <div className="h-7 w-64 bg-gray-700 dark:bg-gray-800 rounded mb-2" />
+              <div className="h-4 w-64 bg-gray-700 dark:bg-gray-800 rounded mb-6 mt-2" />
+              <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-stretch mb-6">
+                <div className="h-[52px] bg-gray-800 dark:bg-gray-700 rounded-xl flex-1" />
+                <div className="h-[52px] w-[130px] bg-gray-700 dark:bg-gray-800 rounded-lg" />
+              </div>
+              <ul className="space-y-5">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-col gap-2 border border-gray-200 dark:border-gray-700 bg-gray-800/30 rounded-xl p-4"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="h-5 w-32 bg-gray-700 dark:bg-gray-800 rounded" />
+                      <div className="h-4 w-10 bg-gray-700 dark:bg-gray-800 rounded ml-auto" />
+                      <div className="h-4 w-16 bg-gray-700 dark:bg-gray-800 rounded" />
                     </div>
-                  </div>
+                    <div className="border-2 border-dashed rounded-lg p-3 min-h-[60px] bg-white dark:bg-gray-900 flex gap-2">
+                      {Array.from({ length: 3 }).map((_, j) => (
+                        <div key={j} className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-700 dark:bg-gray-800">
+                          <div className="w-6 h-6 rounded-full bg-gray-400 dark:bg-gray-700" />
+                          <div className="h-4 w-20 bg-gray-700 dark:bg-gray-800 rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          {/* Tengah: Dosen Sudah Dikelompokkan (PBL) */}
+          <div className="md:col-span-3">
+            <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-lg p-8 animate-pulse">
+              <div className="h-6 w-40 bg-gray-700 dark:bg-gray-800 rounded mb-4" />
+              <div className="h-10 w-full bg-gray-700 dark:bg-gray-800 rounded mb-6" />
+              {/* Dosen Reguler/Standby Skeleton */}
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-3 h-3 rounded-full bg-gray-700" />
+                  <div className="h-4 w-32 bg-gray-700 dark:bg-gray-800 rounded" />
                 </div>
-              ))}
+                <div className="space-y-3 max-h-[500px] overflow-y-auto hide-scroll">
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="p-4 bg-gray-700 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-700" />
+                        <div className="flex-1 min-w-0">
+                          <div className="h-4 w-24 bg-gray-700 dark:bg-gray-800 rounded mb-1" />
+                          <div className="h-3 w-16 bg-gray-700 dark:bg-gray-800 rounded" />
+                        </div>
+                      </div>
+                      <div className="bg-gray-700 dark:bg-gray-800 rounded-lg p-3">
+                        <div className="h-3 w-16 bg-gray-700 dark:bg-gray-800 rounded mb-2" />
+                        <div className="flex gap-1">
+                          {Array.from({ length: 2 }).map((_, j) => (
+                            <div key={j} className="h-4 w-12 bg-gray-700 dark:bg-gray-800 rounded-full" />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Dosen Standby Skeleton */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-3 h-3 rounded-full bg-gray-700" />
+                  <div className="h-4 w-32 bg-gray-700 dark:bg-gray-800 rounded" />
+                </div>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto hide-scroll">
+                  {Array.from({ length: 1 }).map((_, i) => (
+                    <div key={i} className="p-4 bg-gray-700 dark:bg-gray-800/20 border border-gray-200 dark:border-gray-700 rounded-xl">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-700" />
+                        <div className="flex-1 min-w-0">
+                          <div className="h-4 w-24 bg-gray-700 dark:bg-gray-800 rounded mb-1" />
+                          <div className="h-3 w-16 bg-gray-700 dark:bg-gray-800 rounded" />
+                        </div>
+                        <div className="h-5 w-16 bg-gray-700 dark:bg-gray-800 rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Kanan: Dosen Tersedia */}
+          <div className="md:col-span-3">
+            <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-lg p-8 animate-pulse">
+              <div className="h-6 w-40 bg-gray-700 dark:bg-gray-800 rounded mb-4" />
+              <div className="h-10 w-full bg-gray-700 dark:bg-gray-800 rounded mb-6" />
+              {/* Dosen Reguler Skeleton */}
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-3 h-3 rounded-full bg-gray-700" />
+                  <div className="h-4 w-32 bg-gray-700 dark:bg-gray-800 rounded" />
+                </div>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto hide-scroll">
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="p-4 bg-gray-700 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-700" />
+                        <div className="flex-1 min-w-0">
+                          <div className="h-4 w-24 bg-gray-700 dark:bg-gray-800 rounded mb-1" />
+                          <div className="h-3 w-16 bg-gray-700 dark:bg-gray-800 rounded" />
+                        </div>
+                      </div>
+                      <div className="bg-gray-700 dark:bg-gray-800 rounded-lg p-3">
+                        <div className="h-3 w-16 bg-gray-700 dark:bg-gray-800 rounded mb-2" />
+                        <div className="flex gap-1">
+                          {Array.from({ length: 2 }).map((_, j) => (
+                            <div key={j} className="h-4 w-12 bg-gray-700 dark:bg-gray-800 rounded-full" />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Dosen Standby Skeleton */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-3 h-3 rounded-full bg-gray-700" />
+                  <div className="h-4 w-32 bg-gray-700 dark:bg-gray-800 rounded" />
+                </div>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto hide-scroll">
+                  {Array.from({ length: 1 }).map((_, i) => (
+                    <div key={i} className="p-4 bg-gray-700 dark:bg-gray-800/20 border border-gray-200 dark:border-gray-700 rounded-xl">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-700" />
+                        <div className="flex-1 min-w-0">
+                          <div className="h-4 w-24 bg-gray-700 dark:bg-gray-800 rounded mb-1" />
+                          <div className="h-3 w-16 bg-gray-700 dark:bg-gray-800 rounded" />
+                        </div>
+                        <div className="h-5 w-16 bg-gray-700 dark:bg-gray-800 rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -331,7 +621,7 @@ const CSRDetail: React.FC = () => {
   const totalKategori = keahlianList.length;
   // 2. Total dosen masuk kategori (unique across all categories)
   const dosenMasukKategoriSet = new Set<number>();
-  Object.values(assignedDosen).forEach((arr) =>
+  Object.values(mapping).forEach((arr) =>
     arr.forEach((d) => dosenMasukKategoriSet.add(d.id))
   );
   const totalDosenMasukKategori = dosenMasukKategoriSet.size;
@@ -378,7 +668,7 @@ const CSRDetail: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-1">
           Detail CSR:{" "}
           <span className="text-brand-600 dark:text-brand-400">{csr.nama}</span>
-          <span className="text-base font-normal text-gray-500 dark:text-gray-300 ml-2">
+          <span className="fon-bold text-2xl text-gray-500 dark:text-gray-300 ml-2">
             ({csr.nomor_csr})
           </span>
         </h1>
@@ -454,7 +744,7 @@ const CSRDetail: React.FC = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="bg-brand-100 dark:bg-brand-900/20 border text-brand-700 dark:text-brand-200 p-3 rounded-lg mb-6"
+            className="bg-brand-100 text-brand-700 p-3 rounded-lg mb-6"
           >
             {success}
           </motion.div>
@@ -464,19 +754,26 @@ const CSRDetail: React.FC = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="bg-red-100 dark:bg-red-900/20 border text-red-700 dark:text-red-200 p-3 rounded-lg mb-6"
+            className="bg-red-100 text-red-700 p-3 rounded-lg mb-6"
           >
             {error}
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Keahlian Table (Left) */}
-        <div className="md:col-span-2">
+      {/* Ganti layout utama menjadi grid 3 kolom */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+        {/* Kiri: Keahlian yang Dibutuhkan */}
+        <div className="md:col-span-6">
           <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-xl p-8 relative overflow-visible">
             {/* Section Title and Description */}
-            <h2 className="text-xl font-semibold mb-1 text-brand-700 dark:text-brand-300 flex items-center gap-2">
-              Keahlian Dibutuhkan
+            <h2 className="text-xl font-semibold mb-1 text-gray-800 dark:text-white flex items-center gap-2">
+              Keahlian yang dibutuhkan CSR
+              {csr?.nama && (
+                <span className="font-semibold text-brand-600 dark:text-brand-400">{csr.nama}</span>
+              )}
+              {csr?.mata_kuliah_kode && (
+                <span className="ml-2 text-xl font-semibold text-gray-800 dark:text-white">({csr.nomor_csr})</span>
+              )}
             </h2>
             <p className="text-gray-500 dark:text-gray-300 text-sm mb-6">
               Tambahkan kategori keahlian yang diperlukan untuk penugasan dosen.
@@ -502,95 +799,150 @@ const CSRDetail: React.FC = () => {
               </button>
             </div>
             <ul className="space-y-5">
-              {keahlianList.map((k) => (
+              {(keahlianList as string[]).map((k: string) => (
                 <li
                   key={k}
                   className="flex flex-col gap-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30 rounded-xl p-4"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="flex-1 font-semibold text-brand-700 dark:text-brand-300 text-base">
-                      {k}
+                      {editKeahlian === k ? (
+                        <input
+                          type="text"
+                          value={editKeahlianValue}
+                          onChange={(e) => setEditKeahlianValue(e.target.value)}
+                          className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-sm"
+                          autoFocus
+                        />
+                      ) : (
+                        k
+                      )}
                     </span>
                     <span className="text-xs text-gray-500 dark:text-gray-300">
-                      {assignedDosen[k]?.length || 0} dosen
+                      {mapping[k]?.length || 0} dosen
                     </span>
-                    <button
-                      onClick={() => handleRemoveKeahlian(k)}
-                      className="text-red-500 dark:text-red-400 text-xs ml-2 hover:underline"
-                    >
-                      Hapus Kategori
-                    </button>
+                    {editKeahlian === k ? (
+                      <>
+                        <button
+                          onClick={async () => {
+                            if (!csr) return;
+                            if (!editKeahlianValue.trim() || editKeahlianValue === k) {
+                              setEditKeahlian(null);
+                              setEditKeahlianValue("");
+                              return;
+                            }
+                            // Validasi duplikat (case-insensitive, trim), kecuali dirinya sendiri
+                            const newK = editKeahlianValue.trim().toLowerCase();
+                            const exists = csr.keahlian_required.some(x => x !== k && x.trim().toLowerCase() === newK);
+                            if (exists) {
+                              setError("Keahlian sudah ada, tidak boleh duplikat.");
+                              return;
+                            }
+                            // Update array keahlian_required
+                            const updated = csr.keahlian_required.map((x) =>
+                              x === k ? editKeahlianValue.trim() : x
+                            );
+                            // Pastikan nama tidak null
+                            const nama = csr.nama || (csr.mata_kuliah && csr.mata_kuliah.nama) || "";
+                            if (!nama) {
+                              setError("Nama CSR belum diisi. Silakan isi nama CSR terlebih dahulu.");
+                              return;
+                            }
+                            try {
+                              await api.put(`/csr/${csr.id}`, { ...csr, nama, keahlian_required: updated });
+                              setSuccess("Keahlian berhasil diubah");
+                              setEditKeahlian(null);
+                              setEditKeahlianValue("");
+                              await fetchAllData();
+                            } catch {
+                              setError("Gagal mengubah keahlian");
+                            }
+                          }}
+                          className="ml-2 px-2 py-1 rounded bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 transition"
+                        >
+                          Simpan
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditKeahlian(null);
+                            setEditKeahlianValue("");
+                          }}
+                          className="ml-1 px-2 py-1 rounded bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 transition"
+                        >
+                          Batal
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditKeahlian(k);
+                            setEditKeahlianValue(k);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 bg-transparent rounded-lg transition"
+                          title="Edit Keahlian"
+                        >
+                          <FontAwesomeIcon icon={faEdit} className="w-4 h-4" />
+                          <span className="hidden sm:inline">Edit</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setKeahlianToDelete(k);
+                            setShowDeleteKeahlianModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 bg-transparent rounded-lg transition"
+                          title="Hapus Kategori"
+                        >
+                          <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
+                          <span className="hidden sm:inline">Hapus</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                   {/* Slot for assigned dosen with drop area */}
                   <div
-                    className={`border-2 border-dashed rounded-lg p-3 min-h-[60px] flex flex-wrap items-center gap-2 transition-all duration-150 ${
-                      dragOverKeahlian === k
-                        ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20"
-                        : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900"
-                    } hover:border-brand-400`}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragOverKeahlian(k);
-                    }}
-                    onDragLeave={(e) => {
-                      e.preventDefault();
-                      setDragOverKeahlian(null);
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      handleDropDosen(k);
+                    className={`border-2 border-dashed rounded-lg p-3 min-h-[60px] flex flex-wrap items-center gap-2 transition-all duration-150 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:border-brand-400`}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (draggedDosenId) {
+                        handleAssignDosen(draggedDosenId, k);
+                        setDraggedDosenId(null);
+                      }
                     }}
                   >
-                    {assignedDosen[k] && assignedDosen[k].length > 0 ? (
-                      assignedDosen[k].map((d) => {
-                        // --- Badge style logic ala PBL-detail.tsx ---
-                        const isStandby = Array.isArray(d.keahlian)
-                          ? d.keahlian.some(
-                              (k) => k.toLowerCase() === "standby"
-                            )
-                          : false;
-                        let badgeBg = "bg-green-100 dark:bg-green-900/40";
-                        let circleBg = "bg-green-500";
-                        let textColor = "text-green-700 dark:text-green-200";
-                        let initial = "D";
-                        if (d.role === "ketua") {
-                          badgeBg = "bg-blue-100 dark:bg-blue-900/40";
-                          circleBg = "bg-blue-500";
-                          textColor = "text-blue-700 dark:text-blue-200";
-                          initial = "K";
-                        } else if (d.role === "anggota") {
-                          badgeBg = "bg-green-100 dark:bg-green-900/40";
-                          circleBg = "bg-green-500";
-                          textColor = "text-green-700 dark:text-green-200";
-                          initial = "A";
-                        } else if (d.role === "dosen_mengajar") {
-                          badgeBg = "bg-purple-100 dark:bg-purple-900/40";
-                          circleBg = "bg-purple-500";
-                          textColor = "text-purple-700 dark:text-purple-200";
-                          initial = "M";
-                        }
-                        if (isStandby) {
-                          badgeBg = "bg-yellow-100 dark:bg-yellow-900/40";
-                          circleBg = "bg-yellow-400";
-                          textColor = "text-yellow-800 dark:text-yellow-200";
-                          initial = "S";
-                        }
+                    {mapping[k] && mapping[k].length > 0 ? (
+                      mapping[k].map((d) => {
+                        // Normalisasi keahlian ke array
+                        const keahlianArr = Array.isArray(d.keahlian)
+                          ? d.keahlian
+                          : typeof d.keahlian === "string"
+                            ? (d.keahlian as string).split(",").map((k: string) => k.trim())
+                          : [];
+                        const isStandby = keahlianArr.some((k: string) => k.toLowerCase().includes("standby"));
+                        // Badge style
+                        const badgeBg = isStandby ? "bg-yellow-100 dark:bg-yellow-900/40" : "bg-green-100 dark:bg-green-900/40";
+                        const circleBg = isStandby ? "bg-yellow-400" : "bg-green-500";
+                        const textColor = isStandby ? "text-yellow-800 dark:text-yellow-200" : "text-green-700 dark:text-green-200";
+                        const initial = "D";
                         return (
                           <div
                             key={d.id}
                             className={`flex items-center gap-2 px-3 py-1 rounded-full ${badgeBg} mb-2 mr-2`}
                           >
                             <div
-                              className={`w-6 h-6 rounded-full flex items-center justify-center ${circleBg}`}
+                              className={`w-6 h-6 rounded-full flex items-center justify-center relative ${circleBg}`}
                             >
                               <span className="text-white text-xs font-bold">
                                 {initial}
+                              </span>
+                              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[8px] font-semibold rounded-full flex justify-center items-center w-4 h-4 border border-white dark:border-green-800" title="Jumlah penugasan">
+                                {typeof d.csr_assignment_count === 'number' ? d.csr_assignment_count : 0}x
                               </span>
                             </div>
                             <span
                               className={`text-xs font-medium ${textColor}`}
                             >
-                              {d.name} ({d.nid})
+                              {d.name}
                               {isStandby && (
                                 <span className="ml-2 px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 text-[10px] font-semibold">
                                   Dosen Standby
@@ -598,7 +950,7 @@ const CSRDetail: React.FC = () => {
                               )}
                             </span>
                             <button
-                              onClick={() => handleRemoveAssigned(k, d.id)}
+                              onClick={() => handleRemoveAssigned(d.id, k)}
                               className="ml-2 p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-full transition text-xs"
                               title="Hapus penugasan"
                             >
@@ -618,8 +970,104 @@ const CSRDetail: React.FC = () => {
             </ul>
           </div>
         </div>
-        {/* Dosen List (Right) */}
-        <div className="md:col-span-1">
+        {/* Tengah: Dosen Sudah Dikelompokkan (PBL) */}
+        <div className="md:col-span-3">
+          <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-lg p-8 mb-8">
+            <h2 className="text-lg font-bold mb-4 text-brand-700 dark:text-brand-300">Dosen Sudah Dikelompokkan (PBL)</h2>
+            <input
+              type="text"
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-brand-500 focus:border-brand-500 mb-6 bg-white dark:bg-gray-800 text-gray-800 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+              placeholder="Cari dosen atau keahlian..."
+              value={searchDosenPBL}
+              onChange={e => setSearchDosenPBL(e.target.value)}
+            />
+            <div className="space-y-6 overflow-y-auto overflow-x-hidden hide-scroll" style={{ maxHeight: '862px' }}>
+              {loadingDosenPBL ? (
+                  <p className="text-sm text-gray-500">Memuat data dosen PBL...</p>
+              ) : (
+                Object.entries(filteredDosenPBLBySemester).map(([semester, dosenList]) => (
+                  <div key={semester} className="mb-4">
+                    {/* Label Semester, samakan dengan Dosen Reguler */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="inline-block w-3 h-3 rounded-full bg-brand-500"></span>
+                      <span className="text-gray-700 dark:text-gray-300 font-semibold text-sm">Semester {semester}</span>
+                    </div>
+                    <div className="space-y-3">
+                      {dosenList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6">
+                    <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-gray-700 dark:bg-gray-800 flex items-center justify-center">
+                    <FontAwesomeIcon
+                      icon={faUsers}
+                      className="w-6 h-6 text-gray-400"
+                    />
+                  </div>
+                  <div className="text-sm text-gray-400">Belum ada dosen dikelompokan</div>
+                  </div>
+                  ) : (
+                        dosenList.map((dosen) => {
+                          const keahlianArr = Array.isArray(dosen.keahlian)
+                            ? dosen.keahlian
+                            : typeof dosen.keahlian === "string" && dosen.keahlian
+                            ? [dosen.keahlian]
+                            : [];
+                          const isStandby = keahlianArr.some((k) => k.toLowerCase().includes("standby"));
+                          return (
+                            <div
+                              key={dosen.id}
+                              className={`p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl hover:shadow-md transition-all duration-200 cursor-move`}
+                              draggable
+                              onDragStart={() => setDraggedDosenId(dosen.id)}
+                              onDragEnd={() => setDraggedDosenId(null)}
+                            >
+                              <div className="flex items-start gap-3 mb-3">
+                                <div className={`w-10 h-10 rounded-full ${isStandby ? "bg-yellow-400" : "bg-brand-500"} flex items-center justify-center relative`}>
+                                  <span className="text-white text-sm font-bold">{dosen.name.charAt(0)}</span>
+                                  <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-semibold rounded-full flex justify-center items-center w-6 h-6 border-2 border-white dark:border-gray-800" title="Jumlah penugasan">
+                                    {typeof dosen.csr_assignment_count === 'number' ? dosen.csr_assignment_count : 0}x
+                                  </span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-semibold text-gray-800 dark:text-white/90 text-sm mb-1">{dosen.name}</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">NID: {dosen.nid}</div>
+                                </div>
+                                {isStandby && (
+                                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-200 text-gray-700 text-xs">Standby</span>
+                                )}
+                              </div>
+                              {/* Keahlian Section */}
+                              <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+                                <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+                                  <div className="w-1 h-1 rounded-full bg-orange-500"></div>
+                                  Keahlian
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {keahlianArr.map((k, idx) => (
+                                    <span
+                                      key={idx}
+                                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                        k.toLowerCase() === "standby"
+                                          ? "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 font-semibold"
+                                          : "bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300"
+                                      }`}
+                                    >
+                                      {k}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+        {/* Kanan: Dosen Tersedia */}
+        <div className="md:col-span-3">
           <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-lg p-8">
             <h2 className="text-lg font-semibold mb-4 text-brand-700 dark:text-brand-300">
               Dosen Tersedia (
@@ -643,62 +1091,71 @@ const CSRDetail: React.FC = () => {
               </div>
               <div className="space-y-3 max-h-[500px] overflow-y-auto hide-scroll">
                 {filteredRegularDosen.length > 0 ? (
-                  filteredRegularDosen.map((dosen) => (
-                    <div
-                      key={dosen.id}
-                      className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl hover:shadow-md transition-all duration-200 cursor-move"
-                      draggable
-                      onDragStart={() => setDraggedDosen(dosen)}
-                      onDragEnd={() => setDraggedDosen(null)}
-                    >
-                      {/* Header dengan Avatar dan Info Dasar */}
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center">
-                          <span className="text-white text-sm font-bold">
-                            {dosen.name.charAt(0)}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-800 dark:text-white/90 text-sm mb-1">
-                            {dosen.name}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            NID: {dosen.nid}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Only Keahlian Section */}
-                      <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
-                          <div className="w-1 h-1 rounded-full bg-orange-500"></div>
-                          Keahlian
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {dosen.keahlian.map((k, idx) => (
-                            <span
-                              key={idx}
-                              className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                k.toLowerCase() === "standby"
-                                  ? "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 font-semibold"
-                                  : "bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300"
-                              }`}
-                            >
-                              {k}
+                  filteredRegularDosen.map((dosen) => {
+                    const keahlianArr = Array.isArray(dosen.keahlian)
+                      ? dosen.keahlian
+                      : typeof dosen.keahlian === "string" && dosen.keahlian
+                      ? [dosen.keahlian]
+                      : [];
+                    const isStandby = keahlianArr.some((k) => k.toLowerCase().includes("standby"));
+                    return (
+                      <div
+                        key={dosen.id}
+                        className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl hover:shadow-md transition-all duration-200 cursor-move"
+                        draggable
+                        onDragStart={() => setDraggedDosenId(dosen.id)}
+                        onDragEnd={() => setDraggedDosenId(null)}
+                      >
+                        {/* Header dengan Avatar dan Info Dasar */}
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className={`w-10 h-10 rounded-full ${isStandby ? "bg-yellow-400" : "bg-brand-500"} flex items-center justify-center relative`}>
+                            <span className="text-white text-sm font-bold">{dosen.name.charAt(0)}</span>
+                            <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-semibold rounded-full flex justify-center items-center w-6 h-6 border-2 border-white dark:border-gray-800" title="Jumlah penugasan">
+                              {typeof dosen.csr_assignment_count === 'number' ? dosen.csr_assignment_count : 0}x
                             </span>
-                          ))}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-gray-800 dark:text-white/90 text-sm mb-1">
+                              {dosen.name}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              NID: {dosen.nid}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Only Keahlian Section */}
+                        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+                          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+                            <div className="w-1 h-1 rounded-full bg-orange-500"></div>
+                            Keahlian
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {keahlianArr.map((k, idx) => (
+                              <span
+                                key={idx}
+                                className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                  k.toLowerCase() === "standby"
+                                    ? "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 font-semibold"
+                                    : "bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300"
+                                }`}
+                              >
+                                {k}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="text-center py-6 text-gray-400 dark:text-gray-500">
-                    <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                    <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-gray-700 dark:bg-gray-800 flex items-center justify-center">
                       <FontAwesomeIcon
                         icon={faUsers}
                         className="w-6 h-6 text-gray-400"
                       />
                     </div>
-                    <div className="text-sm">Tidak ada dosen reguler</div>
+                    <div className="text-sm text-gray-400">Tidak ada dosen reguler</div>
                   </div>
                 )}
               </div>
@@ -713,43 +1170,48 @@ const CSRDetail: React.FC = () => {
               </div>
               <div className="space-y-3 max-h-[500px] overflow-y-auto hide-scroll">
                 {filteredStandbyDosen.length > 0 ? (
-                  filteredStandbyDosen.map((dosen) => (
-                    <div
-                      key={dosen.id}
-                      className={`p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-xl hover:shadow-md transition-all duration-200 cursor-move ${
-                        draggedDosen?.id === dosen.id
-                          ? "ring-2 ring-yellow-500 scale-105"
-                          : ""
-                      }`}
-                      draggable
-                      onDragStart={() => setDraggedDosen(dosen)}
-                      onDragEnd={() => setDraggedDosen(null)}
-                    >
-                      {/* Header dengan Avatar dan Info Dasar */}
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center ">
-                          <span className="text-white text-sm font-bold">
-                            {dosen.name.charAt(0)}
+                  filteredStandbyDosen.map((dosen) => {
+                    const keahlianArr = Array.isArray(dosen.keahlian)
+                      ? dosen.keahlian
+                      : typeof dosen.keahlian === "string" && dosen.keahlian
+                      ? [dosen.keahlian]
+                      : [];
+                    const isStandby = keahlianArr.some((k) => k.toLowerCase().includes("standby"));
+                    return (
+                      <div
+                        key={dosen.id}
+                        className={`p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-xl hover:shadow-md transition-all duration-200 cursor-move`}
+                        draggable
+                        onDragStart={() => setDraggedDosenId(dosen.id)}
+                        onDragEnd={() => setDraggedDosenId(null)}
+                      >
+                        {/* Header dengan Avatar dan Info Dasar */}
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className={`w-10 h-10 rounded-full ${isStandby ? "bg-yellow-400" : "bg-brand-500"} flex items-center justify-center relative`}>
+                            <span className="text-white text-sm font-bold">{dosen.name.charAt(0)}</span>
+                            <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-semibold rounded-full flex justify-center items-center w-6 h-6 border-2 border-white dark:border-gray-800" title="Jumlah penugasan">
+                              {typeof dosen.csr_assignment_count === 'number' ? dosen.csr_assignment_count : 0}x
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-gray-800 dark:text-white/90 text-sm mb-1">
+                              {dosen.name}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              NID: {dosen.nid}
+                            </div>
+                          </div>
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-200 text-gray-700 text-xs">
+                            Standby
                           </span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-800 dark:text-white/90 text-sm mb-1">
-                            {dosen.name}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            NID: {dosen.nid}
-                          </div>
-                        </div>
-                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-gray-200 text-gray-700 text-xs">
-                          Standby
-                        </span>
+                        {/* Tidak ada info lain untuk dosen standby */}
                       </div>
-                      {/* Tidak ada info lain untuk dosen standby */}
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="text-center py-6 text-gray-400 dark:text-gray-500">
-                    <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                    <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-gray-700 dark:bg-gray-800 flex items-center justify-center">
                       <FontAwesomeIcon
                         icon={faUsers}
                         className="w-6 h-6 text-gray-400"
@@ -763,6 +1225,95 @@ const CSRDetail: React.FC = () => {
           </div>
         </div>
       </div>
+      {/* Modal Konfirmasi Hapus Keahlian */}
+      <AnimatePresence>
+        {showDeleteKeahlianModal && keahlianToDelete && (
+          <div className="fixed inset-0 z-[100000] flex items-center justify-center">
+            {/* Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
+              onClick={() => {
+                setShowDeleteKeahlianModal(false);
+                setKeahlianToDelete(null);
+              }}
+            ></motion.div>
+            {/* Modal Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-[100001]"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => {
+                  setShowDeleteKeahlianModal(false);
+                  setKeahlianToDelete(null);
+                }}
+                className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
+              >
+                <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M6.04289 16.5413C5.65237 16.9318 5.65237 17.565 6.04289 17.9555C6.43342 18.346 7.06658 18.346 7.45711 17.9555L11.9987 13.4139L16.5408 17.956C16.9313 18.3466 17.5645 18.3466 17.955 17.956C18.3455 17.5655 18.3455 16.9323 17.955 16.5418L13.4129 11.9997L17.955 7.4576C18.3455 7.06707 18.3455 6.43391 17.955 6.04338C17.5645 5.65286 16.9313 5.65286 16.5408 6.04338L11.9987 10.5855L6.04289 16.5413Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <div>
+                <div className="flex items-center justify-between pb-6">
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">Hapus Kategori Keahlian</h2>
+                </div>
+                <div>
+                  <p className="mb-6 text-gray-500 dark:text-gray-400">
+                    Apakah Anda yakin ingin menghapus kategori keahlian <span className="font-semibold text-gray-800 dark:text-white">{keahlianToDelete}</span>? Data yang dihapus tidak dapat dikembalikan.
+                  </p>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        setShowDeleteKeahlianModal(false);
+                        setKeahlianToDelete(null);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!keahlianToDelete) return;
+                        setIsDeletingKeahlian(true);
+                        await handleRemoveKeahlian(keahlianToDelete);
+                        setIsDeletingKeahlian(false);
+                        setShowDeleteKeahlianModal(false);
+                        setKeahlianToDelete(null);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium shadow-theme-xs hover:bg-red-600 transition flex items-center justify-center"
+                      disabled={isDeletingKeahlian}
+                    >
+                      {isDeletingKeahlian ? (
+                        <>
+                          <svg className="w-5 h-5 mr-2 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                          </svg>
+                          Menghapus...
+                        </>
+                      ) : (
+                        'Hapus'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

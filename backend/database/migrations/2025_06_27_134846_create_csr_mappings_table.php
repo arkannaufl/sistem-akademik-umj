@@ -15,10 +15,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('csr_id')->constrained('csrs')->onDelete('cascade');
             $table->foreignId('dosen_id')->constrained('users')->onDelete('cascade');
+            $table->string('keahlian')->nullable();
             $table->timestamps();
 
-            // Memastikan satu dosen hanya bisa mengajar satu mata kuliah CSR
-            $table->unique('dosen_id');
+            // Memastikan satu dosen hanya bisa mengajar satu keahlian di satu CSR
+            $table->unique(['csr_id', 'keahlian', 'dosen_id']);
         });
     }
 

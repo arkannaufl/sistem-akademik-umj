@@ -6,7 +6,7 @@ use App\Models\Ruangan;
 use Illuminate\Http\Request;
 use App\Imports\RuanganImport;
 use Maatwebsite\Excel\Facades\Excel;
-use App\Services\ActivityLogService;
+use Illuminate\Support\Facades\Auth;
 
 class RuanganController extends Controller
 {
@@ -27,14 +27,6 @@ class RuanganController extends Controller
 
         $ruangan = Ruangan::create($validated);
         
-        // Log activity
-        ActivityLogService::logCreate(
-            'RUANGAN',
-            "Menambahkan ruangan baru: {$ruangan->nama} ({$ruangan->id_ruangan})",
-            $validated,
-            $request
-        );
-        
         return response()->json($ruangan, 201);
     }
 
@@ -50,7 +42,6 @@ class RuanganController extends Controller
     public function update(Request $request, $id)
     {
         $ruangan = Ruangan::findOrFail($id);
-        $oldData = $ruangan->toArray();
         
         $validated = $request->validate([
             'id_ruangan' => 'sometimes|required|string|unique:ruangan,id_ruangan,' . $ruangan->id,
@@ -62,32 +53,14 @@ class RuanganController extends Controller
 
         $ruangan->update($validated);
         
-        // Log activity
-        ActivityLogService::logUpdate(
-            'RUANGAN',
-            "Mengupdate ruangan: {$ruangan->nama} ({$ruangan->id_ruangan})",
-            $oldData,
-            $validated,
-            $request
-        );
-        
         return response()->json($ruangan);
     }
 
     public function destroy($id)
     {
         $ruangan = Ruangan::findOrFail($id);
-        $oldData = $ruangan->toArray();
         
         $ruangan->delete();
-        
-        // Log activity
-        ActivityLogService::logDelete(
-            'RUANGAN',
-            "Menghapus ruangan: {$oldData['nama']} ({$oldData['id_ruangan']})",
-            $oldData,
-            request()
-        );
         
         return response()->json(['message' => 'Ruangan deleted']);
     }
@@ -112,14 +85,9 @@ class RuanganController extends Controller
 
         $importedCount = $totalRows - count($failedRows);
 
-        // Log activity
-        ActivityLogService::logImport(
-            'RUANGAN',
-            "Import data ruangan dari file: {$request->file('file')->getClientOriginalName()}",
-            $request->file('file')->getClientOriginalName(),
-            $importedCount,
-            $request
-        );
+        activity()
+            ->causedBy(Auth::user())
+            ->log("Mengimpor {$importedCount} data ruangan dari file: {$request->file('file')->getClientOriginalName()}");
 
         if ($importedCount > 0) {
             return response()->json([

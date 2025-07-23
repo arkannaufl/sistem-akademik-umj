@@ -4,7 +4,6 @@ import { UserIcon, ChevronLeftIcon } from "../icons";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   kelompokKecilApi,
-  Mahasiswa as ApiMahasiswa,
   kelompokBesarApi,
 } from "../api/generateApi";
 import type { KelompokKecil } from "../api/generateApi";
@@ -72,9 +71,6 @@ const KelompokKecil: React.FC = () => {
     semester: string;
   }>(null);
 
-  // State untuk search di section Mahasiswa Terdaftar
-  const [searchTerdaftar, setSearchTerdaftar] = useState("");
-
   // Tambahkan state untuk modal konfirmasi hapus
   const [showDeleteModal, setShowDeleteModal] = useState<null | {
     semester: string;
@@ -92,9 +88,6 @@ const KelompokKecil: React.FC = () => {
   const [kelompokKecilData, setKelompokKecilData] = useState<KelompokKecil[]>(
     []
   );
-  const [mahasiswaInOtherSemesters, setMahasiswaInOtherSemesters] = useState<{
-    [id: string]: string;
-  }>({});
 
   // Tambahkan state untuk pesan error
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -165,45 +158,6 @@ const KelompokKecil: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [semester]);
-
-  // Get mahasiswa in other semesters
-  useEffect(() => {
-    const loadOtherSemestersData = async () => {
-      try {
-        // Get all semesters data from API
-        const allSemesters = ["2023/2024", "2024/2025", "2025/2026"]; // You might want to make this dynamic
-        const otherSemesters: { [id: string]: string } = {};
-
-        for (const sem of allSemesters) {
-          if (sem !== semester) {
-            try {
-              const response = await kelompokKecilApi.getBySemester(
-                String(mapSemesterToNumber(sem))
-              );
-              const mahasiswaIds = response.data.map((kk) =>
-                kk.mahasiswa_id.toString()
-              );
-              mahasiswaIds.forEach((id) => {
-                otherSemesters[id] = sem;
-              });
-            } catch (err) {
-              // Ignore errors for semesters that might not have data
-            }
-          }
-        }
-
-        setMahasiswaInOtherSemesters(otherSemesters);
-        setTimeout(() => {
-          console.log(
-            "[DEBUG][RELOAD] mahasiswaInOtherSemesters:",
-            otherSemesters
-          );
-        }, 100);
-      } catch (err) {}
-    };
-
-    loadOtherSemestersData();
   }, [semester]);
 
   // Fungsi untuk menyimpan data pengelompokan ke API
@@ -410,15 +364,6 @@ const KelompokKecil: React.FC = () => {
   };
 
   const handleSelectMahasiswa = (mahasiswaId: string) => {
-    // Cek apakah mahasiswa sudah dikelompokkan di semester lain
-    const otherSemester = isMahasiswaInOtherSemester(mahasiswaId);
-    if (otherSemester) {
-      alert(
-        `Mahasiswa ini sudah dikelompokkan di Semester ${otherSemester}. Tidak dapat dipilih untuk semester ini.`
-      );
-      return;
-    }
-
     setSelectedMahasiswa((prev) => {
       if (prev.includes(mahasiswaId)) {
         return prev.filter((id) => id !== mahasiswaId);
@@ -470,14 +415,18 @@ const KelompokKecil: React.FC = () => {
     }
     setIsGenerating(true);
     try {
-      await kelompokKecilApi.generate({
+      console.log("Kirim ke API:", {
         semester: String(mapSemesterToNumber(semester)),
         mahasiswa_ids: selectedMahasiswa.map((id) => parseInt(id)),
         jumlah_kelompok: jumlahKelompok,
       });
-      // Setelah generate, re-fetch data dari backend
+      const res = await kelompokKecilApi.generate({
+        semester: String(mapSemesterToNumber(semester)),
+        mahasiswa_ids: selectedMahasiswa.map((id) => parseInt(id)),
+        jumlah_kelompok: jumlahKelompok,
+      });
+      console.log("Response generate:", res);
       await loadData();
-      console.log("loadData dipanggil ulang setelah generate");
       setShowKelompok(true);
       setHasUnsavedChanges(false);
       setHasSavedData(true);
@@ -507,7 +456,6 @@ const KelompokKecil: React.FC = () => {
         await kelompokKecilApi.delete(kk.id);
       }
       
-      // Reload all data to refresh mahasiswaInOtherSemesters state
       await loadData();
       
       setSelectedMahasiswa([]);
@@ -643,42 +591,11 @@ const KelompokKecil: React.FC = () => {
             }
           : m
       );
-      // Debug log: print updated mahasiswa and mahasiswaInOtherSemesters
-      setTimeout(() => {
-        console.log("[DEBUG] Updated mahasiswa:", updated);
-        console.log(
-          "[DEBUG] mahasiswaInOtherSemesters:",
-          mahasiswaInOtherSemesters
-        );
-        const justMoved = updated.find((m) => m.id === draggedMahasiswa.id);
-        if (justMoved) {
-          console.log(
-            `[DEBUG] Mahasiswa ${justMoved.nama} (id: ${justMoved.id}) kelompok:`,
-            justMoved.kelompok
-          );
-          console.log(
-            `[DEBUG] isMahasiswaInOtherSemester:`,
-            isMahasiswaInOtherSemester(justMoved.id)
-          );
-        }
-      }, 100);
-      return updated;
-    });
 
-    // If moved to unassigned, remove from mahasiswaInOtherSemesters
-    if (targetKelompok === "unassigned") {
-      setMahasiswaInOtherSemesters((prev) => {
-        if (prev[draggedMahasiswa.id]) {
-          const updated = { ...prev };
-          delete updated[draggedMahasiswa.id];
-          console.log(
-            `[DEBUG] Removed mahasiswa ${draggedMahasiswa.id} from mahasiswaInOtherSemesters`
-          );
           return updated;
-        }
-        return prev;
       });
-    }
+
+
 
     // Set flag bahwa ada perubahan yang belum disimpan
     setHasUnsavedChanges(true);
@@ -702,35 +619,6 @@ const KelompokKecil: React.FC = () => {
     // Hapus styling drag
     if (e.currentTarget) {
       (e.currentTarget as HTMLElement).style.opacity = "1";
-    }
-  };
-
-  // Get all saved data from API for checking conflicts
-  const getAllSavedData = async () => {
-    try {
-      // Get all semesters data from API
-      const allSemesters = ["2023/2024", "2024/2025", "2025/2026"]; // You might want to make this dynamic
-      const allData: { semester: string; mahasiswa: string[] }[] = [];
-
-      for (const sem of allSemesters) {
-        if (sem !== semester) {
-          try {
-            const response = await kelompokKecilApi.getBySemester(sem);
-            const mahasiswaIds = response.data.map((kk) =>
-              kk.mahasiswa_id.toString()
-            );
-            if (mahasiswaIds.length > 0) {
-              allData.push({ semester: sem, mahasiswa: mahasiswaIds });
-            }
-          } catch (err) {
-            // Ignore errors for semesters that might not have data
-          }
-        }
-      }
-
-      return allData;
-    } catch (err) {
-      return [];
     }
   };
 
@@ -774,22 +662,9 @@ const KelompokKecil: React.FC = () => {
     return kelompokStats;
   };
 
-  const isMahasiswaInOtherSemester = (mahasiswaId: string) => {
-    return mahasiswaInOtherSemesters[mahasiswaId] || null;
-  };
 
-  const getMahasiswaSemester = (mahasiswaId: string) => {
-    return mahasiswaInOtherSemesters[mahasiswaId];
-  };
 
-  // Filter mahasiswa yang terdaftar di semester lain
-  const mahasiswaTerdaftarFiltered = mahasiswa.filter(
-    (m) =>
-      mahasiswaInOtherSemesters[m.id] &&
-      (searchTerdaftar === "" ||
-        m.nama.toLowerCase().includes(searchTerdaftar.toLowerCase()) ||
-        m.nim.toLowerCase().includes(searchTerdaftar.toLowerCase()))
-  );
+
 
   // Group kelompokKecilData by semester
   const semesterGroups: { [semester: string]: typeof kelompokKecilData } = {};
@@ -980,7 +855,7 @@ const KelompokKecil: React.FC = () => {
               <div className="text-2xl md:text-4xl font-bold mb-1 text-green-600 dark:text-green-400">
                 {
                   mahasiswa.filter(
-                    (m) => !m.kelompok && !isMahasiswaInOtherSemester(m.id)
+                    (m) => !m.kelompok
                   ).length
                 }
               </div>
@@ -996,16 +871,6 @@ const KelompokKecil: React.FC = () => {
                 Total Mahasiswa
               </div>
             </div>
-            {Object.keys(mahasiswaInOtherSemesters).length > 0 && (
-              <div>
-                <div className="text-2xl md:text-4xl font-bold mb-1 text-orange-600 dark:text-orange-400">
-                  {Object.keys(mahasiswaInOtherSemesters).length}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Tidak Tersedia
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1045,7 +910,6 @@ const KelompokKecil: React.FC = () => {
                       type="checkbox"
                       checked={(() => {
                         const availableMahasiswaIds = filteredMahasiswa
-                          .filter((m) => !isMahasiswaInOtherSemester(m.id))
                           .map((m) => m.id);
                         return (
                           availableMahasiswaIds.every((id) =>
@@ -1055,7 +919,6 @@ const KelompokKecil: React.FC = () => {
                       })()}
                       onChange={() => {
                         const availableMahasiswaIds = filteredMahasiswa
-                          .filter((m) => !isMahasiswaInOtherSemester(m.id))
                           .map((m) => m.id);
                         const allSelected =
                           availableMahasiswaIds.every((id) =>
@@ -1085,7 +948,6 @@ const KelompokKecil: React.FC = () => {
                         border-2
                         ${(() => {
                           const availableMahasiswaIds = filteredMahasiswa
-                            .filter((m) => !isMahasiswaInOtherSemester(m.id))
                             .map((m) => m.id);
                           return availableMahasiswaIds.every((id) =>
                             selectedMahasiswa.includes(id)
@@ -1103,7 +965,6 @@ const KelompokKecil: React.FC = () => {
                     />
                     {(function () {
                       const availableMahasiswaIds = filteredMahasiswa
-                        .filter((m) => !isMahasiswaInOtherSemester(m.id))
                         .map((m) => m.id);
                       return (
                         availableMahasiswaIds.every((id) =>
@@ -1126,19 +987,11 @@ const KelompokKecil: React.FC = () => {
                     Pilih Semua (
                     {
                       selectedMahasiswa.filter((id) =>
-                        filteredMahasiswa
-                          .filter((m) => !isMahasiswaInOtherSemester(m.id))
-                          .map((m) => m.id)
-                          .includes(id)
+                        filteredMahasiswa.map((m) => m.id).includes(id)
                       ).length
                     }
                     /
-                    {
-                      filteredMahasiswa.filter(
-                        (m) => !isMahasiswaInOtherSemester(m.id)
-                      ).length
-                    }{" "}
-                    tersedia)
+                    {filteredMahasiswa.length} tersedia)
                   </span>
                 </label>
 
@@ -1240,39 +1093,9 @@ const KelompokKecil: React.FC = () => {
           <div className="bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-                Mahasiswa Terdaftar (
-                {
-                  filteredMahasiswa.filter(
-                    (m) => !isMahasiswaInOtherSemester(m.id)
-                  ).length
-                }{" "}
-                tersedia dari {filteredMahasiswa.length} total)
+                Mahasiswa Terdaftar ({filteredMahasiswa.length} tersedia dari {filteredMahasiswa.length} total)
               </h3>
-              {Object.keys(mahasiswaInOtherSemesters).length > 0 && (
-                <span className="text-xs px-2 py-1 bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300 rounded-full">
-                  {Object.keys(mahasiswaInOtherSemesters).length} tidak tersedia
-                </span>
-              )}
             </div>
-
-            {/* Informasi Sistem Pembatasan */}
-            {Object.keys(mahasiswaInOtherSemesters).length > 0 && (
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
-                  <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
-                    <span className="text-white text-xs">ℹ️</span>
-                  </div>
-                  <p className="text-sm font-medium">
-                    Sistem Pembatasan Mahasiswa
-                  </p>
-                </div>
-                <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                  Mahasiswa yang sudah dikelompokkan di semester lain tidak
-                  dapat dipilih untuk semester ini. Ini memastikan tidak ada
-                  duplikasi pengelompokan mahasiswa antar semester.
-                </p>
-              </div>
-            )}
 
             {/* Input Search */}
             <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
@@ -1285,7 +1108,6 @@ const KelompokKecil: React.FC = () => {
               />
               {(function () {
                 const availableMahasiswaIds = filteredMahasiswa
-                  .filter((m) => !isMahasiswaInOtherSemester(m.id))
                   .map((m) => m.id);
                 const anySelected = availableMahasiswaIds.some((id) =>
                   selectedMahasiswa.includes(id)
@@ -1296,7 +1118,6 @@ const KelompokKecil: React.FC = () => {
                   type="button"
                   onClick={() => {
                     const availableMahasiswaIds = filteredMahasiswa
-                      .filter((m) => !isMahasiswaInOtherSemester(m.id))
                       .map((m) => m.id);
                     setSelectedMahasiswa(
                       selectedMahasiswa.filter(
@@ -1327,21 +1148,16 @@ const KelompokKecil: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredMahasiswa.map((mhs) => {
-                  const otherSemester = isMahasiswaInOtherSemester(mhs.id);
-                  const isDisabled = !!otherSemester;
-
                   return (
                     <div
                       key={mhs.id}
                       className={`flex items-center gap-3 p-3 rounded-lg border transition-colors duration-200 ${
-                        isDisabled
-                          ? "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 opacity-60 cursor-not-allowed"
-                          : selectedMahasiswa.includes(mhs.id)
+                        selectedMahasiswa.includes(mhs.id)
                           ? "bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-700 cursor-pointer hover:bg-green-50 hover:border-green-400"
                           : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-green-50 hover:border-green-400"
                       }`}
                       onClick={() => {
-                        if (!isDisabled) handleSelectMahasiswa(mhs.id);
+                        handleSelectMahasiswa(mhs.id);
                       }}
                     >
                       <div
@@ -1352,7 +1168,6 @@ const KelompokKecil: React.FC = () => {
                           type="checkbox"
                           checked={selectedMahasiswa.includes(mhs.id)}
                           onChange={() => handleSelectMahasiswa(mhs.id)}
-                          disabled={isDisabled}
                           className={`
                             w-5 h-5
                             appearance-none
@@ -1411,25 +1226,6 @@ const KelompokKecil: React.FC = () => {
                           >
                             IPK {mhs.ipk.toFixed(2)}
                           </span>
-                          {otherSemester && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300 font-bold animate-pulse flex items-center gap-2">
-                              Terdaftar semester {otherSemester}
-                              <button
-                                type="button"
-                                className="ml-2 px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-700 text-xs font-bold transition"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setShowKeluarkanModal({
-                                    id: mhs.id,
-                                    nama: mhs.nama,
-                                    semester: otherSemester,
-                                  });
-                                }}
-                              >
-                                Keluarkan
-                              </button>
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1714,8 +1510,7 @@ const KelompokKecil: React.FC = () => {
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {
                         mahasiswa.filter(
-                          (m) =>
-                            !m.kelompok && !isMahasiswaInOtherSemester(m.id)
+                          (m) => !m.kelompok
                         ).length
                       }{" "}
                       mahasiswa
@@ -1726,7 +1521,7 @@ const KelompokKecil: React.FC = () => {
                 <div className="space-y-2">
                   {mahasiswa
                     .filter(
-                      (m) => !m.kelompok && !isMahasiswaInOtherSemester(m.id)
+                      (m) => !m.kelompok
                     )
                     .map((mhs, index) => (
                       <React.Fragment key={mhs.id}>
@@ -1795,7 +1590,7 @@ const KelompokKecil: React.FC = () => {
 
                   {/* Area drop kosong jika tidak ada mahasiswa */}
                   {mahasiswa.filter(
-                    (m) => !m.kelompok && !isMahasiswaInOtherSemester(m.id)
+                    (m) => !m.kelompok
                   ).length === 0 && (
                     <div className="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 text-sm transition-all duration-300 ease-out hover:border-orange-400 hover:text-orange-600 dark:hover:border-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/10">
                       <div className="flex items-center gap-2">

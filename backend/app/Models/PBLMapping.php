@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class PBLMapping extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'pbl_mappings';
 
@@ -15,6 +17,14 @@ class PBLMapping extends Model
         'pbl_id',
         'dosen_id'
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn(string $eventName) => "PBL Mapping Dosen ID {$this->dosen_id} ke PBL ID {$this->pbl_id} telah di-{$eventName}");
+    }
 
     // Relasi ke PBL
     public function pbl()

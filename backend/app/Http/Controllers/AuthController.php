@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use App\Models\User;
-use App\Services\ActivityLogService;
 
 class AuthController extends Controller
 {
@@ -45,11 +44,12 @@ class AuthController extends Controller
         $user->current_token = $token;
         $user->save();
 
-        // Log activity
-        ActivityLogService::logLogin(
-            "User {$user->name} berhasil login",
-            $request
-        );
+        // Log manual aksi login tanpa perubahan field
+        activity()
+            ->causedBy($user)
+            ->event('login')
+            ->withProperties([])
+            ->log("User {$user->name} berhasil login");
 
         return response()->json([
             'access_token' => $token,
@@ -62,11 +62,12 @@ class AuthController extends Controller
     {
         $user = $request->user();
         
-        // Log activity before logout
-        ActivityLogService::logLogout(
-            "User {$user->name} berhasil logout",
-            $request
-        );
+        // Log manual aksi logout tanpa perubahan field
+        activity()
+            ->causedBy($user)
+            ->event('logout')
+            ->withProperties([])
+            ->log("User {$user->name} berhasil logout");
         
         // Set status logout dan hapus token
         $user->is_logged_in = 0;
@@ -89,7 +90,6 @@ class AuthController extends Controller
     public function updateProfile(Request $request)
     {
         $user = $request->user();
-        $oldData = $user->toArray();
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -111,15 +111,6 @@ class AuthController extends Controller
         $user->username = $validated['username'];
         $user->save();
 
-        // Log activity
-        ActivityLogService::logUpdate(
-            'USER',
-            "User {$user->name} mengupdate profil",
-            $oldData,
-            $validated,
-            $request
-        );
-
         return response()->json([
             'message' => 'Profile updated successfully.',
             'user' => $user,
@@ -129,7 +120,6 @@ class AuthController extends Controller
     public function updateAvatar(Request $request)
     {
         $user = $request->user();
-        $oldData = $user->toArray();
 
         $request->validate([
             'avatar' => 'required|image|max:2048',
@@ -146,15 +136,6 @@ class AuthController extends Controller
         $path = $request->file('avatar')->store('avatars', 'public');
         $user->avatar = '/storage/' . $path;
         $user->save();
-
-        // Log activity
-        ActivityLogService::logUpdate(
-            'USER',
-            "User {$user->name} mengupdate avatar",
-            $oldData,
-            ['avatar' => $user->avatar],
-            $request
-        );
 
         return response()->json([
             'message' => 'Avatar updated successfully.',

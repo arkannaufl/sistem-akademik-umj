@@ -6,7 +6,7 @@ use App\Models\Semester;
 use App\Models\TahunAjaran;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Services\ActivityLogService;
+use Illuminate\Support\Facades\Auth;
 
 class TahunAjaranController extends Controller
 {
@@ -41,16 +41,13 @@ class TahunAjaranController extends Controller
             return $tahunAjaran;
         });
 
-        ActivityLogService::logCreate('TAHUN_AJARAN', "Menambah tahun ajaran {$tahunAjaran->tahun}", $tahunAjaran->toArray());
         return response()->json($tahunAjaran->load('semesters'), 201);
     }
 
     public function destroy(TahunAjaran $tahunAjaran)
     {
-        $tahun = $tahunAjaran->tahun;
-        $oldData = $tahunAjaran->toArray();
         $tahunAjaran->delete();
-        ActivityLogService::logDelete('TAHUN_AJARAN', "Menghapus tahun ajaran {$tahun}", $oldData);
+        
         return response()->json(null, 204);
     }
 
@@ -75,7 +72,12 @@ class TahunAjaranController extends Controller
                 $firstSemester->update(['aktif' => true]);
             }
         });
-        ActivityLogService::logUpdate('TAHUN_AJARAN', "Mengaktifkan tahun ajaran {$tahunAjaran->tahun}");
+
+        activity()
+            ->causedBy(Auth::user())
+            ->performedOn($tahunAjaran)
+            ->log("Mengaktifkan tahun ajaran {$tahunAjaran->tahun}");
+
         return response()->json($tahunAjaran->load('semesters'));
     }
     
@@ -93,7 +95,13 @@ class TahunAjaranController extends Controller
             // Activate the selected semester
             $semester->update(['aktif' => true]);
         });
-        ActivityLogService::logUpdate('SEMESTER', "Mengaktifkan semester {$semester->jenis} pada tahun ajaran {$semester->tahunAjaran->tahun}");
+
+        activity()
+            ->causedBy(Auth::user())
+            ->performedOn($semester->tahunAjaran)
+            ->withProperties(['semester_id' => $semester->id, 'jenis' => $semester->jenis])
+            ->log("Mengaktifkan semester {$semester->jenis} pada tahun ajaran {$semester->tahunAjaran->tahun}");
+        
         return response()->json($semester->load('tahunAjaran.semesters'));
     }
 

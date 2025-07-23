@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChevronLeftIcon, UserIcon } from "../icons";
 import { motion, AnimatePresence } from "framer-motion";
-import { kelompokBesarApi, mahasiswaApi, Mahasiswa, kelompokKecilApi } from "../api/generateApi";
+import { kelompokBesarApi, mahasiswaApi, Mahasiswa } from "../api/generateApi";
 import type { KelompokBesar } from "../api/generateApi";
 
 function mapSemesterToNumber(semester: string | number): number {
@@ -29,9 +29,7 @@ const KelompokBesar: React.FC = () => {
   const [pendingSelectedId, setPendingSelectedId] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showKeluarkanModal, setShowKeluarkanModal] = useState<null | { id: string; nama: string; semester: string }>(null);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
-  const [pendingLeaveAction, setPendingLeaveAction] = useState<(() => void) | null>(null);
   
   // New state for API data
   const [mahasiswaList, setMahasiswaList] = useState<Mahasiswa[]>([]);
@@ -40,8 +38,6 @@ const KelompokBesar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [isResetting, setIsResetting] = useState(false);
-  const [isOtherSemesterLoading, setIsOtherSemesterLoading] = useState(true);
-  const [isKeluarkanLoading, setIsKeluarkanLoading] = useState(false);
 
   // Load data from API
   useEffect(() => {
@@ -70,40 +66,6 @@ const KelompokBesar: React.FC = () => {
     };
 
     loadData();
-  }, [semester]);
-
-  // Get all saved data from API for checking conflicts
-  const getAllSavedData = async () => {
-    try {
-      const allSemesters = ['Ganjil', 'Genap'];
-      const response = await kelompokBesarApi.batchBySemester({ semesters: allSemesters });
-      const allData = response.data; // { Ganjil: [...], Genap: [...] }
-      return allData;
-    } catch (err) {
-      return [];
-    }
-  };
-
-  // Get mahasiswa in other semesters
-  const [mahasiswaInOtherSemesters, setMahasiswaInOtherSemesters] = useState<{ [id: string]: string }>({});
-
-  useEffect(() => {
-    const loadOtherSemestersData = async () => {
-      setIsOtherSemesterLoading(true);
-      const allData = await getAllSavedData();
-      const otherSemesters: { [id: string]: string } = {};
-      Object.entries(allData).forEach(([semesterKey, mahasiswaArr]: [string, any]) => {
-        ((mahasiswaArr as any[]) || []).forEach((kb: any) => {
-          if (kb && kb.mahasiswa_id) {
-            otherSemesters[kb.mahasiswa_id] = semesterKey;
-          }
-        });
-      });
-      setMahasiswaInOtherSemesters(otherSemesters);
-      setIsOtherSemesterLoading(false);
-    };
-
-    loadOtherSemestersData();
   }, [semester]);
 
   // Filter mahasiswa berdasarkan semester yang dipilih
@@ -148,9 +110,7 @@ const KelompokBesar: React.FC = () => {
 
   const handleSelectAll = () => {
     // Hanya pilih mahasiswa yang tidak terkunci
-    const allIds = filteredMahasiswa
-      .filter(m => !mahasiswaInOtherSemesters[m.id.toString()])
-      .map(m => m.id.toString());
+    const allIds = filteredMahasiswa.map(m => m.id.toString());
     const allSelected = allIds.every(id => selectedMahasiswa.includes(id)) && allIds.length > 0;
     if (allSelected) {
       setSelectedMahasiswa(selectedMahasiswa.filter(id => !allIds.includes(id)));
@@ -179,9 +139,7 @@ const KelompokBesar: React.FC = () => {
     try {
       if (semester) {
         // Only send mahasiswa not registered in other semesters
-        const mahasiswaIds = selectedMahasiswa
-          .filter(id => !mahasiswaInOtherSemesters[id])
-          .map(id => parseInt(id));
+        const mahasiswaIds = selectedMahasiswa.map(id => parseInt(id));
         await kelompokBesarApi.create({
           semester: String(mapSemesterToNumber(semester)),
           mahasiswa_ids: mahasiswaIds
@@ -246,39 +204,8 @@ const KelompokBesar: React.FC = () => {
     }
   };
 
-  // Handle keluarkan mahasiswa from other semester
-  const handleKeluarkan = async () => {
-    if (!showKeluarkanModal) return;
-    setErrorMsg("");
-    setIsKeluarkanLoading(true);
-    try {
-      // Get kelompok besar data for the other semester
-      const response = await kelompokBesarApi.batchBySemester({ semesters: [String(mapSemesterToNumber(showKeluarkanModal.semester))] });
-      const targetKelompok = response.data[String(mapSemesterToNumber(showKeluarkanModal.semester))].find((kb: any) => kb.mahasiswa_id.toString() === showKeluarkanModal.id);
-      
-      if (targetKelompok) {
-        await kelompokBesarApi.delete(targetKelompok.id);
-        
-        // Update local state
-        const newOtherSemesters = { ...mahasiswaInOtherSemesters };
-        delete newOtherSemesters[showKeluarkanModal.id];
-        setMahasiswaInOtherSemesters(newOtherSemesters);
-        
-        setShowKeluarkanModal(null);
-        // Setelah mengeluarkan, fetch ulang kelompok kecil semester terkait (jika ada logic/props untuk itu)
-        if (showKeluarkanModal.semester) {
-          try {
-            await kelompokKecilApi.getBySemester(String(mapSemesterToNumber(showKeluarkanModal.semester)));
-            // TODO: update state kelompok kecil jika ada di context/parent
-          } catch {}
-        }
-      }
-    } catch (error) {
-      setErrorMsg('Gagal mengeluarkan mahasiswa dari semester sebelumnya!');
-    } finally {
-      setIsKeluarkanLoading(false);
-    }
-  };
+  const allIds = mahasiswaBySemester.map(m => m.id.toString());
+const allSelected = allIds.every(id => selectedMahasiswa.includes(id)) && allIds.length > 0;
 
   // Hilangkan errorMsg setelah 5 detik
   useEffect(() => {
@@ -288,7 +215,7 @@ const KelompokBesar: React.FC = () => {
     }
   }, [errorMsg]);
 
-  if (loading || isOtherSemesterLoading) {
+  if (loading) {
     return (
       <div className="w-full mt-5">
         {/* Skeleton Header */}
@@ -503,27 +430,32 @@ const KelompokBesar: React.FC = () => {
       <div className="mb-6 w-full bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-theme-xs">
         <div className="flex items-center gap-2 select-none mb-4 md:mb-0">
           <span className="relative flex items-center">
-            <input
-              type="checkbox"
-              checked={filteredMahasiswa.length > 0 && filteredMahasiswa.every(m => selectedMahasiswa.includes(m.id.toString()))}
-              onChange={handleSelectAll}
-              className="w-5 h-5 appearance-none rounded-md border-2 border-brand-500 bg-transparent transition-colors duration-150 focus:ring-2 focus:ring-brand-300 dark:focus:ring-brand-600 relative disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ outline: 'none' }}
-            />
-            {(filteredMahasiswa.length > 0 && filteredMahasiswa.every(m => selectedMahasiswa.includes(m.id.toString()))) && (
-              <svg
-                className="absolute left-0 top-0 w-5 h-5 pointer-events-none"
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="white"
-                strokeWidth="2.5"
-              >
-                <polyline points="5 11 9 15 15 7" />
+  <button
+    type="button"
+    aria-checked={allSelected}
+    role="checkbox"
+    onClick={() => {
+      if (allSelected) {
+        setSelectedMahasiswa([]);
+      } else {
+        setSelectedMahasiswa(allIds);
+      }
+    }}
+    className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${
+      allSelected
+        ? "bg-brand-500 border-brand-500"
+        : "bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700"
+    } cursor-pointer`}
+  >
+    {allSelected && (
+      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+        <polyline points="20 7 11 17 4 10" />
               </svg>
             )}
+  </button>
+  <span className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+    Pilih Semua ({selectedMahasiswaFiltered.length}/{allIds.length})
           </span>
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Pilih Semua ({selectedMahasiswaFiltered.filter(id => filteredMahasiswa.map(m => m.id.toString()).includes(id)).length}/{filteredMahasiswa.length})
           </span>
         </div>
         <div className="w-full md:w-auto flex flex-col md:flex-row md:justify-end gap-2 items-stretch md:items-center">
@@ -589,27 +521,21 @@ const KelompokBesar: React.FC = () => {
           </p>
         </div>
       ) : (
+        <AnimatePresence>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <AnimatePresence>
-            {filteredMahasiswa.map(mhs => {
-              const otherSemester = mahasiswaInOtherSemesters[mhs.id.toString()];
-              const isDisabled = !!otherSemester;
-              return (
+            {filteredMahasiswa.map(mhs => (
                 <motion.div
                   key={mhs.id}
                   initial={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.35 } }}
                   transition={{ duration: 0.2 }}
                   className={`flex items-center gap-3 p-3 rounded-lg border transition-colors duration-200
-                    ${isDisabled
-                      ? 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 opacity-60 cursor-not-allowed'
-                      : (selectedMahasiswa.includes(mhs.id.toString()) || pendingSelectedId === mhs.id.toString()
+                  ${selectedMahasiswa.includes(mhs.id.toString()) || pendingSelectedId === mhs.id.toString()
                         ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-700 cursor-pointer hover:bg-brand-50 hover:border-brand-400'
-                        : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-brand-50 hover:border-brand-400')
-                    }
+                    : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-brand-50 hover:border-brand-400'}
                   `}
                   onClick={() => {
-                    if (!isDisabled) {
+                  if (!selectedMahasiswa.includes(mhs.id.toString())) {
                       setPendingSelectedId(mhs.id.toString());
                       setTimeout(() => {
                         handleSelect(mhs.id.toString());
@@ -624,9 +550,9 @@ const KelompokBesar: React.FC = () => {
                       checked={selectedMahasiswa.includes(mhs.id.toString()) || pendingSelectedId === mhs.id.toString()}
                       onChange={e => {
                         e.stopPropagation();
-                        if (!isDisabled) handleSelect(mhs.id.toString());
+                      if (!selectedMahasiswa.includes(mhs.id.toString())) handleSelect(mhs.id.toString());
                       }}
-                      disabled={isDisabled}
+                    disabled={selectedMahasiswa.includes(mhs.id.toString())}
                       className={`w-5 h-5 appearance-none rounded-md border-2 ${selectedMahasiswa.includes(mhs.id.toString()) || pendingSelectedId === mhs.id.toString() ? 'border-brand-500 bg-brand-500' : 'border-brand-500 bg-transparent'} transition-colors duration-150 focus:ring-2 focus:ring-brand-300 dark:focus:ring-brand-600 relative disabled:opacity-50 disabled:cursor-not-allowed`}
                       style={{ outline: 'none' }}
                     />
@@ -659,29 +585,11 @@ const KelompokBesar: React.FC = () => {
                         IPK {mhs.ipk.toFixed(2)}
                       </span>
                     </div>
-                    {isDisabled && (
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300">
-                          Terdaftar semester {otherSemester}
-                        </span>
-                        <button
-                          type="button"
-                          className="px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-700 text-xs transition"
-                          onClick={e => {
-                            e.stopPropagation();
-                            setShowKeluarkanModal({ id: mhs.id.toString(), nama: mhs.name, semester: otherSemester });
-                          }}
-                        >
-                          Keluarkan
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </motion.div>
-              );
-            })}
+            ))}
+          </div>
           </AnimatePresence>
-        </div>
       )}
       
       {/* Modal Konfirmasi Reset */}
@@ -789,75 +697,6 @@ const KelompokBesar: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Konfirmasi Keluarkan */}
-      {showKeluarkanModal && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
-            onClick={() => setShowKeluarkanModal(null)}
-          ></motion.div>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-lg z-[100001]"
-          >
-            <div className="flex items-center mb-6">
-              <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mr-4">
-                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-800 dark:text-white leading-tight">Konfirmasi Keluarkan</h3>
-                <p className="text-base text-gray-500 dark:text-gray-400 mt-1">Keluarkan mahasiswa dari semester lain</p>
-              </div>
-            </div>
-            <p className="text-lg text-gray-800 dark:text-white text-center font-medium mb-6">
-              Apakah Anda yakin ingin mengeluarkan <span className="font-bold text-red-500">{showKeluarkanModal.nama}</span> dari semester <span className="font-bold text-red-500">{showKeluarkanModal.semester}</span>?
-            </p>
-            <div className="flex gap-4 w-full mt-2">
-              <button
-                onClick={() => setShowKeluarkanModal(null)}
-                className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-300 ease-out"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleKeluarkan}
-                className="flex-1 px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all duration-300 ease-out"
-                disabled={isKeluarkanLoading}
-              >
-                {isKeluarkanLoading ? (
-                  <>
-                    <svg className="w-5 h-5 mr-2 animate-spin text-white inline-block align-middle" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
-                    Mengeluarkan...
-                  </>
-                ) : (
-                  'Keluarkan'
-                )}
-              </button>
-            </div>
-            <button
-              onClick={() => setShowKeluarkanModal(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 dark:hover:text-white bg-transparent rounded-full p-1 transition-colors duration-200"
-              aria-label="Tutup"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </motion.div>
-        </div>
-      )}
-
       {showLeaveModal && (
         <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
           <motion.div
@@ -898,11 +737,7 @@ const KelompokBesar: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  if (pendingLeaveAction) {
-                    pendingLeaveAction();
-                  } else {
                     navigate(-1);
-                  }
                   setShowLeaveModal(false);
                 }}
                 className="flex-1 px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all duration-300 ease-out"

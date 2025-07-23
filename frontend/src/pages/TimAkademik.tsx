@@ -6,7 +6,7 @@ import api from "../utils/api";
 import { EyeIcon, EyeCloseIcon } from "../icons";
 import * as XLSX from 'xlsx';
 
-const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 
 type UserTimAkademik = {
   id?: number;
@@ -39,7 +39,7 @@ export default function TimAkademik() {
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [previewPage, setPreviewPage] = useState(1);
-  const [previewPageSize, setPreviewPageSize] = useState(5);
+  const [previewPageSize, setPreviewPageSize] = useState(10);
   const previewTotalPages = Math.ceil(previewData.length / previewPageSize);
   const paginatedPreviewData = previewData.slice((previewPage - 1) * previewPageSize, previewPage * previewPageSize);
   const [editingCell, setEditingCell] = useState<{ row: number; key: string } | null>(null);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { faChevronUp, faChevronDown } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faTrash,
@@ -6,7 +7,6 @@ import {
   faEdit,
   faUsers,
   faTimes,
-  faCheckCircle,
   faExclamationTriangle,
   faClock,
 } from "@fortawesome/free-solid-svg-icons";
@@ -69,6 +69,8 @@ interface Dosen {
   matkul_anggota_nama?: string;
   matkul_anggota_semester?: number;
   peran_kurikulum_mengajar?: string;
+  pbl_assignment_count?: number;
+  dosen_peran?: { tipe_peran: string; mata_kuliah_nama?: string; nama_mk?: string; semester: number; blok: number; peran_kurikulum: string }[];
 }
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
@@ -83,6 +85,20 @@ function mapSemesterToNumber(semester: string | number | null): number | null {
     if (semester.toLowerCase() === "genap") return 2;
   }
   return null;
+}
+
+// Helper untuk parsing keahlian agar selalu array string rapi
+function parseKeahlian(val: string[] | string | undefined): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const arr = JSON.parse(val);
+      if (Array.isArray(arr)) return arr;
+    } catch {}
+    return val.split(',').map(k => k.trim()).filter(k => k !== '');
+  }
+  return [];
 }
 
 export default function PBL() {
@@ -245,6 +261,16 @@ export default function PBL() {
           k.toLowerCase().includes(searchDosen.toLowerCase())
         ))
   );
+
+  // Untuk expand/collapse per grup peran
+const [expandedGroups, setExpandedGroups] = useState<{ [key: string]: boolean }>({});
+const [showAllPeran, setShowAllPeran] = useState<{ [key: string]: boolean }>({});
+const toggleGroup = (rowKey: string) => {
+  setExpandedGroups(prev => ({ ...prev, [rowKey]: !prev[rowKey] }));
+};
+const toggleShowAll = (rowKey: string) => {
+  setShowAllPeran(prev => ({ ...prev, [rowKey]: !prev[rowKey] }));
+};
 
   useEffect(() => {
     if (success) {
@@ -1251,9 +1277,7 @@ export default function PBL() {
                                 const availableDosen = dosenList.filter((d) => {
                                   const keahlianArr = Array.isArray(d.keahlian)
                                     ? d.keahlian
-                                    : (d.keahlian || "")
-                                        .split(",")
-                                        .map((k) => k.trim());
+                                    : (d.keahlian || "").split(",").map((k) => k.trim());
                                   return (mk.keahlian_required || []).some(
                                     (k) => keahlianArr.includes(k)
                                   );
@@ -1398,6 +1422,27 @@ export default function PBL() {
                                         }
                                       }
 
+                                      // VALIDASI SESI: Cek apakah dosen mengajar sudah mendapat sesi penuh
+                                      if (draggedDosen.peran_utama === 'dosen_mengajar') {
+                                        // Hitung sesi yang sudah didapat dosen ini di semester aktif
+                                        const existingAssignments = Object.entries(assignedDosen).filter(([pblId, dosenList]) => {
+                                          // Cari PBL yang ada di semester yang sama
+                                          const pblInSemester = Object.values(pblData).flat().find(p => 
+                                            p.id === Number(pblId) && 
+                                            p.mata_kuliah_kode === mk.kode
+                                          );
+                                          return pblInSemester && dosenList.some(d => d.id === draggedDosen.id);
+                                        });
+                                        
+                                        const sesiYangSudahDidapat = existingAssignments.length * 5; // Setiap assignment = 5 sesi
+                                        
+                                        // Jika dosen mengajar sudah mendapat sesi 5x50 menit atau lebih, tolak assignment
+                                        if (sesiYangSudahDidapat >= 5) {
+                                          setError(`Dosen ${draggedDosen.name} sudah mendapat sesi mengajar ${sesiYangSudahDidapat}×50 menit. Dosen mengajar maksimal hanya boleh mendapat 1 assignment (5×50 menit) untuk distribusi yang adil.`);
+                                          return;
+                                        }
+                                      }
+
                                       // Jika tidak ada perfect match dan bukan standby, berikan warning tapi tetap izinkan
                                       if (!isPerfectMatch && !isStandby) {
                                         const warningMsg = `Dosen ${draggedDosen.name} tidak memiliki peran yang sesuai untuk ${mk.nama} (${mk.kode}). Keahlian sesuai tetapi peran tidak cocok.`;
@@ -1418,25 +1463,8 @@ export default function PBL() {
                                           `/pbls/${pbl.id}/assign-dosen`,
                                           { dosen_id: draggedDosen.id }
                                         );
-                                        // Refresh assigned dosen untuk PBL target (dan asal jika perlu)
-                                        const refreshIds = draggedFromPBLId
-                                          ? [draggedFromPBLId, pbl.id]
-                                          : [pbl.id];
-                                        const res = await api.post(
-                                          "/pbls/assigned-dosen-batch",
-                                          { pbl_ids: refreshIds }
-                                        );
-                                        setAssignedDosen((prev) => {
-                                          const updated = { ...prev };
-                                          refreshIds.forEach((id) => {
-                                            const idx = Number(id);
-                                            updated[idx] =
-                                              res.data && res.data[idx]
-                                                ? res.data[idx]
-                                                : [];
-                                          });
-                                          return updated;
-                                        });
+                                        // Refresh all data to ensure real-time updates
+                                        await fetchAllRef.current();
                                         setSuccess(
                                           isStandby
                                             ? `Dosen ${draggedDosen.name} (Standby) berhasil di-assign ke PBL ini.`
@@ -1448,6 +1476,8 @@ export default function PBL() {
                                         await updateReportingData();
                                       } catch (err) {
                                         setError("Gagal assign dosen");
+                                        // If assignment fails, refresh data to revert UI changes
+                                        await fetchAllRef.current();
                                       } finally {
                                         setIsMovingDosen(false);
                                         setDraggedDosen(null);
@@ -1535,88 +1565,61 @@ export default function PBL() {
                                         </div>
                                         <div className="flex flex-wrap gap-2">
                                           {assigned.map((dosen) => {
-                                            // Cek apakah dosen standby
                                             const isStandby = Array.isArray(dosen.keahlian)
-                                              ? dosen.keahlian.some(k => k.toLowerCase().includes('standby'))
-                                              : (dosen.keahlian || '').toLowerCase().includes('standby');
-
-                                            let badgeBg = "bg-green-100 dark:bg-green-900/40";
-                                            let circleBg = "bg-green-500";
-                                            let textColor = "text-green-700 dark:text-green-200";
-                                            let initial = "D";
-                                            if (dosen.peran_utama === "ketua") {
-                                              badgeBg = "bg-blue-100 dark:bg-blue-900/40";
-                                              circleBg = "bg-blue-500";
-                                              textColor = "text-blue-700 dark:text-blue-200";
-                                              initial = "K";
-                                            } else if (dosen.peran_utama === "anggota") {
-                                              badgeBg = "bg-green-100 dark:bg-green-900/40";
-                                              circleBg = "bg-green-500";
-                                              textColor = "text-green-700 dark:text-green-200";
-                                              initial = "A";
-                                            } else if (dosen.peran_utama === "dosen_mengajar") {
-                                              badgeBg = "bg-purple-100 dark:bg-purple-900/40";
-                                              circleBg = "bg-purple-500";
-                                              textColor = "text-purple-700 dark:text-purple-200";
-                                              initial = "M";
-                                            }
-                                            if (isStandby) {
-                                              badgeBg = "bg-yellow-100 dark:bg-yellow-900/40";
-                                              circleBg = "bg-yellow-400";
-                                              textColor = "text-yellow-800 dark:text-yellow-200";
-                                              initial = "S";
-                                            }
+                                              ? dosen.keahlian.some((k) => k.toLowerCase().includes("standby"))
+                                              : (dosen.keahlian || "").toLowerCase().includes("standby");
                                             return (
-                                              <div key={dosen.id} className={`flex items-center gap-2 px-3 py-1 rounded-full ${badgeBg}`}>
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${circleBg}`}>
-                                                  <span className="text-white text-xs font-bold">{initial}</span>
+                                              <div
+                                                key={dosen.id}
+                                                className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+                                                  isStandby
+                                                    ? "bg-yellow-100 dark:bg-yellow-900/40"
+                                                    : "bg-green-100 dark:bg-green-900/40"
+                                                }`}
+                                              >
+                                                <div
+                                                  className={`w-6 h-6 rounded-full flex items-center justify-center relative ${
+                                                    isStandby ? "bg-yellow-400" : "bg-green-500"
+                                                  }`}
+                                                >
+                                                  <span className="text-white text-xs font-bold">
+                                                    {dosen.name.charAt(0)}
+                                                  </span>
+                                                  <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[8px] font-semibold rounded-full flex justify-center items-center w-4 h-4 border border-white dark:border-green-800" title="Jumlah penugasan">
+                                                    {typeof dosen.pbl_assignment_count === 'number' ? dosen.pbl_assignment_count : 0}x
+                                                  </span>
                                                 </div>
-                                                <span className={`text-xs font-medium ${textColor}`}>
+                                                <span
+                                                  className={`text-xs font-medium ${
+                                                    isStandby
+                                                      ? "text-yellow-800 dark:text-yellow-200"
+                                                      : "text-green-700 dark:text-green-200"
+                                                  }`}
+                                                >
                                                   {dosen.name}
-                                                  {isStandby && (
-                                                    <span className="ml-2 px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200 text-[10px] font-semibold">
-                                                      Dosen Standby
-                                                    </span>
-                                                  )}
-                                                  <button
-                                                    className="ml-2 p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-full transition"
-                                                    title="Hapus penugasan"
-                                                    onClick={async (e) => {
-                                                      e.stopPropagation();
-                                                      try {
-                                                        await api.delete(
-                                                          `/pbls/${pbl.id}/unassign-dosen/${dosen.id}`
-                                                        );
-                                                        // Fetch assigned dosen batch hanya untuk pbl.id
-                                                        const res = await api.post(
-                                                          "/pbls/assigned-dosen-batch",
-                                                          { pbl_ids: [pbl.id] }
-                                                        );
-                                                        const pblIdNum = Number(pbl.id);
-                                                        if (isFinite(pblIdNum)) {
-                                                          setAssignedDosen((prev) => ({
-                                                            ...prev,
-                                                            [pblIdNum]:
-                                                              res.data && res.data[pblIdNum]
-                                                                ? res.data[pblIdNum]
-                                                                : [],
-                                                          }));
-                                                        }
-                                                        // Tambahan: refresh seluruh data agar dosen yang di-unassign langsung muncul di list tersedia/standby
-                                                        await fetchAllRef.current();
-                                                        setSuccess(`Dosen ${dosen.name} berhasil di-unassign.`);
-                                                        // Update reporting data secara real-time
-                                                        await updateReportingData();
-                                                      } catch (err) {
-                                                        // Fix linter: safely access error message
-                                                        const errorMsg = (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data && typeof err.response.data.message === 'string') ? err.response.data.message : 'Gagal unassign dosen';
-                                                        setError(String(errorMsg));
-                                                      }
-                                                    }}
-                                                  >
-                                                    <FontAwesomeIcon icon={faTimes} className="w-3 h-3" />
-                                                  </button>
                                                 </span>
+                                                <button
+                                                  className="ml-2 p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-full transition text-xs"
+                                                  title="Hapus penugasan"
+                                                  onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    try {
+                                                      await api.delete(`/pbls/${pbl.id}/unassign-dosen/${dosen.id}`);
+                                                      // Refresh all data to ensure real-time updates
+                                                      await fetchAllRef.current();
+                                                      setSuccess(`Dosen ${dosen.name} berhasil di-unassign.`);
+                                                      // Update reporting data secara real-time
+                                                      await updateReportingData();
+                                                    } catch (err) {
+                                                      const errorMsg = (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data && typeof err.response.data.message === 'string') ? err.response.data.message : 'Gagal unassign dosen';
+                                                      setError(String(errorMsg));
+                                                      // If unassignment fails, refresh data to revert UI changes
+                                                      await fetchAllRef.current();
+                                                    }
+                                                  }}
+                                                >
+                                                  <FontAwesomeIcon icon={faTimes} className="w-3 h-3" />
+                                                </button>
                                               </div>
                                             );
                                           })}
@@ -1648,44 +1651,6 @@ export default function PBL() {
                                 );
                               });
                         })}
-                      </div>
-                      {/* Detail Info Dosen per Semester */}
-                      <div className="mt-6">
-                        <div className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Detail Dosen Semester {semester}:</div>
-                        <div className="flex flex-wrap gap-4">
-                          {(() => {
-                            // Hitung unique dosen per peran yang benar-benar ditugaskan ke seluruh PBL di semester ini
-                            const dosenPeran = { ketua: new Set<number>(), anggota: new Set<number>(), mengajar: new Set<number>() };
-                            semesterPBLs.forEach((mk: MataKuliah) => {
-                              (pblData[mk.kode] || []).forEach(pbl => {
-                                (assignedDosen[pbl.id!] || []).forEach(dosen => {
-                                  if (dosen.peran_utama === 'ketua') dosenPeran.ketua.add(dosen.id);
-                                  else if (dosen.peran_utama === 'anggota') dosenPeran.anggota.add(dosen.id);
-                                  else if (dosen.peran_utama === 'dosen_mengajar') dosenPeran.mengajar.add(dosen.id);
-                                });
-                              });
-                            });
-                            return (
-                              <>
-                                <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-lg min-w-[120px]">
-                                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                  <span className="text-blue-700 dark:text-blue-200 font-medium text-sm">Ketua</span>
-                                  <span className="text-blue-700 dark:text-blue-200 font-medium text-sm">{dosenPeran.ketua.size}</span>
-                                </div>
-                                <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/30 px-4 py-2 rounded-lg min-w-[120px]">
-                                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                  <span className="text-green-700 dark:text-green-200 font-medium text-sm">Anggota</span>
-                                  <span className="text-green-700 dark:text-green-200 font-medium text-sm">{dosenPeran.anggota.size}</span>
-                                </div>
-                                <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-lg min-w-[120px]">
-                                  <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                                  <span className="text-purple-700 dark:text-purple-200 font-medium text-sm">Mengajar</span>
-                                  <span className="text-purple-700 dark:text-purple-200 font-medium text-sm">{dosenPeran.mengajar.size}</span>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
                       </div>
                     </div>
                   );
@@ -1719,8 +1684,11 @@ export default function PBL() {
           >
             {/* Header dengan Avatar dan Info Dasar */}
             <div className="flex items-start gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center relative">
                 <span className="text-white text-sm font-bold">{dosen.name.charAt(0)}</span>
+                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-semibold rounded-full flex justify-center items-center w-6 h-6 border-2 border-white dark:border-gray-800" title="Jumlah penugasan">
+                  {typeof dosen.pbl_assignment_count === 'number' ? dosen.pbl_assignment_count : 0}x
+                </span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-gray-800 dark:text-white/90 text-sm mb-1">{dosen.name}</div>
@@ -1744,66 +1712,84 @@ export default function PBL() {
             </div>
             {/* Info Section dengan Layout yang Lebih Jelas */}
             <div className="space-y-3">
-              {/* Peran dalam Kurikulum */}
-              <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-                <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
-                  <div className="w-1 h-1 rounded-full bg-brand-500"></div>
-                  Peran dalam Kurikulum
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {Array.isArray(dosen.peran_kurikulum) && dosen.peran_kurikulum.length > 0 ? (
-                    dosen.peran_kurikulum.map((k: string, idx: number) => (
-                      <span key={idx} className="text-xs px-2 py-1 rounded-full bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 font-medium">{k}</span>
-                    ))
-                  ) : typeof dosen.peran_kurikulum === 'string' && dosen.peran_kurikulum.trim() !== '' ? (
-                    <span className="text-xs px-2 py-1 rounded-full bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 font-medium">{dosen.peran_kurikulum}</span>
-                  ) : (
-                    <span className="text-xs text-gray-400 italic">Tidak ada peran kurikulum</span>
-                  )}
-                </div>
-              </div>
               {/* Mata Kuliah/Peran Kurikulum */}
-              <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-                <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
-                  <div className="w-1 h-1 rounded-full bg-purple-500"></div>
-                  Mata Kuliah / Peran Kurikulum
-                </div>
-                <div className="text-xs text-gray-700 dark:text-gray-200 font-medium">
-                  {dosen.peran_utama === 'ketua' && dosen.matkul_ketua_nama && dosen.matkul_ketua_semester ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded">
-                      {dosen.matkul_ketua_nama} (Semester {dosen.matkul_ketua_semester})
-                    </span>
-                  ) : dosen.peran_utama === 'anggota' && dosen.matkul_anggota_nama && dosen.matkul_anggota_semester ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded">
-                      {dosen.matkul_anggota_nama} (Semester {dosen.matkul_anggota_semester})
-                    </span>
-                  ) : dosen.peran_utama === 'dosen_mengajar' && dosen.peran_kurikulum_mengajar ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded">
-                      {dosen.peran_kurikulum_mengajar}
-                    </span>
-                  ) : (
-                    <span className="text-gray-400 italic">Tidak ada mata kuliah terkait</span>
+                                    {/* Mata Kuliah/Peran Kurikulum */}
+                                    <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+  <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+    <div className="w-1 h-1 rounded-full bg-purple-500"></div>
+    Mata Kuliah / Peran Kurikulum
+  </div>
+            {['ketua', 'anggota', 'mengajar'].map((tipe) => {
+              const peranList = Array.isArray(dosen.dosen_peran) ? dosen.dosen_peran.filter(p => p.tipe_peran === tipe) : [];
+              if (peranList.length === 0) return null;
+              let label = '';
+              let badgeClass = '';
+              if (tipe === 'ketua') { label = 'Ketua'; badgeClass = 'bg-blue-100 text-blue-700'; }
+              if (tipe === 'anggota') { label = 'Anggota'; badgeClass = 'bg-green-100 text-green-700'; }
+              if (tipe === 'mengajar') { label = 'Dosen Mengajar'; badgeClass = 'bg-yellow-100 text-yellow-700'; }
+              const rowKey = `${dosen.id || dosen.nid}_${tipe}`;
+              const isExpanded = !!expandedGroups[rowKey];
+              const isShowAll = !!showAllPeran[rowKey];
+              const peranToShow = isShowAll ? peranList : peranList.slice(0, 2);
+              return (
+                <div key={tipe} className="mb-3">
+                  <button
+                    type="button"
+                    className={`px-2 py-1 rounded text-xs font-semibold ${badgeClass} focus:outline-none cursor-pointer flex items-center gap-1`}
+                    onClick={() => toggleGroup(rowKey)}
+                    title="Klik untuk buka/tutup detail"
+                  >
+                    {label} ({peranList.length})
+                    <FontAwesomeIcon icon={isExpanded ? faChevronUp : faChevronDown} className="ml-1 w-3 h-3" />
+                  </button>
+                  {isExpanded && (
+                    <ul className="ml-0 mt-2 flex flex-col gap-2">
+                      {peranToShow.map((p, idx) => (
+                        <li
+                          key={idx}
+                          className="flex items-start gap-2 bg-gray-100 dark:bg-white/5 rounded-lg px-3 py-2 transition"
+                        >
+                          <FontAwesomeIcon icon={faBookOpen} className="text-blue-400 mt-1 w-3 h-3" />
+                          <div>
+                            {tipe === 'mengajar' ? (
+                              <div className="font-medium text-brand-400 text-sm">{p.peran_kurikulum}</div>
+                            ) : (
+                              <>
+                                <div className="font-medium text-brand-400 text-sm">{p.mata_kuliah_nama ?? (p as any)?.nama_mk ?? ''}</div>
+                                <div className="text-xs text-gray-400">
+                                  Semester {p.semester} | Blok {p.blok}
+                                </div>
+                                <div className="text-xs text-gray-500">{p.peran_kurikulum}</div>
+                              </>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
-              </div>
-              {/* Keahlian Section */}
-              <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-                <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
-                  <div className="w-1 h-1 rounded-full bg-orange-500"></div>
-                  Keahlian
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {dosen.keahlianArr?.map((k, idx) => (
-                    <span key={idx} className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      k.toLowerCase() === 'standby' 
-                        ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 font-semibold' 
-                        : 'bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
-                    }`}>
-                      {k}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              );
+            })}
+            {(!Array.isArray(dosen.dosen_peran) || dosen.dosen_peran.length === 0) && <span>-</span>}
+            </div>
+            {/* Keahlian Section */}
+            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+                          <div className="w-1 h-1 rounded-full bg-orange-500"></div>
+                          Keahlian
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {parseKeahlian(dosen.keahlian).map((k, idx) => (
+                            <span key={idx} className={`text-xs px-2 py-1 rounded-full font-medium ${
+                              k.toLowerCase() === 'standby' 
+                                ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 font-semibold' 
+                                : 'bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
+                            }`}>
+                              {k}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
             </div>
           </div>
         )) : (
@@ -1835,8 +1821,11 @@ export default function PBL() {
 >
             {/* Header dengan Avatar dan Info Dasar */}
             <div className="flex items-start gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center ">
+              <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center relative">
                 <span className="text-white text-sm font-bold">{dosen.name.charAt(0)}</span>
+                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-semibold rounded-full flex justify-center items-center w-6 h-6 border-2 border-white dark:border-gray-800" title="Jumlah penugasan">
+                  {typeof dosen.pbl_assignment_count === 'number' ? dosen.pbl_assignment_count : 0}x
+                </span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-gray-800 dark:text-white/90 text-sm mb-1">{dosen.name}</div>
@@ -1861,791 +1850,6 @@ export default function PBL() {
   </div>
 </div>
       </div>
-      {/* Modal, dsb... */}
-      {/* Modal Tambah/Edit PBL */}
-      <AnimatePresence>
-        {showModal && (
-          <div className="fixed inset-0 z-[100000] flex items-center justify-center">
-            {/* Overlay */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
-              onClick={() => setShowModal(false)}
-            ></motion.div>
-            {/* Modal Content */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-[100001] max-h-[90vh] overflow-y-auto hide-scroll"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Close Button */}
-              <button
-                onClick={() => setShowModal(false)}
-                className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  className="w-6 h-6"
-                >
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M6.04289 16.5413C5.65237 16.9318 5.65237 17.565 6.04289 17.9555C6.43342 18.346 7.06658 18.346 7.45711 17.9555L11.9987 13.4139L16.5408 17.956C16.9313 18.3466 17.5645 18.3466 17.955 17.956C18.3455 17.5655 18.3455 16.9323 17.955 16.5418L13.4129 11.9997L17.955 7.4576C18.3455 7.06707 18.3455 6.43391 17.955 6.04338C17.5645 5.65286 16.9313 5.65286 16.5408 6.04338L11.9987 10.5855L7.45711 6.0439C7.06658 5.65338 6.43342 5.65338 6.04289 6.0439C5.65237 6.43442 5.65237 7.06759 6.04289 7.45811L10.5845 11.9997L6.04289 16.5413Z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              {/* Modal Content Here */}
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">
-                {editMode ? "Edit PBL" : "Tambah PBL"}
-              </h3>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (isSaving) return;
-                  if (editMode) {
-                    handleEditPbl();
-                  } else {
-                    handleAddPbl();
-                  }
-                }}
-                className="space-y-4"
-              >
-                {error && (
-                  <div className="mb-2 p-2 bg-red-100 text-red-700 rounded text-sm">
-                    {error}
-                  </div>
-                )}
-                <div>
-                  <label
-                    htmlFor="kodeMataKuliah"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                  >
-                    Mata Kuliah
-                  </label>
-                  <select
-                    id="kodeMataKuliah"
-                    value={selectedPBL?.kode}
-                    onChange={(e) =>
-                      setSelectedPBL({ ...selectedPBL!, kode: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    disabled
-                  >
-                    <option value="">Pilih Mata Kuliah</option>
-                    {blokMataKuliah.map((mk) => (
-                      <option key={mk.kode} value={mk.kode}>
-                        {mk.kode} - {mk.nama}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label
-                    htmlFor="modulKe"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                  >
-                    Modul Ke
-                  </label>
-                  <input
-                    type="text"
-                    id="modulKe"
-                    value={form.modul_ke}
-                    onChange={(e) =>
-                      setForm({ ...form, modul_ke: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="namaModul"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                  >
-                    Nama Modul
-                  </label>
-                  <input
-                    type="text"
-                    id="namaModul"
-                    value={form.nama_modul}
-                    onChange={(e) =>
-                      setForm({ ...form, nama_modul: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className={`px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors flex items-center justify-center ${
-                      isSaving ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <>
-                        <svg
-                          className="w-5 h-5 mr-2 animate-spin text-white inline-block align-middle"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                          ></path>
-                        </svg>
-                        Menyimpan
-                        <span className="inline-block animate-pulse">...</span>
-                      </>
-                    ) : editMode ? (
-                      "Simpan Perubahan"
-                    ) : (
-                      "Simpan PBL"
-                    )}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Modal Konfirmasi Hapus PBL */}
-      <AnimatePresence>
-        {showDeleteModal && pblToDelete && (
-          <div className="fixed inset-0 z-[100000] flex items-center justify-center">
-            {/* Overlay */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
-              onClick={() => setShowDeleteModal(false)}
-            ></motion.div>
-            {/* Modal Content */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-[100001]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Close Button */}
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setPblToDelete(null);
-                }}
-                className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
-              >
-                <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M6.04289 16.5413C5.65237 16.9318 5.65237 17.565 6.04289 17.9555C6.43342 18.346 7.06658 18.346 7.45711 17.9555L11.9987 13.4139L16.5408 17.956C16.9313 18.3466 17.5645 18.3466 17.955 17.956C18.3455 17.5655 18.3455 16.9323 17.955 16.5418L13.4129 11.9997L17.955 7.4576C18.3455 7.06707 18.3455 6.43391 17.955 6.04338C17.5645 5.65286 16.9313 5.65286 16.5408 6.04338L11.9987 10.5855L7.45711 6.0439C7.06658 5.65338 6.43342 5.65338 6.04289 6.0439C5.65237 6.43442 5.65237 7.06759 6.04289 7.45811L10.5845 11.9997L6.04289 16.5413Z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              <div>
-                <div className="flex items-center justify-between pb-6">
-                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">
-                    Hapus Data
-                  </h2>
-                </div>
-                <div>
-                  <p className="mb-6 text-gray-500 dark:text-gray-400">
-                    Apakah Anda yakin ingin menghapus PBL{" "}
-                    <span className="font-semibold text-gray-800 dark:text-white">
-                      {pblToDelete.pbl?.nama_modul}
-                    </span>{" "}
-                    dari mata kuliah{" "}
-                    <span className="font-semibold text-gray-800 dark:text-white">
-                      {pblToDelete.kode}
-                    </span>
-                    ? Data yang dihapus tidak dapat dikembalikan.
-                  </p>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      onClick={() => {
-                        setShowDeleteModal(false);
-                        setPblToDelete(null);
-                      }}
-                      className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (isSaving) return;
-                        setIsSaving(true);
-                        try {
-                          await api.delete(`/pbls/${pblToDelete.pbl?.id}`);
-                          setSuccess("PBL berhasil dihapus.");
-                          setShowDeleteModal(false);
-                          setPblToDelete(null);
-                          // Refresh data PBL
-                          const pblRes = await api.get("/pbls/all");
-                          const data = pblRes.data || {};
-                          const blokListMapped: MataKuliah[] = Array.from(
-                            Object.values(data) as { mata_kuliah: MataKuliah }[]
-                          ).map((item) => item.mata_kuliah);
-                          const pblMap: Record<string, PBL[]> = {};
-                          Array.from(
-                            Object.entries(data) as [string, { pbls: PBL[] }][]
-                          ).forEach(([kode, item]) => {
-                            pblMap[kode] = item.pbls || [];
-                          });
-                          setBlokMataKuliah(blokListMapped);
-                          setPblData(pblMap);
-                        } catch (err: any) {
-                          setError(
-                            err?.response?.data?.message ||
-                              "Gagal menghapus PBL"
-                          );
-                        } finally {
-                          setIsSaving(false);
-                        }
-                      }}
-                      className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium shadow-theme-xs hover:bg-red-600 transition flex items-center justify-center"
-                      disabled={isSaving}
-                    >
-                      {isSaving ? (
-                        <>
-                          <svg
-                            className="w-5 h-5 mr-2 animate-spin text-white"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                            ></path>
-                          </svg>
-                          Menghapus...
-                        </>
-                      ) : (
-                        "Hapus"
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Modal Lihat Mahasiswa */}
-      <AnimatePresence>
-        {showMahasiswaModal && (
-          <div className="fixed inset-0 z-[100000] flex items-center justify-center">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
-              onClick={() => setShowMahasiswaModal(null)}
-            ></motion.div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="relative w-full max-w-xl mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-[100001] max-h-[90vh] overflow-y-auto hide-scroll"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setShowMahasiswaModal(null)}
-                className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  className="w-6 h-6"
-                >
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M6.04289 16.5413C5.65237 16.9318 5.65237 17.565 6.04289 17.9555C6.43342 18.346 7.06658 18.346 7.45711 17.9555L11.9987 13.4139L16.5408 17.956C16.9313 18.3466 17.5645 18.3466 17.955 17.956C18.3455 17.5655 18.3455 16.9323 17.955 16.5418L13.4129 11.9997L17.955 7.4576C18.3455 7.06707 18.3455 6.43391 17.955 6.04338C17.5645 5.65286 16.9313 5.65286 16.5408 6.04338L11.9987 10.5855L7.45711 6.0439C7.06658 5.65338 6.43342 5.65338 6.04289 6.0439C5.65237 6.43442 5.65237 7.06759 6.04289 7.45811L10.5845 11.9997L6.04289 16.5413Z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              {/* Modal Content Here */}
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">
-                Mahasiswa Kelompok {showMahasiswaModal.kelompok.nama_kelompok}
-              </h3>
-              {/* Table Mahasiswa dengan pagination dan zebra row ala MataKuliah.tsx */}
-              <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-white/[0.03]">
-                <div className="max-w-full overflow-x-auto hide-scroll">
-                  <table className="min-w-full text-sm">
-                    <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">
-                          Nama Mahasiswa
-                        </th>
-                        <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">
-                          NIM
-                        </th>
-                        <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">
-                          Angkatan
-                        </th>
-                        <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">
-                          IPK
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const pageSize = 5;
-                        const total = showMahasiswaModal.mahasiswa.length;
-                        const totalPages = Math.ceil(total / pageSize);
-                        const paginated = showMahasiswaModal.mahasiswa.slice(
-                          (pageMahasiswaModal - 1) * pageSize,
-                          pageMahasiswaModal * pageSize
-                        );
-                        return paginated.length > 0 ? (
-                          paginated.map((mhs, idx) => (
-                            <tr
-                              key={mhs.nim}
-                              className={
-                                idx % 2 === 1
-                                  ? "bg-gray-50 dark:bg-white/[0.02]"
-                                  : ""
-                              }
-                            >
-                              <td className="px-6 py-4 text-gray-800 dark:text-white/90">
-                                {mhs.nama}
-                              </td>
-                              <td className="px-6 py-4 text-gray-800 dark:text-white/90">
-                                {mhs.nim}
-                              </td>
-                              <td className="px-6 py-4 text-gray-800 dark:text-white/90">
-                                {mhs.angkatan}
-                              </td>
-                              <td className="px-6 py-4 text-gray-800 dark:text-white/90">
-                                {mhs.ipk}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              className="text-center py-8 text-gray-400 dark:text-gray-300"
-                            >
-                              Tidak ada mahasiswa.
-                            </td>
-                          </tr>
-                        );
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-                {/* Pagination bawah ala MataKuliah.tsx */}
-                {showMahasiswaModal.mahasiswa.length > 5 && (
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-6 py-4">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      Menampilkan{" "}
-                      {Math.min(5, showMahasiswaModal.mahasiswa.length)} dari{" "}
-                      {showMahasiswaModal.mahasiswa.length} mahasiswa
-                    </span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() =>
-                          setPageMahasiswaModal((p) => Math.max(1, p - 1))
-                        }
-                        disabled={pageMahasiswaModal === 1}
-                        className="px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition disabled:opacity-50"
-                      >
-                        Prev
-                      </button>
-                      {Array.from(
-                        {
-                          length: Math.ceil(
-                            showMahasiswaModal.mahasiswa.length / 5
-                          ),
-                        },
-                        (_, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setPageMahasiswaModal(i + 1)}
-                            className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 ${
-                              pageMahasiswaModal === i + 1
-                                ? "bg-brand-500 text-white"
-                                : "bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                            } transition`}
-                          >
-                            {i + 1}
-                          </button>
-                        )
-                      )}
-                      <button
-                        onClick={() =>
-                          setPageMahasiswaModal((p) =>
-                            Math.min(
-                              Math.ceil(
-                                showMahasiswaModal.mahasiswa.length / 5
-                              ),
-                              p + 1
-                            )
-                          )
-                        }
-                        disabled={
-                          pageMahasiswaModal ===
-                          Math.ceil(showMahasiswaModal.mahasiswa.length / 5)
-                        }
-                        className="px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => setShowMahasiswaModal(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                >
-                  Tutup
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Modal Pilih/Edit Kelompok */}
-      <AnimatePresence>
-        {showKelompokModal && (
-          <div className="fixed inset-0 z-[100000] flex items-center justify-center">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
-              onClick={handleBatalKelompok}
-            ></motion.div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-[100001] max-h-[90vh] overflow-y-auto hide-scroll"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={handleBatalKelompok}
-                className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  className="w-6 h-6"
-                >
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M6.04289 16.5413C5.65237 16.9318 5.65237 17.565 6.04289 17.9555C6.43342 18.346 7.06658 18.346 7.45711 17.9555L11.9987 13.4139L16.5408 17.956C16.9313 18.3466 17.5645 18.3466 17.955 17.956C18.3455 17.5655 18.3455 16.9323 17.955 16.5418L13.4129 11.9997L17.955 7.4576C18.3455 7.06707 18.3455 6.43391 17.955 6.04338C17.5645 5.65286 16.9313 5.65286 16.5408 6.04338L11.9987 10.5855L7.45711 6.0439C7.06658 5.65338 6.43342 5.65338 6.04289 6.0439C5.65237 6.43442 5.65237 7.06759 6.04289 7.45811L10.5845 11.9997L6.04289 16.5413Z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              {/* Modal Content Here */}
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">
-                Pilih/Edit Kelompok untuk Mata Kuliah {showKelompokModal}
-              </h3>
-              <input
-                type="text"
-                value={searchKelompok}
-                onChange={(e) => setSearchKelompok(e.target.value)}
-                placeholder="Cari kelompok..."
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white mb-4"
-              />
-              <div className="space-y-3 max-h-96 overflow-y-auto hide-scroll">
-                {(() => {
-                  // Ambil semester dari mk yang sedang dipilih
-                  const mk = blokMataKuliah.find(
-                    (mk) => mk.kode === showKelompokModal
-                  );
-                  const semesterKey = mk ? String(mk.semester) : "";
-                  const kelompokList =
-                    kelompokKecilListBySemester[semesterKey] || [];
-                  // Ambil hanya nama_kelompok unik
-                  const uniqueKelompok = Array.from(
-                    new Set(kelompokList.map((k) => k.nama_kelompok))
-                  );
-                  // Filter by search dan urutkan secara numerik
-                  const filteredList = uniqueKelompok
-                    .filter((nama) =>
-                      nama.toLowerCase().includes(searchKelompok.toLowerCase())
-                    )
-                    .sort((a, b) => {
-                      const numA = parseInt(a.replace(/[^0-9]/g, ""), 10);
-                      const numB = parseInt(b.replace(/[^0-9]/g, ""), 10);
-                      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-                      return a.localeCompare(b);
-                    });
-                  if (filteredList.length === 0) {
-                    return (
-                      <div className="text-center text-gray-400 py-6">
-                        Tidak ada kelompok kecil tersedia.
-                      </div>
-                    );
-                  }
-                  return filteredList.map((nama, idx) => {
-                    // Ambil jumlah anggota dari kelompokList
-                    const jumlahAnggota = kelompokList.filter(
-                      (k) => k.nama_kelompok === nama
-                    ).length;
-                    const checked = selectedKelompok.includes(nama);
-                    // Cek apakah kelompok ini sudah dipakai di mata kuliah lain
-                    const mk = blokMataKuliah.find(
-                      (mk) => mk.kode === showKelompokModal
-                    );
-                    const semesterKey = mk ? String(mk.semester) : "";
-                    // Cek mapping kelompok di blokKelompokBySemester[semesterKey] untuk semua kode selain showKelompokModal
-                    let digunakanDiMataKuliahLain = false;
-                    let kodeMkLain = null;
-                    if (blokKelompokBySemester[semesterKey]) {
-                      for (const kode in blokKelompokBySemester[semesterKey]) {
-                        if (
-                          kode !== showKelompokModal &&
-                          blokKelompokBySemester[semesterKey][kode]?.includes(
-                            nama
-                          )
-                        ) {
-                          digunakanDiMataKuliahLain = true;
-                          kodeMkLain = kode;
-                          break;
-                        }
-                      }
-                    }
-                    return (
-                      <div
-                        key={nama}
-                        className={`flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg transition-colors mb-2 ${
-                          digunakanDiMataKuliahLain
-                            ? "opacity-60 cursor-not-allowed"
-                            : "cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                        }`}
-                        onClick={() => {
-                          if (digunakanDiMataKuliahLain) return;
-                          setSelectedKelompok((prev) => {
-                            const currentSelected = [...prev];
-                            if (currentSelected.includes(nama)) {
-                              return currentSelected.filter(
-                                (name) => name !== nama
-                              );
-                            } else {
-                              return [...currentSelected, nama];
-                            }
-                          });
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white text-sm font-bold">
-                            {nama.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-800 dark:text-white/90 text-sm">
-                              Kelompok {nama}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              Jumlah Anggota: {jumlahAnggota}
-                            </div>
-                            {digunakanDiMataKuliahLain && (
-                              <div className="text-xs text-red-500 mt-1">
-                                Digunakan di mata kuliah lain
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {digunakanDiMataKuliahLain ? (
-                            <button
-                              type="button"
-                              className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                // Unassign kelompok dari mk lain
-                                if (kodeMkLain) {
-                                  await api.post(
-                                    `/mata-kuliah/${kodeMkLain}/pbl-kelompok-kecil`,
-                                    {
-                                      nama_kelompok_list: (
-                                        blokKelompokBySemester[semesterKey][
-                                          kodeMkLain
-                                        ] || []
-                                      ).filter((k) => k !== nama),
-                                      semester: semesterKey,
-                                    }
-                                  );
-                                  // Refresh mapping
-                                  const res = await api.post(
-                                    "/mata-kuliah/pbl-kelompok-kecil/batch",
-                                    {
-                                      mata_kuliah_kode: [
-                                        showKelompokModal,
-                                        kodeMkLain,
-                                      ],
-                                      semester: semesterKey,
-                                    }
-                                  );
-                                  setBlokKelompokBySemester((prev) => ({
-                                    ...prev,
-                                    [semesterKey]: {
-                                      ...(prev[semesterKey] || {}),
-                                      ...res.data,
-                                    },
-                                  }));
-                                }
-                              }}
-                            >
-                              Keluarkan
-                            </button>
-                          ) : (
-                            <div
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex items-center"
-                            >
-                              <button
-                                type="button"
-                                aria-checked={checked}
-                                role="checkbox"
-                                tabIndex={0}
-                                onClick={() => {
-                                  setSelectedKelompok((prev) => {
-                                    const currentSelected = [...prev];
-                                    if (currentSelected.includes(nama)) {
-                                      return currentSelected.filter(
-                                        (name) => name !== nama
-                                      );
-                                    } else {
-                                      return [...currentSelected, nama];
-                                    }
-                                  });
-                                }}
-                                className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-                                  checked
-                                    ? "bg-brand-500 border-brand-500"
-                                    : "bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700"
-                                } cursor-pointer`}
-                                disabled={digunakanDiMataKuliahLain}
-                              >
-                                {checked && (
-                                  <svg
-                                    className="w-3 h-3 text-white"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth={3}
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <polyline points="20 7 11 17 4 10" />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleBatalKelompok}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSimpanKelompok}
-                  className={`px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors flex items-center justify-center min-w-[180px] ${
-                    isSavingKelompok ? "opacity-60 cursor-not-allowed" : ""
-                  }`}
-                  disabled={selectedKelompok.length === 0 || isSavingKelompok}
-                >
-                  {isSavingKelompok ? (
-                    <>
-                      <svg
-                        className="w-5 h-5 mr-2 animate-spin text-white inline-block align-middle"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        ></path>
-                      </svg>
-                      Menyimpan...
-                    </>
-                  ) : (
-                    "Simpan Pilihan Kelompok"
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

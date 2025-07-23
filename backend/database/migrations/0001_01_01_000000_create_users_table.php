@@ -33,13 +33,15 @@ return new class extends Migration
             $table->integer('semester')->nullable();
 
             $table->json('kompetensi')->nullable();
-            $table->json('peran_kurikulum')->nullable();
+            $table->json('keahlian')->nullable();
 
             $table->boolean('is_logged_in')->default(false);
             $table->string('current_token')->nullable();
 
             $table->rememberToken();
             $table->timestamps();
+            $table->unsignedInteger('csr_assignment_count')->default(0);
+            $table->unsignedInteger('pbl_assignment_count')->default(0);
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

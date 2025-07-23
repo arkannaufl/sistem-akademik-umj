@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Semester;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class KelompokKecilController extends Controller
 {
@@ -73,23 +74,16 @@ class KelompokKecilController extends Controller
             ], 422);
         }
 
-        // Cek rule: mahasiswa tidak boleh ada di semester lain
-        $sudahTerdaftar = KelompokKecil::whereIn('mahasiswa_id', $request->mahasiswa_ids)
-            ->where('semester', '!=', $semester)
-            ->pluck('mahasiswa_id')
-            ->toArray();
-        if (count($sudahTerdaftar) > 0) {
-            $mahasiswa = User::whereIn('id', $sudahTerdaftar)->pluck('name', 'id');
-            return response()->json([
-                'message' => 'Beberapa mahasiswa sudah terdaftar di semester lain',
-                'mahasiswa' => $mahasiswa
-            ], 422);
-        }
-
         // Generate kelompok dengan algoritma round robin berdasarkan gender dan IPK
         $mahasiswaData = User::whereIn('id', $request->mahasiswa_ids)->get();
-        $laki = $mahasiswaData->where('gender', 'Laki-laki')->sortByDesc('ipk')->values();
-        $perempuan = $mahasiswaData->where('gender', 'Perempuan')->sortByDesc('ipk')->values();
+        $laki = $mahasiswaData->filter(function($m) {
+            $g = strtolower(trim($m->gender));
+            return in_array($g, ['l', 'laki-laki', 'male']);
+        })->sortByDesc('ipk')->values();
+        $perempuan = $mahasiswaData->filter(function($m) {
+            $g = strtolower(trim($m->gender));
+            return in_array($g, ['p', 'perempuan', 'female']);
+        })->sortByDesc('ipk')->values();
 
         $kelompokArr = array_fill(0, $request->jumlah_kelompok, []);
 
@@ -124,6 +118,11 @@ class KelompokKecilController extends Controller
             // Auto-mapping ke mata kuliah PBL
             $this->autoMapKelompokToMataKuliah($semester, $request->jumlah_kelompok);
         });
+
+        // Log aktivitas generate kelompok
+        activity()
+            ->causedBy(Auth::user())
+            ->log("Generate {$request->jumlah_kelompok} kelompok kecil untuk semester {$semester} dengan " . count($request->mahasiswa_ids) . " mahasiswa");
 
         return response()->json([
             'message' => 'Kelompok kecil berhasil dibuat',
@@ -353,12 +352,6 @@ class KelompokKecilController extends Controller
         ]);
     }
 
-    /**
-     * Batch get kelompok kecil by semester list
-     * Endpoint: POST /kelompok-kecil/batch-by-semester
-     * Body: { "semesters": ["Ganjil", "Genap"] }
-     * Response: { "Ganjil": [...], "Genap": [...] }
-     */
     public function batchBySemester(Request $request)
     {
         $semesters = $request->input('semesters', []);
@@ -377,10 +370,6 @@ class KelompokKecilController extends Controller
         return response()->json($result);
     }
 
-    /**
-     * Get kelompok kecil by nama_kelompok and semester
-     * Endpoint: GET /api/kelompok-kecil/by-nama?nama_kelompok=1&semester=1
-     */
     public function getByNama(Request $request)
     {
         $nama = $request->query('nama_kelompok');
@@ -395,12 +384,6 @@ class KelompokKecilController extends Controller
         return response()->json($data);
     }
 
-    /**
-     * Batch detail kelompok kecil: hanya id, nama_kelompok, semester
-     * Endpoint: POST /kelompok-kecil/batch-detail
-     * Body: { "nama_kelompok": ["1", "2", ...], "semester": "1" }
-     * Response: [ { id, nama_kelompok, semester }, ... ]
-     */
     public function batchDetail(Request $request)
     {
         $request->validate([

@@ -48,6 +48,8 @@ Route::get('/mata-kuliah/filter-options', [MataKuliahController::class, 'filterO
 
 Route::get('/mata-kuliah/peran-kurikulum-options', [MataKuliahController::class, 'peranKurikulumOptions']);
 
+Route::get('/mata-kuliah/keahlian-options', [MataKuliahController::class, 'keahlianOptions']);
+
 Route::middleware('auth:sanctum')->apiResource('ruangan', RuanganController::class);
 
 Route::middleware('auth:sanctum')->apiResource('mata-kuliah', MataKuliahController::class);
@@ -85,11 +87,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // CSR Routes
     Route::apiResource('csr', CSRController::class);
-    Route::get('/csr-mappings', [CSRController::class, 'getMappings']);
-    Route::post('/csr-mappings', [CSRController::class, 'createMapping']);
-    Route::delete('/csr-mappings/{mappingId}', [CSRController::class, 'removeMapping']);
-    Route::get('/csr/{csrId}/available-dosen', [CSRController::class, 'getAvailableDosen']);
     Route::get('/csrs', [CSRController::class, 'batch']);
+    Route::get('/csr/{csr}/mappings', [\App\Http\Controllers\CSRMappingController::class, 'index']);
+    Route::post('/csr/{csr}/mappings', [\App\Http\Controllers\CSRMappingController::class, 'store']);
+    Route::delete('/csr/{csr}/mappings/{dosen}/{keahlian}', [\App\Http\Controllers\CSRMappingController::class, 'destroy']);
 
     Route::post('/pbls/assign-dosen-batch', [App\Http\Controllers\MataKuliahPBLController::class, 'assignDosenBatch']);
     Route::post('/pbls/reset-dosen-batch', [App\Http\Controllers\MataKuliahPBLController::class, 'resetDosenBatch']);

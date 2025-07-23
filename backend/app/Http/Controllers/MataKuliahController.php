@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\MataKuliah;
 use Illuminate\Http\Response;
-use App\Services\ActivityLogService;
 
 class MataKuliahController extends Controller
 {
@@ -20,18 +19,9 @@ class MataKuliahController extends Controller
         ]);
         
         $mataKuliah = MataKuliah::findOrFail($kode);
-        $oldKeahlian = $mataKuliah->keahlian_required;
         
         $mataKuliah->update([
             'keahlian_required' => $validated['keahlian_required']
-        ]);
-        
-        // Logging
-        $oldKeahlianStr = is_array($oldKeahlian) ? implode(', ', $oldKeahlian) : $oldKeahlian;
-        $newKeahlianStr = implode(', ', $validated['keahlian_required']);
-        ActivityLogService::logUpdate('MataKuliah', "Update keahlian required untuk {$kode}: {$oldKeahlianStr} → {$newKeahlianStr}", [
-            'before' => ['keahlian_required' => $oldKeahlian],
-            'after' => ['keahlian_required' => $validated['keahlian_required']]
         ]);
         
         return response()->json($mataKuliah);
@@ -70,12 +60,24 @@ class MataKuliahController extends Controller
     }
 
     /**
+     * Ambil seluruh daftar keahlian unik dari semua mata kuliah
+     */
+    public function keahlianOptions()
+    {
+        $all = MataKuliah::pluck('keahlian_required')->filter()->flatten()->unique()->values();
+        return response()->json($all);
+    }
+
+    /**
      * Update data mata kuliah
      */
     public function update(Request $request, $kode)
     {
         $mataKuliah = MataKuliah::findOrFail($kode);
-        $mataKuliah->update($request->all());
+        $data = $request->all();
+        $data['keahlian_required'] = $request->input('keahlian_required', []);
+        $data['peran_dalam_kurikulum'] = $request->input('peran_dalam_kurikulum', []);
+        $mataKuliah->update($data);
         return response()->json($mataKuliah);
     }
 
@@ -95,6 +97,8 @@ class MataKuliahController extends Controller
     public function store(Request $request)
     {
         $data = $request->all();
+        $data['keahlian_required'] = $request->input('keahlian_required', []);
+        $data['peran_dalam_kurikulum'] = $request->input('peran_dalam_kurikulum', []);
         $mataKuliah = MataKuliah::create($data);
         return response()->json($mataKuliah, 201);
     }

@@ -1,15 +1,14 @@
 import { useState, ChangeEvent, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFileExcel, faPenToSquare, faTrash, faDownload, faChevronDown } from "@fortawesome/free-solid-svg-icons";
+import { faFileExcel, faPenToSquare, faTrash, faDownload, faChevronDown, faChevronUp, faBookOpen } from "@fortawesome/free-solid-svg-icons";
 import { AnimatePresence, motion } from "framer-motion";
 import api from "../utils/api";
 import { EyeIcon, EyeCloseIcon } from "../icons";
 import * as XLSX from 'xlsx';
 import { Listbox, Transition } from '@headlessui/react';
 import React from "react";
-import { Combobox } from '@headlessui/react';
 
-const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 
 type UserDosen = {
   id?: number;
@@ -31,6 +30,14 @@ type UserDosen = {
   matkul_anggota_nama?: string;
   matkul_anggota_semester?: number;
   peran_kurikulum_mengajar?: string;
+  dosen_peran?: {
+    mata_kuliah_kode: string;
+    blok: string;
+    semester: string;
+    peran_kurikulum: string;
+    tipe_peran: 'ketua' | 'anggota' | 'mengajar';
+    mata_kuliah_nama?: string;
+  }[];
 };
 
 export default function Dosen() {
@@ -52,10 +59,9 @@ export default function Dosen() {
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [previewPage, setPreviewPage] = useState(1);
-  const [previewPageSize, setPreviewPageSize] = useState(5);
+  const [previewPageSize, setPreviewPageSize] = useState(10);
   const previewTotalPages = Math.ceil(previewData.length / previewPageSize);
   const paginatedPreviewData = previewData.slice((previewPage - 1) * previewPageSize, previewPage * previewPageSize);
-  const [editingCell, setEditingCell] = useState<{ row: number; key: string } | null>(null);
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [showDeleteModalBulk, setShowDeleteModalBulk] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
@@ -77,7 +83,16 @@ export default function Dosen() {
   const [matkulKetua, setMatkulKetua] = useState<string>("");
   const [matkulAnggota, setMatkulAnggota] = useState<string>("");
   const [peranKurikulumMengajar, setPeranKurikulumMengajar] = useState<string>("");
-  const [activeSemester, setActiveSemester] = useState<string | null>(null);
+  // 1. Tambahkan state untuk multi-peran
+  const [peranKetua, setPeranKetua] = useState([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+  const [peranAnggota, setPeranAnggota] = useState([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+  const [peranMengajar, setPeranMengajar] = useState([{ peran_kurikulum: "" }]);
+  // State untuk expand/collapse per grup peran dan show all peran
+  const [expandedGroups, setExpandedGroups] = useState<{ [key: string]: boolean }>({});
+  const [showAllPeran, setShowAllPeran] = useState<{ [key: string]: boolean }>({});
+  const toggleGroup = (rowKey: string) => {
+    setExpandedGroups(prev => ({ ...prev, [rowKey]: !prev[rowKey] }));
+  };
 
   useEffect(() => {
     if (success) {
@@ -87,14 +102,6 @@ export default function Dosen() {
       return () => clearTimeout(timer);
     }
   }, [success]);
-
-  const isPeranValid = peranUtama === "standby" || (
-    peranUtama !== "" && (
-      (peranUtama === "ketua" && matkulKetua) ||
-      (peranUtama === "anggota" && matkulAnggota) ||
-      (peranUtama === "dosen_mengajar" && peranKurikulumMengajar)
-    )
-  );
 
   // Fungsi untuk download template Excel
   const downloadTemplate = async () => {
@@ -131,6 +138,9 @@ export default function Dosen() {
     setEditMode(false);
     setModalError("");
     setNewKompetensi("");
+    setPeranKetua([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+    setPeranAnggota([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+    setPeranMengajar([{ peran_kurikulum: "" }]);
   };
 
   const userToDelete = data?.find((u) => String(u.id) === String(selectedDeleteNid));
@@ -163,13 +173,9 @@ export default function Dosen() {
           const semAktif = tahunAktif.semesters.find((s: any) => s.aktif);
           semesterAktif = semAktif ? semAktif.jenis : null;
         }
-        setActiveSemester(semesterAktif);
-        // Ambil matkul sesuai semester aktif
+        // Pada bagian ambil matkul sesuai semester aktif, deklarasikan mkList sebelum digunakan:
         const mkRes = await api.get("/mata-kuliah");
         let mkList = mkRes.data;
-        if (semesterAktif) {
-          mkList = mkList.filter((mk: any) => (semesterAktif === "Ganjil" ? mk.semester % 2 === 1 : mk.semester % 2 === 0));
-        }
         setMatkulList(mkList.map((mk: any) => ({ 
           kode: mk.kode, 
           nama: mk.nama, 
@@ -185,11 +191,15 @@ export default function Dosen() {
   }, [showModal]);
 
   useEffect(() => {
-    if (!showModal) {
+    if (showModal) {
+      setPeranUtama("aktif");
+    } else {
       setPeranUtama("");
       setMatkulKetua("");
       setMatkulAnggota("");
       setPeranKurikulumMengajar("");
+      setPeranKetua([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+      setPeranAnggota([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
     }
   }, [showModal]);
 
@@ -326,51 +336,33 @@ const handleAdd = async () => {
   setIsSaving(true);
   setModalError("");
   try {
-    let payload;
-    if (peranUtama === "standby") {
-      payload = {
-        ...form,
-        peran_utama: "standby",
-        matkul_ketua_id: null,
-        matkul_anggota_id: null,
-        peran_kurikulum_mengajar: null,
-        kompetensi: [],
-        keahlian: [],
-      };
+    // Validasi frontend multi-peran
+    // 1. Hitung total peran per blok (hanya untuk ketua & anggota)
+    const blokCount: { [kode: string]: number } = {};
+    [...peranKetua, ...peranAnggota].forEach((p) => {
+      if (p.mata_kuliah_kode) {
+        blokCount[p.mata_kuliah_kode] = (blokCount[p.mata_kuliah_kode] || 0) + 1;
+      }
+    });
+    // 2. Validasi total peran (max 4)
+    const totalPeran = peranKetua.length + peranAnggota.length + peranMengajar.length;
+    if (totalPeran > 4) throw new Error("Maksimal 4 peran untuk satu dosen.");
+    // Payload
+    let payload: any = {
+      ...form,
+      role: 'dosen',
+    };
+    // Hanya kirim dosen_peran jika peranUtama 'aktif'
+    if (peranUtama === 'aktif') {
+      payload.dosen_peran = [
+        ...peranKetua.map(p => ({ ...p, tipe_peran: 'ketua' })),
+        ...peranAnggota.map(p => ({ ...p, tipe_peran: 'anggota' })),
+        ...peranMengajar.filter(p => p.peran_kurikulum).map(p => ({ peran_kurikulum: p.peran_kurikulum, tipe_peran: 'mengajar' })),
+      ];
     } else {
-      payload = {
-        ...form,
-        peran_utama: peranUtama,
-        matkul_ketua_id: matkulKetua,
-        matkul_anggota_id: matkulAnggota,
-        peran_kurikulum_mengajar: peranKurikulumMengajar,
-      };
-      // Pastikan kompetensi adalah array
-      payload.kompetensi = Array.isArray(payload.kompetensi) 
-        ? payload.kompetensi.filter(k => k.trim() !== '')
-        : payload.kompetensi 
-          ? payload.kompetensi.split(',').map(k => k.trim()).filter(k => k !== '')
-          : [];
+      payload.dosen_peran = [];
     }
-    
-    // Pastikan kompetensi adalah array
-    payload.kompetensi = Array.isArray(payload.kompetensi) 
-      ? payload.kompetensi.filter(k => k.trim() !== '')
-      : payload.kompetensi 
-        ? payload.kompetensi.split(',').map(k => k.trim()).filter(k => k !== '')
-        : [];
-
-    // Perbaikan untuk peran_kurikulum
-    if (payload.peran_kurikulum) {
-      payload.peran_kurikulum = typeof payload.peran_kurikulum === 'string' 
-        ? payload.peran_kurikulum.split(',').map((item: string) => item.trim()).filter((item: string) => item !== '')
-        : Array.isArray(payload.peran_kurikulum) 
-          ? payload.peran_kurikulum.map((item: string) => item.trim()).filter((item: string) => item !== '')
-          : [];
-    } else {
-      payload.peran_kurikulum = [];
-    }
-
+    delete payload.peran_kurikulum;
     if (editMode) {
       if (!payload.password) delete payload.password;
       await api.put(`/users/${form.id}`, payload);
@@ -381,17 +373,9 @@ const handleAdd = async () => {
         setIsSaving(false);
         return;
       }
-      payload.role = 'dosen';
       await api.post("/users", payload);
       setSuccess("Data dosen berhasil ditambahkan.");
     }
-
-    if (!isPeranValid) {
-      setModalError("Pilih peran utama dan lengkapi opsinya.");
-      setIsSaving(false);
-      return;
-    }
-    
     const res = await api.get("/users?role=dosen");
     setData(res.data);
     setShowModal(false);
@@ -399,8 +383,19 @@ const handleAdd = async () => {
     setForm({ nid: "", nidn: "", name: "", username: "", email: "", telp: "", password: "", kompetensi: [], peran_kurikulum: [], keahlian: [] });
     setShowPassword(false);
     setNewKompetensi("");
+    setPeranKetua([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+    setPeranAnggota([{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+    setPeranMengajar([{ peran_kurikulum: "" }]);
   } catch (err: any) {
-    setModalError(err?.response?.data?.message || "Gagal simpan data");
+    // Cek error dari backend (axios)
+    const backendMsg = err?.response?.data?.message;
+    if (backendMsg) {
+      setModalError(backendMsg);
+    } else if (err?.message) {
+      setModalError(err.message);
+    } else {
+      setModalError("Gagal simpan data");
+    }
   } finally {
     setIsSaving(false);
   }
@@ -446,9 +441,25 @@ const handleAdd = async () => {
       : ""
   );
   setPeranKurikulumMengajar(d.peran_kurikulum_mengajar || "");
-    setShowModal(true);
-    setEditMode(true);
-  };
+  // Set peran dari backend
+  setPeranKetua(Array.isArray(d.dosen_peran) ? d.dosen_peran.filter(p => p.tipe_peran === 'ketua').map(p => ({
+    mata_kuliah_kode: p.mata_kuliah_kode,
+    peran_kurikulum: p.peran_kurikulum,
+    blok: String(p.blok || ""),
+    semester: String(p.semester || "")
+  })) : [{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+  setPeranAnggota(Array.isArray(d.dosen_peran) ? d.dosen_peran.filter(p => p.tipe_peran === 'anggota').map(p => ({
+    mata_kuliah_kode: p.mata_kuliah_kode,
+    peran_kurikulum: p.peran_kurikulum,
+    blok: String(p.blok || ""),
+    semester: String(p.semester || "")
+  })) : [{ mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }]);
+  setPeranMengajar(Array.isArray(d.dosen_peran) ? d.dosen_peran.filter(p => p.tipe_peran === 'mengajar').map(p => ({
+    peran_kurikulum: p.peran_kurikulum || ""
+  })) : [{ peran_kurikulum: "" }]);
+  setShowModal(true);
+  setEditMode(true);
+};
 
   const handleDelete = async (id: string) => {
     setSelectedDeleteNid(id);
@@ -822,49 +833,6 @@ const handleSubmitImport = async () => {
     return { valid: errors.length === 0, errors, cellErrors: newCellErrors };
   };
 
-  // Fungsi validasi cell per baris (untuk real-time cell validation)
-  // `allRows` adalah `previewData` saat ini
-  // `existingDbData` adalah `data` (dosen dari database)
-  const handleCellEdit = (rowIdx: number, key: string, value: string | string[]) => {
-    setPreviewData(prev => {
-      const newData = [...prev];
-      if (key === 'kompetensi' || key === 'peran_dalam_kurikulum') {
-        // Simpan sebagai string jika input adalah string
-        if (typeof value === 'string') {
-          newData[rowIdx] = { 
-            ...newData[rowIdx], 
-            [key]: value
-          };
-        } else {
-          // Jika sudah array, konversi ke string dengan koma
-          newData[rowIdx] = { 
-            ...newData[rowIdx], 
-            [key]: value.join(', ')
-          };
-        }
-      } else {
-        newData[rowIdx] = { ...newData[rowIdx], [key]: value };
-      }
-      return newData;
-    });
-
-    // Validasi setelah edit
-    const updatedData = [...previewData];
-    if (key === 'kompetensi' || key === 'peran_dalam_kurikulum') {
-      // Simpan sebagai string untuk validasi
-      updatedData[rowIdx] = { 
-        ...updatedData[rowIdx], 
-        [key]: typeof value === 'string' ? value : value.join(', ')
-      };
-    } else {
-      updatedData[rowIdx] = { ...updatedData[rowIdx], [key]: value };
-    }
-
-    const validationResult = validateExcelData(updatedData, data);
-    setValidationErrors(validationResult.errors);
-    setCellErrors(validationResult.cellErrors);
-  };
-
   const handleDeleteSelected = async () => {
     setIsDeleting(true);
     try {
@@ -926,6 +894,9 @@ const handleSubmitImport = async () => {
       if (Array.isArray(res.data)) setPeranKurikulumOptions(res.data);
     });
   }, []);
+
+  // Tambahkan sebelum return/modal render
+  const totalPeran = peranKetua.length + peranAnggota.length + peranMengajar.length;
 
   return (
     <div>
@@ -1226,14 +1197,39 @@ const handleSubmitImport = async () => {
               <table className="min-w-full divide-y divide-gray-100 dark:divide-white/[0.05] text-sm">
                 <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
                   <tr>
-      <th className="px-4 py-4"></th>
+                    <th className="px-4 py-4">
+                      <button
+                        type="button"
+                        aria-checked={paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid)))}
+                        role="checkbox"
+                        onClick={() => {
+                          if (paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid)))) {
+                            setSelectedRows([]);
+                          } else {
+                            setSelectedRows(paginatedData.map(d => String(d.id || d.nid)));
+                          }
+                        }}
+                        className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${
+                          paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid)))
+                            ? 'bg-brand-500 border-brand-500'
+                            : 'bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700'
+                        } cursor-pointer`}
+                      >
+                        {paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid))) && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                            <polyline points="20 7 11 17 4 10" />
+                          </svg>
+                        )}
+                      </button>
+                    </th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NID</th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NIDN</th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Nama</th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Username</th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Email</th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">No. Telepon</th>
-      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Peran Utama</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Kompetensi</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Keahlian</th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Mata Kuliah/Peran Kurikulum</th>
       <th className="px-6 py-4 font-semibold text-gray-500 text-center text-xs uppercase tracking-wider dark:text-gray-400">Aksi</th>
                   </tr>
@@ -1327,41 +1323,88 @@ const handleSubmitImport = async () => {
           <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.username}</td>
           <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{d.email}</td>
           <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle min-w-[120px]">{d.telp}</td>
-          {/* Kolom Peran Utama */}
-          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
-            {d.peran_utama === "ketua" && (
-              <span className="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Ketua</span>
-            )}
-            {d.peran_utama === "anggota" && (
-              <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">Anggota</span>
-            )}
-            {d.peran_utama === "dosen_mengajar" && (
-              <span className="inline-block px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">Dosen Mengajar</span>
-            )}
+          {/* Kolom Kompetensi */}
+          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
+            {(() => {
+              let val = d.kompetensi;
+              if (!val) return "-";
+              if (Array.isArray(val)) return val.join(', ');
+              try {
+                const arr = JSON.parse(val);
+                return Array.isArray(arr) ? arr.join(', ') : String(val);
+              } catch {
+                return String(val);
+              }
+            })()}
+          </td>
+          {/* Kolom Keahlian */}
+          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
+            {(() => {
+              let val = d.keahlian;
+              if (!val) return "-";
+              if (Array.isArray(val)) return val.join(', ');
+              try {
+                const arr = JSON.parse(val);
+                return Array.isArray(arr) ? arr.join(', ') : String(val);
+              } catch {
+                return String(val);
+              }
+            })()}
           </td>
           {/* Kolom Mata Kuliah/Peran Kurikulum */}
-          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
-            {d.peran_utama === "ketua" && d.matkul_ketua_nama && d.matkul_ketua_semester && (
-              <span>
-                {d.matkul_ketua_nama} (Semester {d.matkul_ketua_semester})
-                {(() => {
-                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_ketua_nama);
-                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
-                })()}
-              </span>
-            )}
-            {d.peran_utama === "anggota" && d.matkul_anggota_nama && d.matkul_anggota_semester && (
-              <span>
-                {d.matkul_anggota_nama} (Semester {d.matkul_anggota_semester})
-                {(() => {
-                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_anggota_nama);
-                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
-                })()}
-              </span>
-            )}
-            {d.peran_utama === "dosen_mengajar" && d.peran_kurikulum_mengajar && (
-              <span>{d.peran_kurikulum_mengajar}</span>
-            )}
+          <td className="px-6 py-4 align-top min-w-[300px]">
+            {['ketua', 'anggota', 'mengajar'].map((tipe) => {
+              const peranList = Array.isArray(d.dosen_peran) ? d.dosen_peran.filter(p => p.tipe_peran === tipe) : [];
+              if (peranList.length === 0) return null;
+              let label = '';
+              let badgeClass = '';
+              if (tipe === 'ketua') { label = 'Ketua'; badgeClass = 'bg-blue-100 text-blue-700'; }
+              if (tipe === 'anggota') { label = 'Anggota'; badgeClass = 'bg-green-100 text-green-700'; }
+              if (tipe === 'mengajar') { label = 'Dosen Mengajar'; badgeClass = 'bg-yellow-100 text-yellow-700'; }
+              const rowKey = `${d.id || d.nid}_${tipe}`;
+              const isExpanded = !!expandedGroups[rowKey];
+              const isShowAll = !!showAllPeran[rowKey];
+              const peranToShow = isShowAll ? peranList : peranList.slice(0, 2);
+              return (
+                <div key={tipe} className="mb-3">
+                  <button
+                    type="button"
+                    className={`px-2 py-1 rounded text-xs font-semibold ${badgeClass} focus:outline-none cursor-pointer flex items-center gap-1`}
+                    onClick={() => toggleGroup(rowKey)}
+                    title="Klik untuk buka/tutup detail"
+                  >
+                    {label} ({peranList.length})
+                    <FontAwesomeIcon icon={isExpanded ? faChevronUp : faChevronDown} className="ml-1 w-3 h-3" />
+                  </button>
+                  {isExpanded && (
+                    <ul className="ml-0 mt-2 flex flex-col gap-2">
+                      {peranToShow.map((p, idx) => (
+                        <li
+                          key={idx}
+                          className="flex items-start gap-2 bg-gray-100 dark:bg-white/5 rounded-lg px-3 py-2 transition"
+                        >
+                          <FontAwesomeIcon icon={faBookOpen} className="text-blue-400 mt-1 w-3 h-3" />
+                          <div>
+                            {tipe === 'mengajar' ? (
+                              <div className="font-medium text-brand-400">{p.peran_kurikulum}</div>
+                            ) : (
+                              <>
+                                <div className="font-medium text-brand-400">{p.mata_kuliah_nama ?? (p as any)?.nama_mk ?? ''}</div>
+                                <div className="text-xs text-gray-400">
+                                  Semester {p.semester} | Blok {p.blok}
+                                </div>
+                                <div className="text-xs text-gray-500">{p.peran_kurikulum}</div>
+                              </>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+            {(!Array.isArray(d.dosen_peran) || d.dosen_peran.length === 0) && <span>-</span>}
           </td>
           {/* Kolom Aksi */}
           <td className="px-6 py-4 whitespace-nowrap text-center align-middle">
@@ -1512,7 +1555,31 @@ const handleSubmitImport = async () => {
           <table className="min-w-full divide-y divide-gray-100 dark:divide-white/[0.05] text-sm">
             <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
               <tr>
-      <th className="px-4 py-4"></th>
+                <th className="px-4 py-4">
+                  <button
+                    type="button"
+                    aria-checked={paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid)))}
+                    role="checkbox"
+                    onClick={() => {
+                      if (paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid)))) {
+                        setSelectedRows([]);
+                      } else {
+                        setSelectedRows(paginatedData.map(d => String(d.id || d.nid)));
+                      }
+                    }}
+                    className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${
+                      paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid)))
+                        ? 'bg-brand-500 border-brand-500'
+                        : 'bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700'
+                    } cursor-pointer`}
+                  >
+                    {paginatedData.length > 0 && paginatedData.every(d => selectedRows.includes(String(d.id || d.nid))) && (
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                        <polyline points="20 7 11 17 4 10" />
+                      </svg>
+                    )}
+                  </button>
+                </th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NID</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">NIDN</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Nama</th>
@@ -1521,10 +1588,8 @@ const handleSubmitImport = async () => {
       <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">No. Telepon</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Kompetensi</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Keahlian</th>
-                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Peran dalam Kurikulum</th>
-      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Peran Utama</th>
-      <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Mata Kuliah/Peran Kurikulum</th>
-                <th className="px-6 py-4 font-semibold text-gray-500 text-center text-xs uppercase tracking-wider dark:text-gray-400">Aksi</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">Mata Kuliah/Peran Kurikulum</th>
+      <th className="px-6 py-4 font-semibold text-gray-500 text-center text-xs uppercase tracking-wider dark:text-gray-400">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -1644,56 +1709,60 @@ const handleSubmitImport = async () => {
               }
             })()}
           </td>
-          {/* Kolom Peran dalam Kurikulum */}
-          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[300px]">
-            {(() => {
-              let val = d.peran_kurikulum;
-              if (!val) return "-";
-              if (Array.isArray(val)) return val.join(', ');
-              try {
-                const arr = JSON.parse(val);
-                return Array.isArray(arr) ? arr.join(', ') : String(val);
-              } catch {
-                return String(val);
-              }
-            })()}
-          </td>
-          {/* Kolom Peran Utama */}
-          <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
-            {d.peran_utama === "ketua" && (
-              <span className="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Ketua</span>
-            )}
-            {d.peran_utama === "anggota" && (
-              <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">Anggota</span>
-            )}
-            {d.peran_utama === "dosen_mengajar" && (
-              <span className="inline-block px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">Dosen Mengajar</span>
-            )}
-            {!d.peran_utama && "-"}
-                    </td>
           {/* Kolom Mata Kuliah/Peran Kurikulum */}
-          <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
-            {d.peran_utama === "ketua" && d.matkul_ketua_nama && d.matkul_ketua_semester && (
-              <span>
-                {d.matkul_ketua_nama} (Semester {d.matkul_ketua_semester})
-                {(() => {
-                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_ketua_nama);
-                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
-                })()}
-              </span>
-            )}
-            {d.peran_utama === "anggota" && d.matkul_anggota_nama && d.matkul_anggota_semester && (
-              <span>
-                {d.matkul_anggota_nama} (Semester {d.matkul_anggota_semester})
-                {(() => {
-                  const selectedMatkul = matkulList.find(mk => mk.nama === d.matkul_anggota_nama);
-                  return selectedMatkul?.blok ? ` • Blok ${selectedMatkul.blok}` : '';
-                })()}
-              </span>
-            )}
-            {d.peran_utama === "dosen_mengajar" && d.peran_kurikulum_mengajar && (
-              <span>{d.peran_kurikulum_mengajar}</span>
-            )}
+          <td className="px-6 py-4 align-top min-w-[300px]">
+            {['ketua', 'anggota', 'mengajar'].map((tipe) => {
+              const peranList = Array.isArray(d.dosen_peran) ? d.dosen_peran.filter(p => p.tipe_peran === tipe) : [];
+              if (peranList.length === 0) return null;
+              let label = '';
+              let badgeClass = '';
+              if (tipe === 'ketua') { label = 'Ketua'; badgeClass = 'bg-blue-100 text-blue-700'; }
+              if (tipe === 'anggota') { label = 'Anggota'; badgeClass = 'bg-green-100 text-green-700'; }
+              if (tipe === 'mengajar') { label = 'Dosen Mengajar'; badgeClass = 'bg-yellow-100 text-yellow-700'; }
+              const rowKey = `${d.id || d.nid}_${tipe}`;
+              const isExpanded = !!expandedGroups[rowKey];
+              const isShowAll = !!showAllPeran[rowKey];
+              const peranToShow = isShowAll ? peranList : peranList.slice(0, 2);
+              return (
+                <div key={tipe} className="mb-3">
+                  <button
+                    type="button"
+                    className={`px-2 py-1 rounded text-xs font-semibold ${badgeClass} focus:outline-none cursor-pointer flex items-center gap-1`}
+                    onClick={() => toggleGroup(rowKey)}
+                    title="Klik untuk buka/tutup detail"
+                  >
+                    {label} ({peranList.length})
+                    <FontAwesomeIcon icon={isExpanded ? faChevronUp : faChevronDown} className="ml-1 w-3 h-3" />
+                  </button>
+                  {isExpanded && (
+                    <ul className="ml-0 mt-2 flex flex-col gap-2">
+                      {peranToShow.map((p, idx) => (
+                        <li
+                          key={idx}
+                          className="flex items-start gap-2 bg-gray-100 dark:bg-white/5 rounded-lg px-3 py-2 transition"
+                        >
+                          <FontAwesomeIcon icon={faBookOpen} className="text-blue-400 mt-1 w-3 h-3" />
+                          <div>
+                            {tipe === 'mengajar' ? (
+                              <div className="font-medium text-brand-400">{p.peran_kurikulum}</div>
+                            ) : (
+                              <>
+                                <div className="font-medium text-brand-400">{p.mata_kuliah_nama ?? (p as any)?.nama_mk ?? ''}</div>
+                                <div className="text-xs text-gray-400">
+                                  Semester {p.semester} | Blok {p.blok}
+                                </div>
+                                <div className="text-xs text-gray-500">{p.peran_kurikulum}</div>
+                              </>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+            {(!Array.isArray(d.dosen_peran) || d.dosen_peran.length === 0) && <span>-</span>}
           </td>
           {/* Kolom Aksi */}
                     <td className="px-6 py-4 whitespace-nowrap text-center align-middle">
@@ -1931,269 +2000,518 @@ const handleSubmitImport = async () => {
                   </div>
                   <div className="mb-4">
                   <div className="mb-4">
-  <label className="block text-sm font-medium text-gray-300 mb-2">Peran Utama</label>
-  <div className="flex gap-3">
-    {[
-      { value: "ketua", label: "Ketua" },
-      { value: "anggota", label: "Anggota" },
-      { value: "dosen_mengajar", label: "Dosen Mengajar" },
-      { value: "standby", label: "Standby" },
-    ].map(opt => (
-      <label
-        key={opt.value}
-        className={`
-          flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition
-          border-2
-          ${peranUtama === opt.value
-            ? "border-brand-500 bg-brand-900/30 text-brand-400"
-            : "border-gray-700 bg-gray-800 text-gray-300 hover:border-brand-700"}
-          ${editMode ? "opacity-60 pointer-events-none" : ""}
-        `}
-      >
-        <input
-          type="radio"
-          name="peran_utama"
-          value={opt.value}
-          checked={peranUtama === opt.value}
-          onChange={() => setPeranUtama(opt.value)}
-          disabled={editMode}
-          className="hidden"
-        />
-        <span className="font-semibold">{opt.label}</span>
-      </label>
-    ))}
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Status Dosen</label>
+  <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-2xl w-fit px-1 py-1 bg-gray-100 dark:bg-[#181F2A]">
+    <button
+      type="button"
+      onClick={() => !editMode && setPeranUtama("standby")}
+      className={`px-5 py-2 rounded-xl font-semibold text-sm transition focus:outline-none
+        ${peranUtama === "standby"
+          ? "bg-gray-300 text-gray-800 dark:bg-brand-500 dark:text-white"
+          : "bg-transparent text-gray-700 dark:text-white opacity-70"}
+        ${editMode ? "opacity-60 pointer-events-none" : ""}`}
+      style={{ minWidth: 60 }}
+    >
+      Standby
+    </button>
+    <button
+      type="button"
+      onClick={() => !editMode && setPeranUtama("aktif")}
+      className={`
+        px-5 py-2 rounded-xl text-sm transition focus:outline-none
+        font-semibold
+        ${peranUtama === "aktif"
+          ? "bg-green-500 text-white dark:bg-brand-500"
+          : "bg-transparent text-gray-700 dark:text-white opacity-70"}
+        ${editMode ? "opacity-60 pointer-events-none" : ""}`}
+      style={{ minWidth: 60 }}
+    >
+      Aktif
+    </button>
   </div>
 </div>
 </div>
-{peranUtama === "ketua" && (
-  <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-      Mata Kuliah (Ketua) 
-      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">• Hanya mata kuliah Blok yang tersedia</span>
-    </label>
-    <Listbox value={matkulKetua} onChange={(value) => setMatkulKetua(value)}>
-      {({ open }) => (
-        <div className="relative">
-          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
-            <span className="block truncate">
-              {(() => {
-                const selectedMatkul = matkulList.find(mk => mk.kode === matkulKetua);
-                return selectedMatkul ? `Blok ${selectedMatkul.blok}: ${selectedMatkul.nama}` : "Pilih Mata Kuliah";
-              })()}
-            </span>
-            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-              <FontAwesomeIcon
-                icon={faChevronDown}
-                className="h-5 w-5 text-gray-400"
-                aria-hidden="true"
-              />
-            </span>
-          </Listbox.Button>
-          <Transition
-            show={open}
-            as={"div"}
-            leave="transition ease-in duration-100"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-            className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
-          >
-            <Listbox.Options static>
-              {(() => {
-                const blokMataKuliah = matkulList
-                  .filter(mk => mk.jenis === 'Blok')
-                  .sort((a, b) => {
-                    if (a.semester !== b.semester) return a.semester - b.semester;
-                    return (a.blok || 0) - (b.blok || 0);
-                  });
-                
-                if (blokMataKuliah.length === 0) {
-                  return (
-                    <Listbox.Option
-                      className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500"
-                      value=""
-                      disabled
-                    >
-                      Belum ada mata kuliah Blok
-                    </Listbox.Option>
-                  );
-                }
-                
-                // Group by semester
-                const groupedBySemester = blokMataKuliah.reduce((acc, mk) => {
-                  if (!acc[mk.semester]) acc[mk.semester] = [];
-                  acc[mk.semester].push(mk);
-                  return acc;
-                }, {} as Record<number, typeof blokMataKuliah>);
-                
-                return Object.entries(groupedBySemester).map(([semester, mataKuliah]) => (
-                  <div key={semester}>
-                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700">
-                      Semester {semester}
-                    </div>
-                    {mataKuliah.map(mk => (
-                      <Listbox.Option
-                        key={mk.kode}
-                        className={({ active }) =>
-                          `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
-                            ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
-                            : 'text-gray-900 dark:text-gray-100'
-                          }`
+{peranUtama === "aktif" && (
+  <>
+    <div className="mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Peran Ketua */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Peran Ketua</label>
+            <button 
+              type="button" 
+              className={`text-xs font-medium px-2 py-1 rounded transition ${totalPeran >= 4 || editMode ? 'text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-60' : 'text-brand-500 hover:text-brand-600'}`}
+              disabled={totalPeran >= 4 || editMode}
+              onClick={() => setPeranKetua([...peranKetua, { mata_kuliah_kode: '', peran_kurikulum: '', blok: '', semester: '' }])}
+            >
+              + Tambah
+            </button>
+          </div>
+          {peranKetua.map((item, idx) => (
+            <div key={idx} className="mb-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500">Ketua {idx + 1}</span>
+                {peranKetua.length > 0 && (
+                  <button 
+                    type="button" 
+                    className={`text-xs text-red-500 hover:text-red-600 ${editMode ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''}`}
+                    onClick={() => !editMode && setPeranKetua(peranKetua.filter((_, i) => i !== idx))}
+                    disabled={editMode}
+                  >
+                    Hapus
+                  </button>
+                )}
+              </div>
+              {/* Listbox Matkul */}
+              <Listbox 
+                value={item.mata_kuliah_kode} 
+                onChange={(value) => {
+                  if (editMode) return;
+                  const selectedMatkul = matkulList.find(mk => mk.kode === value);
+                  setPeranKetua(peranKetua.map((p, i) => 
+                    i === idx 
+                      ? { 
+                          ...p, 
+                          mata_kuliah_kode: value,
+                          blok: String(selectedMatkul?.blok || ""),
+                          semester: String(selectedMatkul?.semester || "")
                         }
-                        value={mk.kode}
-                      >
-                        {({ selected }) => (
-                          <div className="flex items-center justify-between">
-                            <span
-                              className={`block truncate ${selected ? 'font-medium' : 'font-normal'
-                                }`}
-                            >
-                              Blok {mk.blok}: {mk.nama}
-                            </span>
-                            {selected && (
-                              <span className="text-brand-500">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </Listbox.Option>
-                    ))}
-                  </div>
-                ));
-              })()}
-            </Listbox.Options>
-          </Transition>
-        </div>
-      )}
-    </Listbox>
-    {matkulKetua && (
-      <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          Ketua mata kuliah terpilih
-        </span>
-      </div>
-    )}
-  </div>
-)}
-{peranUtama === "anggota" && (
-  <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-      Mata Kuliah (Anggota)
-      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">• Hanya mata kuliah Blok yang tersedia</span>
-    </label>
-    <Listbox value={matkulAnggota} onChange={(value) => setMatkulAnggota(value)}>
-      {({ open }) => (
-        <div className="relative">
-          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
-            <span className="block truncate">
-              {(() => {
-                const selectedMatkul = matkulList.find(mk => mk.kode === matkulAnggota);
-                return selectedMatkul ? `Blok ${selectedMatkul.blok}: ${selectedMatkul.nama}` : "Pilih Mata Kuliah";
-              })()}
-            </span>
-            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-              <FontAwesomeIcon
-                icon={faChevronDown}
-                className="h-5 w-5 text-gray-400"
-                aria-hidden="true"
-              />
-            </span>
-          </Listbox.Button>
-          <Transition
-            show={open}
-            as={"div"}
-            leave="transition ease-in duration-100"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-            className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
-          >
-            <Listbox.Options static>
-              {(() => {
-                const blokMataKuliah = matkulList
-                  .filter(mk => mk.jenis === 'Blok')
-                  .sort((a, b) => {
-                    if (a.semester !== b.semester) return a.semester - b.semester;
-                    return (a.blok || 0) - (b.blok || 0);
-                  });
-                
-                if (blokMataKuliah.length === 0) {
-                  return (
-                    <Listbox.Option
-                      className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500"
-                      value=""
-                      disabled
+                      : p
+                  ));
+                }}
+                disabled={editMode}
+              >
+                {({ open }) => (
+                  <div className="relative mb-2">
+                    <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+                      <span className="block truncate">
+                        {(() => {
+                          const selectedMatkul = matkulList.find(mk => mk.kode === item.mata_kuliah_kode);
+                          return selectedMatkul ? `Blok ${selectedMatkul.blok}: ${selectedMatkul.nama}` : "Pilih Mata Kuliah";
+                        })()}
+                      </span>
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <FontAwesomeIcon icon={faChevronDown} className="h-5 w-5 text-gray-400" />
+                      </span>
+                    </Listbox.Button>
+                    <Transition
+                      show={open}
+                      as={"div"}
+                      leave="transition ease-in duration-100"
+                      leaveFrom="opacity-100"
+                      leaveTo="opacity-0"
+                      className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
                     >
-                      Belum ada mata kuliah Blok
-                    </Listbox.Option>
-                  );
-                }
-                
-                // Group by semester
-                const groupedBySemester = blokMataKuliah.reduce((acc, mk) => {
-                  if (!acc[mk.semester]) acc[mk.semester] = [];
-                  acc[mk.semester].push(mk);
-                  return acc;
-                }, {} as Record<number, typeof blokMataKuliah>);
-                
-                return Object.entries(groupedBySemester).map(([semester, mataKuliah]) => (
-                  <div key={semester}>
-                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700">
-                      Semester {semester}
-                    </div>
-                    {mataKuliah.map(mk => (
-                      <Listbox.Option
-                        key={mk.kode}
-                        className={({ active }) =>
-                          `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
-                            ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
-                            : 'text-gray-900 dark:text-gray-100'
-                          }`
-                        }
-                        value={mk.kode}
-                      >
-                        {({ selected }) => (
-                          <div className="flex items-center justify-between">
-                            <span
-                              className={`block truncate ${selected ? 'font-medium' : 'font-normal'
-                                }`}
-                            >
-                              Blok {mk.blok}: {mk.nama}
-                            </span>
-                            {selected && (
-                              <span className="text-brand-500">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </Listbox.Option>
-                    ))}
+                      <Listbox.Options static>
+                        {(() => {
+     const blokMataKuliah = matkulList
+     .filter(mk => mk.jenis === 'Blok')
+     .sort((a, b) => {
+       if (a.semester !== b.semester) return a.semester - b.semester;
+       return (a.blok || 0) - (b.blok || 0);
+     });
+                          
+                          const groupedBySemester = blokMataKuliah.reduce((acc, mk) => {
+                            if (!acc[mk.semester]) acc[mk.semester] = [];
+                            acc[mk.semester].push(mk);
+                            return acc;
+                          }, {} as Record<number, typeof blokMataKuliah>);
+                          
+                          return Object.entries(groupedBySemester).map(([semester, mataKuliah]) => (
+                            <div key={semester}>
+                              <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700">
+                                Semester {semester}
+                              </div>
+                              {mataKuliah.map(mk => (
+                                <Listbox.Option
+                                  key={mk.kode}
+                                  className={({ active }) =>
+                                    `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                                      ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                                      : 'text-gray-900 dark:text-gray-100'
+                                    }`
+                                  }
+                                  value={mk.kode}
+                                >
+                                  {({ selected }) => (
+                                    <div className="flex items-center justify-between">
+                                      <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                        Blok {mk.blok}: {mk.nama}
+                                      </span>
+                                      {selected && (
+                                        <span className="text-brand-500">
+                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </Listbox.Option>
+                              ))}
+                            </div>
+                          ));
+                        })()}
+                      </Listbox.Options>
+                    </Transition>
                   </div>
-                ));
-              })()}
-            </Listbox.Options>
-          </Transition>
+                )}
+              </Listbox>
+              {/* Listbox Peran Kurikulum */}
+              <Listbox 
+                value={item.peran_kurikulum} 
+                onChange={(value) => !editMode && setPeranKetua(peranKetua.map((p, i) => i === idx ? { ...p, peran_kurikulum: value } : p))}
+                disabled={editMode}
+              >
+                {({ open }) => (
+                  <div className="relative">
+                    <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+                      <span className="block truncate">
+                        {item.peran_kurikulum || "Pilih Peran Kurikulum"}
+                      </span>
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <FontAwesomeIcon icon={faChevronDown} className="h-5 w-5 text-gray-400" />
+                      </span>
+                    </Listbox.Button>
+                    <Transition
+                      show={open}
+                      as={"div"}
+                      leave="transition ease-in duration-100"
+                      leaveFrom="opacity-100"
+                      leaveTo="opacity-0"
+                      className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+                    >
+                      <Listbox.Options static>
+                        {peranKurikulumOptions.length === 0 ? (
+                          <Listbox.Option className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500" value="" disabled>
+                            Belum ada peran kurikulum
+                          </Listbox.Option>
+                        ) : (
+                          peranKurikulumOptions.map((peran) => (
+                            <Listbox.Option
+                              key={peran}
+                              className={({ active }) =>
+                                `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                                  ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                                  : 'text-gray-900 dark:text-gray-100'
+                                }`
+                              }
+                              value={peran}
+                            >
+                              {({ selected }) => (
+                                <div className="flex items-center justify-between">
+                                  <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                    {peran}
+                                  </span>
+                                  {selected && (
+                                    <span className="text-brand-500">
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </Listbox.Option>
+                          ))
+                        )}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                )}
+              </Listbox>
+            </div>
+          ))}
         </div>
-      )}
-    </Listbox>
-    {matkulAnggota && (
-      <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          Anggota mata kuliah terpilih
-        </span>
+
+        {/* Peran Anggota */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Peran Anggota</label>
+            <button 
+              type="button" 
+              className={`text-xs font-medium px-2 py-1 rounded transition ${totalPeran >= 4 || editMode ? 'text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-60' : 'text-brand-500 hover:text-brand-600'}`}
+              disabled={totalPeran >= 4 || editMode}
+              onClick={() => setPeranAnggota([...peranAnggota, { mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" }])}
+            >
+              + Tambah
+            </button>
+          </div>
+          {peranAnggota.map((item, idx) => (
+            <div key={idx} className="mb-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500">Anggota {idx + 1}</span>
+                {peranAnggota.length > 0 && (
+                  <button 
+                    type="button" 
+                    className={`text-xs text-red-500 hover:text-red-600 ${editMode ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''}`}
+                    onClick={() => !editMode && setPeranAnggota(peranAnggota.filter((_, i) => i !== idx))}
+                    disabled={editMode}
+                  >
+                    Hapus
+                  </button>
+                )}
+              </div>
+              {/* Listbox Matkul */}
+              <Listbox 
+                value={item.mata_kuliah_kode} 
+                onChange={(value) => {
+                  if (editMode) return;
+                  const selectedMatkul = matkulList.find(mk => mk.kode === value);
+                  setPeranAnggota(peranAnggota.map((p, i) => 
+                    i === idx 
+                      ? { 
+                          ...p, 
+                          mata_kuliah_kode: value,
+                          blok: String(selectedMatkul?.blok || ""),
+                          semester: String(selectedMatkul?.semester || "")
+                        }
+                      : p
+                  ));
+                }}
+                disabled={editMode}
+              >
+                {({ open }) => (
+                  <div className="relative mb-2">
+                    <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+                      <span className="block truncate">
+                        {(() => {
+                          const selectedMatkul = matkulList.find(mk => mk.kode === item.mata_kuliah_kode);
+                          return selectedMatkul ? `Blok ${selectedMatkul.blok}: ${selectedMatkul.nama}` : "Pilih Mata Kuliah";
+                        })()}
+                      </span>
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <FontAwesomeIcon icon={faChevronDown} className="h-5 w-5 text-gray-400" />
+                      </span>
+                    </Listbox.Button>
+                    <Transition
+                      show={open}
+                      as={"div"}
+                      leave="transition ease-in duration-100"
+                      leaveFrom="opacity-100"
+                      leaveTo="opacity-0"
+                      className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+                    >
+                      <Listbox.Options static>
+                        {(() => {
+const blokMataKuliah = matkulList
+.filter(mk => mk.jenis === 'Blok')
+.sort((a, b) => {
+  if (a.semester !== b.semester) return a.semester - b.semester;
+  return (a.blok || 0) - (b.blok || 0);
+});
+                          
+                          const groupedBySemester = blokMataKuliah.reduce((acc, mk) => {
+                            if (!acc[mk.semester]) acc[mk.semester] = [];
+                            acc[mk.semester].push(mk);
+                            return acc;
+                          }, {} as Record<number, typeof blokMataKuliah>);
+                          
+                          return Object.entries(groupedBySemester).map(([semester, mataKuliah]) => (
+                            <div key={semester}>
+                              <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700">
+                                Semester {semester}
+                              </div>
+                              {mataKuliah.map(mk => (
+                                <Listbox.Option
+                                  key={mk.kode}
+                                  className={({ active }) =>
+                                    `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                                      ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                                      : 'text-gray-900 dark:text-gray-100'
+                                    }`
+                                  }
+                                  value={mk.kode}
+                                >
+                                  {({ selected }) => (
+                                    <div className="flex items-center justify-between">
+                                      <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                        Blok {mk.blok}: {mk.nama}
+                                      </span>
+                                      {selected && (
+                                        <span className="text-brand-500">
+                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </Listbox.Option>
+                              ))}
+                            </div>
+                          ));
+                        })()}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                )}
+              </Listbox>
+              {/* Listbox Peran Kurikulum */}
+              <Listbox 
+                value={item.peran_kurikulum} 
+                onChange={(value) => !editMode && setPeranAnggota(peranAnggota.map((p, i) => i === idx ? { ...p, peran_kurikulum: value } : p))}
+                disabled={editMode}
+              >
+                {({ open }) => (
+                  <div className="relative">
+                    <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+                      <span className="block truncate">
+                        {item.peran_kurikulum || "Pilih Peran Kurikulum"}
+                      </span>
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <FontAwesomeIcon icon={faChevronDown} className="h-5 w-5 text-gray-400" />
+                      </span>
+                    </Listbox.Button>
+                    <Transition
+                      show={open}
+                      as={"div"}
+                      leave="transition ease-in duration-100"
+                      leaveFrom="opacity-100"
+                      leaveTo="opacity-0"
+                      className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+                    >
+                      <Listbox.Options static>
+                        {peranKurikulumOptions.length === 0 ? (
+                          <Listbox.Option className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500" value="" disabled>
+                            Belum ada peran kurikulum
+                          </Listbox.Option>
+                        ) : (
+                          peranKurikulumOptions.map((peran) => (
+                            <Listbox.Option
+                              key={peran}
+                              className={({ active }) =>
+                                `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                                  ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                                  : 'text-gray-900 dark:text-gray-100'
+                                }`
+                              }
+                              value={peran}
+                            >
+                              {({ selected }) => (
+                                <div className="flex items-center justify-between">
+                                  <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                    {peran}
+                                  </span>
+                                  {selected && (
+                                    <span className="text-brand-500">
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </Listbox.Option>
+                          ))
+                        )}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                )}
+              </Listbox>
+            </div>
+          ))}
+        </div>
       </div>
-    )}
-  </div>
+    </div>
+    {/* Peran Mengajar full width */}
+    <div className="mb-4 mt-4">
+      {/* Section Peran Mengajar, copy persis dari instruksi sebelumnya */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Peran Mengajar</label>
+          <button
+            type="button"
+            className={`text-xs font-medium px-2 py-1 rounded transition ${totalPeran >= 4 || editMode ? 'text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-60' : 'text-brand-500 hover:text-brand-600'}`}
+            disabled={totalPeran >= 4 || editMode}
+            onClick={() => setPeranMengajar([...peranMengajar, { peran_kurikulum: "" }])}
+          >
+            + Tambah
+          </button>
+        </div>
+        {peranMengajar.map((item, idx) => (
+          <div key={idx} className="mb-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-500">Mengajar {idx + 1}</span>
+              {peranMengajar.length > 0 && (
+                <button
+                  type="button"
+                  className={`text-xs text-red-500 hover:text-red-600 ${editMode ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''}`}
+                  onClick={() => !editMode && setPeranMengajar(peranMengajar.filter((_, i) => i !== idx))}
+                  disabled={editMode}
+                >
+                  Hapus
+                </button>
+              )}
+            </div>
+            {/* Listbox Peran Kurikulum */}
+            <Listbox
+              value={item.peran_kurikulum}
+              onChange={(value) => !editMode && setPeranMengajar(peranMengajar.map((p, i) => i === idx ? { ...p, peran_kurikulum: value } : p))}
+              disabled={editMode}
+            >
+              {({ open }) => (
+                <div className="relative">
+                  <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+                    <span className="block truncate">
+                      {item.peran_kurikulum || "Pilih Peran Kurikulum"}
+                    </span>
+                    <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                      <FontAwesomeIcon icon={faChevronDown} className="h-5 w-5 text-gray-400" />
+                    </span>
+                  </Listbox.Button>
+                  <Transition
+                    show={open}
+                    as={"div"}
+                    leave="transition ease-in duration-100"
+                    leaveFrom="opacity-100"
+                    leaveTo="opacity-0"
+                    className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+                  >
+                    <Listbox.Options static>
+                      {peranKurikulumOptions.filter(peran => !peranMengajar.some((p, i) => i !== idx && p.peran_kurikulum === peran)).length === 0 ? (
+                        <Listbox.Option className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500" value="" disabled>
+                          Belum ada peran kurikulum
+                        </Listbox.Option>
+                      ) : (
+                        peranKurikulumOptions.filter(peran => !peranMengajar.some((p, i) => i !== idx && p.peran_kurikulum === peran)).map((peran) => (
+                          <Listbox.Option
+                            key={peran}
+                            className={({ active }) =>
+                              `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                                ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                                : 'text-gray-900 dark:text-gray-100'
+                              }`
+                            }
+                            value={peran}
+                          >
+                            {({ selected }) => (
+                              <div className="flex items-center justify-between">
+                                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>{peran}</span>
+                                {selected && (
+                                  <span className="text-brand-500">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </Listbox.Option>
+                        ))
+                      )}
+                    </Listbox.Options>
+                  </Transition>
+                </div>
+              )}
+            </Listbox>
+          </div>
+        ))}
+      </div>
+    </div>
+  </>
 )}
 {peranUtama === "dosen_mengajar" && (
   <div className="mb-4">

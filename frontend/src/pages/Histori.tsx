@@ -11,15 +11,25 @@ import {
 
 interface ActivityLog {
   id: number;
-  user_id: number | null;
-  action: string;
-  module: string;
   description: string;
+  subject_type: string | null;
+  subject_id: number | null;
+  causer_type: string | null;
+  causer_id: number | null;
+  event: string | null;
+  properties: {
+    attributes?: Record<string, any>;
+    old?: Record<string, any>;
+    details?: {
+      ip_address?: string;
+      browser?: string;
+      os?: string;
+      method?: string;
+      path?: string;
+    }
+  } | null;
   created_at: string;
-  ip_address?: string;
-  file_name?: string;
-  records_count?: number;
-  user?: {
+  causer?: {
     id: number;
     name: string;
   };
@@ -30,28 +40,43 @@ interface SummaryData {
   activities_by_action: Array<{ action: string; count: number }>;
   activities_by_module: Array<{ module: string; count: number }>;
   activities_by_date: Array<{ date: string; count: number }>;
-  top_users: Array<{ user_id: number; count: number; user?: { id: number; name: string } }>;
+  top_users: Array<{ user_id: number; count: number; causer?: { id: number; name: string } }>;
+  modul_terbanyak?: string;
+  user_terbanyak?: { name: string; count: number };
+  activities_today?: number;
 }
 
 const SKELETON_ROWS = 6;
 
-// Utility: Format tanggal di deskripsi log
-function formatLogDescription(desc: string) {
-  // Ganti semua tanggal 'YYYY-MM-DD 00:00:00' jadi 'YYYY-MM-DD'
-  return desc.replace(/(\d{4}-\d{2}-\d{2}) 00:00:00/g, '$1');
-}
-
-// Utility: Deteksi log CSR yang berubah saja (opsional, jika backend belum filter)
-function isChangedCsrLog(log: ActivityLog) {
-  // Jika log.module adalah CSR dan deskripsi mengandung 'Mengupdate CSR' atau 'Menambah CSR',
-  // asumsikan ini log perubahan CSR. Bisa disesuaikan dengan pola backend.
-  if (log.module.toLowerCase().includes('csr')) {
-    // Jika ada perubahan (mengandung '→' atau 'Menambah')
-    return /→|Menambah/i.test(log.description);
+// Helper untuk menampilkan perubahan data
+const renderChanges = (properties: ActivityLog['properties']) => {
+  if (!properties || (!properties.old && !properties.attributes)) {
+    return null;
   }
-  // Untuk log lain, tampilkan saja
-  return true;
-}
+
+  const changes = properties.attributes ? Object.keys(properties.attributes) : [];
+  if (changes.length === 0) return null;
+
+  return (
+    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+      <ul className="list-disc pl-4 space-y-1">
+        {changes.map(key => {
+          const oldValue = properties.old?.[key] ?? '(tidak ada)';
+          const newValue = properties.attributes?.[key] ?? '(tidak ada)';
+          if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+            return (
+              <li key={key}>
+                <span className="font-semibold">{key}:</span> {JSON.stringify(oldValue)} → {JSON.stringify(newValue)}
+              </li>
+            );
+          }
+          return null;
+        })}
+      </ul>
+    </div>
+  );
+};
+
 
 const Histori: React.FC = () => {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -141,24 +166,36 @@ const Histori: React.FC = () => {
   };
 
   const getActionColor = (action: string) => {
+    if (!action) return 'bg-gray-100 text-gray-700';
     switch (action) {
-      case 'CREATE': return 'bg-green-100 text-green-700';
-      case 'UPDATE': return 'bg-blue-100 text-blue-700';
-      case 'DELETE': return 'bg-red-100 text-red-700';
-      case 'IMPORT': return 'bg-purple-100 text-purple-700';
-      case 'LOGIN': return 'bg-yellow-100 text-yellow-700';
-      case 'LOGOUT': return 'bg-gray-100 text-gray-700';
+      case 'created': return 'bg-green-100 text-green-700';
+      case 'updated': return 'bg-blue-100 text-blue-700';
+      case 'deleted': return 'bg-red-100 text-red-700';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
 
   const getModuleColor = (module: string) => {
-    switch (module) {
+    if (!module) return 'bg-gray-100 text-gray-700';
+    const moduleName = module.split('\\').pop()?.toUpperCase() || 'UNKNOWN';
+    switch (moduleName) {
       case 'USER': return 'bg-indigo-100 text-indigo-700';
-      case 'MATA_KULIAH': return 'bg-pink-100 text-pink-700';
+      case 'MATAKULIAH': return 'bg-pink-100 text-pink-700';
       case 'RUANGAN': return 'bg-orange-100 text-orange-700';
       case 'KEGIATAN': return 'bg-teal-100 text-teal-700';
       case 'AUTH': return 'bg-cyan-100 text-cyan-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getMethodColor = (method: string) => {
+    if (!method) return 'bg-gray-100 text-gray-700';
+    switch (method.toUpperCase()) {
+      case 'GET': return 'bg-blue-100 text-blue-700';
+      case 'POST': return 'bg-green-100 text-green-700';
+      case 'PUT': return 'bg-yellow-100 text-yellow-700';
+      case 'PATCH': return 'bg-orange-100 text-orange-700';
+      case 'DELETE': return 'bg-red-100 text-red-700';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
@@ -181,8 +218,20 @@ const Histori: React.FC = () => {
       </div>
 
       {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <div key={idx} className="bg-white dark:bg-white/[0.03] rounded-xl shadow border border-gray-200 dark:border-white/[0.05] p-6 flex items-center gap-4 animate-pulse">
+              <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <div className="flex-1">
+                <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                <div className="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-white/[0.03] rounded-xl shadow border border-gray-200 dark:border-white/[0.05] p-6 flex items-center gap-4">
             <PieChartIcon className="w-10 h-10 text-blue-500 bg-blue-100 rounded-full p-2" />
             <div>
@@ -202,7 +251,7 @@ const Histori: React.FC = () => {
             <div>
               <div className="text-xs text-gray-500 dark:text-gray-400">Modul Terbanyak</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {summary.activities_by_module[0]?.module || '-'}
+                {summary.modul_terbanyak || '-'}
               </div>
             </div>
           </div>
@@ -213,6 +262,25 @@ const Histori: React.FC = () => {
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {summary.activities_by_action[0]?.action || '-'}
               </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-white/[0.03] rounded-xl shadow border border-gray-200 dark:border-white/[0.05] p-6 flex items-center gap-4">
+            <UserCircleIcon className="w-10 h-10 text-indigo-500 bg-indigo-100 rounded-full p-2" />
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">User Terbanyak</div>
+              <div className="text-lg font-bold text-gray-900 dark:text-white">
+                {summary.user_terbanyak ? summary.user_terbanyak.name : '-'}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {summary.user_terbanyak ? `${summary.user_terbanyak.count} aktivitas` : ''}
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-white/[0.03] rounded-xl shadow border border-gray-200 dark:border-white/[0.05] p-6 flex items-center gap-4">
+            <CalenderIcon className="w-10 h-10 text-pink-500 bg-pink-100 rounded-full p-2" />
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Aktivitas Hari Ini</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{summary.activities_today}</div>
             </div>
           </div>
         </div>
@@ -293,18 +361,23 @@ const Histori: React.FC = () => {
             <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Tanggal</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Jam</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">User</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Aksi</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Modul</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Deskripsi</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Method</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Path</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">IP Address</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Browser</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">OS</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: SKELETON_ROWS }).map((_, idx) => (
                   <tr key={idx}>
-                    {Array.from({ length: 6 }).map((_, colIdx) => (
+                    {Array.from({ length: 11 }).map((_, colIdx) => (
                       <td key={colIdx} className="px-6 py-4">
                         <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse opacity-80"></div>
                       </td>
@@ -313,31 +386,44 @@ const Histori: React.FC = () => {
                 ))
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">Tidak ada data aktivitas</td>
+                  <td colSpan={11} className="px-6 py-8 text-center text-gray-400 dark:text-gray-500">Tidak ada data aktivitas</td>
                 </tr>
               ) : (
-                logs.filter(isChangedCsrLog).map((log, idx) => (
+                logs.map((log, idx) => {
+                  const dateObj = new Date(log.created_at);
+                  const tanggal = dateObj.toLocaleDateString('id-ID');
+                  const jam = dateObj.toLocaleTimeString('en-GB', { hour12: false });
+                  return (
                   <tr key={log.id} className={idx % 2 === 1 ? 'bg-gray-50 dark:bg-white/[0.02]' : '' + ' hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-colors'}>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{new Date(log.created_at).toLocaleString('id-ID')}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{log.user?.name || 'System'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{tanggal}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{jam}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white/90">{log.causer?.name || 'System'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getActionColor(log.action)}`}>{log.action}</span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getActionColor(log.event || '')}`}>{log.event || 'custom'}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getModuleColor(log.module)}`}>{log.module}</span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getModuleColor(log.subject_type || '')}`}>{log.subject_type ? log.subject_type.split('\\').pop() : 'System'}</span>
                     </td>
-                    <td className="px-6 py-4 min-w-[400px] text-gray-900 dark:text-white/90" title={log.description}>
-                      {formatLogDescription(log.description)}
-                      {log.file_name && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">File: {log.file_name}</div>
-                      )}
-                      {log.records_count && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Records: {log.records_count}</div>
+                    <td className="px-6 py-4 min-w-[300px] text-gray-900 dark:text-white/90" title={log.description}>
+                        <div>{log.description}</div>
+                        {renderChanges(log.properties)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                        {log.properties?.details?.method ? (
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getMethodColor(log.properties.details.method)}`}>
+                            {log.properties.details.method}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500 dark:text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{log.ip_address || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 font-mono">{log.properties?.details?.path || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{log.properties?.details?.ip_address || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{log.properties?.details?.browser || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{log.properties?.details?.os || '-'}</td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

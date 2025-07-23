@@ -7,6 +7,8 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\MataKuliah;
+use App\Models\DosenPeran;
+use Illuminate\Support\Facades\DB; // Added DB facade
 
 class UserSeeder extends Seeder
 {
@@ -15,6 +17,7 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
+        $faker = \Faker\Factory::create('id_ID');
         // Data mahasiswa kedokteran dengan nama dan username yang realistis (100 data)
         $mahasiswaData = [
             ['name' => 'Ahmad Rizki Pratama', 'username' => 'ahmadrizki'],
@@ -128,184 +131,27 @@ class UserSeeder extends Seeder
         ];
 
         // Tambahkan semester acak untuk setiap mahasiswa
-        foreach ($mahasiswaData as &$mhs) {
+        $nimStart = 20210001;
+        $statusList = ['aktif', 'cuti', 'lulus'];
+        foreach ($mahasiswaData as $i => &$mhs) {
             $mhs['semester'] = rand(1, 8);
+            $mhs['nim'] = (string)($nimStart + $i);
+            $mhs['gender'] = rand(0, 1) ? 'L' : 'P';
+            $mhs['ipk'] = number_format(rand(200, 400) / 100, 2);
+            $mhs['status'] = $statusList[array_rand($statusList)];
+            $mhs['angkatan'] = rand(2019, 2024);
         }
         unset($mhs);
 
-        // Data dosen dengan nama yang realistis dan peran yang sesuai dengan mata kuliah
-        $dosenData = [
-            // Semester 1 - Dasar-dasar Kedokteran
-            ['name' => 'Dr. Andika Putra Wijaya', 'username' => 'andikaw', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB101'],
-            ['name' => 'Dr. Sari Indah Sari', 'username' => 'sariindah', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB101'],
-            ['name' => 'Dr. Bambang Tri Hartono', 'username' => 'bambanghartono', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Dasar-dasar Kedokteran'],
-            
-            // Semester 1 - Anatomi Dasar
-            ['name' => 'Dr. Dewi Ratna Sari', 'username' => 'dewiratna', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB102'],
-            ['name' => 'Dr. Eko Budi Santoso', 'username' => 'ekobudi', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB102'],
-            ['name' => 'Dr. Fitria Maharani', 'username' => 'fitriamaharani', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Anatomi Dasar'],
-            
-            // Semester 1 - Fisiologi Dasar
-            ['name' => 'Dr. Gunawan Setiadi', 'username' => 'gunawansetiadi', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB103'],
-            ['name' => 'Dr. Hesti Kumalasari', 'username' => 'hestikumala', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB103'],
-            ['name' => 'Dr. Irfan Maulana', 'username' => 'irfanmaulana', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Fisiologi Dasar'],
-            
-            // Semester 1 - Biokimia Dasar
-            ['name' => 'Dr. Joko Widodo Pranoto', 'username' => 'jokowidodo', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB104'],
-            ['name' => 'Prof. Dr. Citra Kirana', 'username' => 'citrak', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB104'],
-            ['name' => 'Dr. Bayu Samudra', 'username' => 'bayus', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Biokimia Dasar'],
-            
-            // Semester 2 - Sistem Muskuloskeletal
-            ['name' => 'Dr. Linda Permata', 'username' => 'lindap', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB201'],
-            ['name' => 'Dr. Rian Hidayat', 'username' => 'rianh', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB201'],
-            ['name' => 'Dr. Nisa Adinda', 'username' => 'nisaa', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Muskuloskeletal'],
-            
-            // Semester 2 - Sistem Saraf
-            ['name' => 'Dr. Kevin Pratama', 'username' => 'kevinp', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB202'],
-            ['name' => 'Dr. Amelia Putri', 'username' => 'ameliap', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB202'],
-            ['name' => 'Dr. Fajar Raharjo', 'username' => 'fajarr', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Saraf'],
-            
-            // Semester 2 - Sistem Kardiovaskular
-            ['name' => 'Dr. Sinta Melati', 'username' => 'sintam', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB203'],
-            ['name' => 'Dr. Rio Kusuma', 'username' => 'riok', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB203'],
-            ['name' => 'Dr. Tania Anggraini', 'username' => 'taniaa', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Kardiovaskular'],
-            
-            // Semester 2 - Sistem Pernafasan
-            ['name' => 'Dr. Wisnu Wardhana', 'username' => 'wisnuw', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB204'],
-            ['name' => 'Dr. Zahra Putri', 'username' => 'zahrap', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB204'],
-            ['name' => 'Dr. Yoga Prasetya', 'username' => 'yogap', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Pernafasan'],
-            
-            // Semester 3 - Sistem Pencernaan
-            ['name' => 'Dr. Elsa Wijayanti', 'username' => 'elsaw', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB301'],
-            ['name' => 'Dr. Cahyo Nugroho', 'username' => 'cahyon', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB301'],
-            ['name' => 'Dr. Gina Fitriana', 'username' => 'ginaf', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Pencernaan'],
-            
-            // Semester 3 - Sistem Endokrin
-            ['name' => 'Dr. Hadi Prabowo', 'username' => 'hadip', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB302'],
-            ['name' => 'Dr. Ira Rahmawati', 'username' => 'irar', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB302'],
-            ['name' => 'Dr. Joni Setiawan', 'username' => 'jonis', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Endokrin'],
-            
-            // Semester 3 - Sistem Reproduksi
-            ['name' => 'Dr. Karla Wijaya', 'username' => 'karlaw', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB303'],
-            ['name' => 'Dr. Lukman Hakim', 'username' => 'lukmanh', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB303'],
-            ['name' => 'Dr. Mira Novita', 'username' => 'miran', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Reproduksi'],
-            
-            // Semester 3 - Sistem Urinaria
-            ['name' => 'Dr. Naufal Azizi', 'username' => 'naufala', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB304'],
-            ['name' => 'Dr. Olga Safitri', 'username' => 'olgas', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB304'],
-            ['name' => 'Dr. Putra Ramadhan', 'username' => 'putrar', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Urinaria'],
-            
-            // Semester 4 - Sistem Imun
-            ['name' => 'Dr. Qonita Zahra', 'username' => 'qonitaz', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB401'],
-            ['name' => 'Dr. Rizky Maulana', 'username' => 'rizkym', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB401'],
-            ['name' => 'Dr. Septi Nuraini', 'username' => 'septin', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Imun'],
-            
-            // Semester 4 - Sistem Hematologi
-            ['name' => 'Dr. Tony Gunawan', 'username' => 'tonyg', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB402'],
-            ['name' => 'Dr. Umi Farida', 'username' => 'umif', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB402'],
-            ['name' => 'Dr. Vicky Andriyani', 'username' => 'vickya', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Sistem Hematologi'],
-            
-            // Semester 4 - Kulit dan Jaringan Subkutan
-            ['name' => 'Dr. Wahyu Nugraha', 'username' => 'wahyun', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB403'],
-            ['name' => 'Dr. Xena Putri', 'username' => 'xenap', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB403'],
-            ['name' => 'Dr. Yudi Santoso', 'username' => 'yudis', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Kulit dan Jaringan Subkutan'],
-            
-            // Semester 4 - Metabolisme Tubuh
-            ['name' => 'Dr. Zaskia Aprilia', 'username' => 'zaskiaa', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB404'],
-            ['name' => 'Dr. Aldebaran Wijaya', 'username' => 'aldebaranw', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB404'],
-            ['name' => 'Dr. Bianca Putri', 'username' => 'biancap', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Metabolisme Tubuh'],
-            
-            // Semester 5 - Infeksi dan Imunologi
-            ['name' => 'Dr. Calvin Susanto', 'username' => 'calvins', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB501'],
-            ['name' => 'Dr. Diana Wulandari', 'username' => 'dianaw', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB501'],
-            ['name' => 'Dr. Erik Sanjaya', 'username' => 'eriks', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Infeksi dan Imunologi'],
-            
-            // Semester 5 - Farmakologi Dasar
-            ['name' => 'Dr. Fani Lestari', 'username' => 'fanil', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB502'],
-            ['name' => 'Dr. Guntur Pratama', 'username' => 'gunturp', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB502'],
-            ['name' => 'Dr. Helena Sari', 'username' => 'helenas', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Farmakologi Dasar'],
-            
-            // Semester 5 - Patologi Anatomi
-            ['name' => 'Dr. Indra Wijaya', 'username' => 'indraw', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB503'],
-            ['name' => 'Dr. Jelita Anggraini', 'username' => 'jelitaa', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB503'],
-            ['name' => 'Dr. Krisna Bayu', 'username' => 'krisnab', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Patologi Anatomi'],
-            
-            // Semester 5 - Patologi Klinik
-            ['name' => 'Dr. Lestari Dewi', 'username' => 'lestarid', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB504'],
-            ['name' => 'Dr. Mario Renaldi', 'username' => 'marior', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB504'],
-            ['name' => 'Dr. Nita Puspita', 'username' => 'nitap', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Patologi Klinik'],
-            
-            // Semester 6 - Penyakit Dalam
-            ['name' => 'Dr. Oscar Wijaya', 'username' => 'oscarw', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB601'],
-            ['name' => 'Dr. Putri Cahaya', 'username' => 'putric', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB601'],
-            ['name' => 'Dr. Rizal Ramadhan', 'username' => 'rizalr', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Penyakit Dalam'],
-            
-            // Semester 6 - Bedah Dasar
-            ['name' => 'Dr. Syifa Fauziah', 'username' => 'syifaf', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB602'],
-            ['name' => 'Dr. Tania Permata', 'username' => 'taniap', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB602'],
-            ['name' => 'Dr. Vicky Sanjaya', 'username' => 'vickys', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Bedah Dasar'],
-            
-            // Semester 6 - Ilmu Anak
-            ['name' => 'Dr. Windy Amalia', 'username' => 'windya', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB603'],
-            ['name' => 'Dr. Xaverius Pratama', 'username' => 'xaveriusp', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB603'],
-            ['name' => 'Dr. Yolanda Dewi', 'username' => 'yolandad', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Ilmu Anak'],
-            
-            // Semester 6 - Ilmu Kebidanan
-            ['name' => 'Dr. Zidan Kurniawan', 'username' => 'zidank', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB604'],
-            ['name' => 'Dr. Aldi Firmansyah', 'username' => 'aldifirmansyah', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB604'],
-            ['name' => 'Dr. Bella Kartika', 'username' => 'bellakartika', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Ilmu Kebidanan'],
-            
-            // Semester 7 - Psikiatri Dasar
-            ['name' => 'Dr. Candra Wijaya', 'username' => 'candrawijaya', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB701'],
-            ['name' => 'Dr. Dila Ramadhani', 'username' => 'dilaramadhani', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB701'],
-            ['name' => 'Dr. Eka Purnama', 'username' => 'ekapurnama', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Psikiatri Dasar'],
-            
-            // Semester 7 - Ilmu Kesehatan Masyarakat
-            ['name' => 'Dr. Farid Setiawan', 'username' => 'faridsetiawan', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB702'],
-            ['name' => 'Dr. Gina Permata', 'username' => 'ginapermata', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB702'],
-            ['name' => 'Dr. Hendra Kurnia', 'username' => 'hendrakurnia', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Ilmu Kesehatan Masyarakat'],
-            
-            // Semester 7 - Dermatologi
-            ['name' => 'Dr. Intan Sari', 'username' => 'intansari', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB703'],
-            ['name' => 'Dr. Jihan Maharani', 'username' => 'jihanmaharani', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB703'],
-            ['name' => 'Dr. Krisna Bayu', 'username' => 'krisnabayu', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Dermatologi'],
-            
-            // Semester 7 - Ilmu Penyakit Mata
-            ['name' => 'Dr. Laila Nurjannah', 'username' => 'lailanurjannah', 'peran_utama' => 'ketua', 'matkul_ketua_id' => 'MKB704'],
-            ['name' => 'Dr. Muhammad Iqbal', 'username' => 'muhammadiqbal', 'peran_utama' => 'anggota', 'matkul_anggota_id' => 'MKB704'],
-            ['name' => 'Dr. Nadia Fitriani', 'username' => 'nadiafitriani', 'peran_utama' => 'dosen_mengajar', 'peran_kurikulum_mengajar' => 'Ilmu Penyakit Mata'],
-            
-            // Dosen Standby
-            ['name' => 'Dr. Standby Satu', 'username' => 'standby1', 'keahlian' => json_encode(['standby'])],
-            ['name' => 'Dr. Standby Dua', 'username' => 'standby2', 'keahlian' => json_encode(['standby'])],
-            ['name' => 'Dr. Standby Tiga', 'username' => 'standby3', 'keahlian' => json_encode(['standby'])],
-        ];
-
-        // Pastikan MK001 ada sebelum insert dosen dengan matkul_ketua_id = MK001
-        if (!MataKuliah::where('kode', 'MK001')->exists()) {
-            MataKuliah::create([
-                'kode' => 'MK001',
-                'nama' => 'Dummy Matkul A',
-                'semester' => 1,
-                'periode' => 'Ganjil',
-                'jenis' => 'Blok',
-                'kurikulum' => 2024,
-                'tanggal_mulai' => now(),
-                'tanggal_akhir' => now()->addWeeks(4),
-                'blok' => 1,
-                'durasi_minggu' => 4,
-                'peran_dalam_kurikulum' => json_encode(['Tutor PBL', 'Koordinator Praktikum']),
-            ]);
-        }
-
-        // List kompetensi untuk randomisasi
+        // === GENERATE DOSEN PERFECT MATCH UNTUK SEMUA KEBUTUHAN PBL ===
+        $totalDosen = 120;
+        $faker = \Faker\Factory::create('id_ID');
         $listKompetensi = [
             'Klinik', 'Penelitian', 'Pengajaran', 'Riset', 'Laboratorium', 'Konsultasi', 'Manajemen', 'Statistik',
             'Epidemiologi', 'Kesehatan Masyarakat', 'Promosi Kesehatan', 'Pendidikan', 'Bedah', 'Farmasi',
             'Radiologi', 'Patologi', 'Gizi', 'Nutrisi', 'Forensik', 'Psikiatri', 'Pediatri', 'Kardiologi',
             'Neurologi', 'Parasitologi', 'Imunologi'
         ];
-        // List keahlian dan peran dalam kurikulum untuk randomisasi
         $listKeahlian = [
             'Kardiologi', 'Anatomi', 'Biostatistik', 'Patologi', 'Farmakologi', 'Mikrobiologi', 'Fisiologi',
             'Parasitologi', 'Histologi', 'Epidemiologi', 'Imunologi', 'Gizi Klinik', 'Kesehatan Masyarakat',
@@ -332,115 +178,146 @@ class UserSeeder extends Seeder
             'Pengampu Ilmu Kebidanan', 'Pengampu Penyakit Dalam', 'Pengampu Psikiatri Dasar',
             'Pengampu Farmakologi Dasar', 'Pengampu Infeksi dan Imunologi',
         ];
-        // Mapping keahlian berdasarkan kode mata kuliah untuk perfect match
-        $keahlianMapping = [
-            'MKB101' => ['Anatomi', 'Fisiologi', 'Biokimia Dasar'],
-            'MKB102' => ['Anatomi', 'Histologi', 'Mikroskopi'],
-            'MKB103' => ['Fisiologi', 'Biokimia', 'Sistem Tubuh'],
-            'MKB104' => ['Biokimia', 'Metabolisme', 'Enzim'],
-            'MKB201' => ['Anatomi', 'Bedah', 'Radiologi'],
-            'MKB202' => ['Neurologi', 'Anatomi', 'Fisiologi'],
-            'MKB203' => ['Kardiologi', 'Fisiologi', 'EKG'],
-            'MKB204' => ['Pulmonologi', 'Fisiologi', 'Spirometri'],
-            'MKB301' => ['Gastroenterologi', 'Fisiologi', 'Endoskopi'],
-            'MKB302' => ['Endokrinologi', 'Fisiologi', 'Metabolisme'],
-            'MKB303' => ['Ginekologi', 'Anatomi', 'Fisiologi'],
-            'MKB304' => ['Nefrologi', 'Fisiologi', 'Anatomi'],
-            'MKB401' => ['Imunologi', 'Mikrobiologi', 'Infeksi'],
-            'MKB402' => ['Hematologi', 'Patologi', 'Transfusi Darah'],
-            'MKB403' => ['Dermatologi', 'Anatomi', 'Patologi'],
-            'MKB404' => ['Biokimia', 'Endokrinologi', 'Nutrisi'],
-            'MKB501' => ['Infeksi', 'Imunologi', 'Mikrobiologi'],
-            'MKB502' => ['Farmakologi', 'Farmasi', 'Konsultasi Obat'],
-            'MKB503' => ['Patologi', 'Anatomi', 'Mikroskopi'],
-            'MKB504' => ['Patologi', 'Laboratorium', 'Diagnostik'],
-            'MKB601' => ['Penyakit Dalam', 'Diagnostik', 'Konsultasi'],
-            'MKB602' => ['Bedah', 'Anatomi', 'Radiologi'],
-            'MKB603' => ['Pediatri', 'Penyakit Dalam', 'Nutrisi'],
-            'MKB604' => ['Ginekologi', 'Kebidanan', 'Anatomi'],
-            'MKB701' => ['Psikiatri', 'Konsultasi', 'Pengajaran'],
-            'MKB702' => ['Kesehatan Masyarakat', 'Epidemiologi', 'Promosi Kesehatan'],
-            'MKB703' => ['Dermatologi', 'Anatomi', 'Patologi'],
-            'MKB704' => ['Oftalmologi', 'Anatomi', 'Radiologi'],
-        ];
-
-        // Saat membangun $dosenData, assign keahlian sesuai mata kuliah (kecuali standby)
-        foreach ($dosenData as &$dosen) {
-            if (isset($dosen['keahlian']) && is_array(json_decode($dosen['keahlian'], true)) && in_array('standby', json_decode($dosen['keahlian'], true))) {
-                $dosen['keahlian'] = json_encode(['standby']);
-                $dosen['peran_dalam_kurikulum'] = json_encode([]);
-                $dosen['kompetensi'] = null;
-            } else {
-                // Random 2-3 kompetensi
-                $randKompetensi = collect($listKompetensi)->shuffle()->take(rand(2,3))->values()->toArray();
-                $dosen['kompetensi'] = json_encode($randKompetensi);
-                
-                // Assign keahlian sesuai mata kuliah
-                $matkulKode = null;
-                if (isset($dosen['matkul_ketua_id'])) {
-                    $matkulKode = $dosen['matkul_ketua_id'];
-                } elseif (isset($dosen['matkul_anggota_id'])) {
-                    $matkulKode = $dosen['matkul_anggota_id'];
-                }
-                
-                if ($matkulKode && isset($keahlianMapping[$matkulKode])) {
-                    $dosen['keahlian'] = json_encode($keahlianMapping[$matkulKode]);
-                } else {
-                    // Fallback ke random keahlian jika tidak ada mapping
-                $randKeahlian = collect($listKeahlian)->shuffle()->take(rand(2,3))->values()->toArray();
-                $dosen['keahlian'] = json_encode($randKeahlian);
-                }
-                
-                // Random 2-3 peran kurikulum
-                $randPeran = collect($listPeranKurikulum)->shuffle()->take(rand(2,3))->values()->toArray();
-                $dosen['peran_dalam_kurikulum'] = json_encode($randPeran);
+        // 1. Ambil semua keahlian_required unik dari seluruh MataKuliah Blok
+        $allKeahlianRequired = collect(\App\Models\MataKuliah::where('jenis', 'Blok')->pluck('keahlian_required')->toArray())
+            ->flatten()->unique()->values()->toArray();
+        $dosenData = [];
+        // 2. Buat satu dosen untuk setiap keahlian unik (keahlian dosen = keahlian_required tsb)
+        foreach ($allKeahlianRequired as $keahlian) {
+            $name = $faker->unique()->name('male');
+            $username = strtolower(preg_replace('/[^a-z0-9]/', '', $faker->unique()->userName));
+            $keahlianArr = [$keahlian];
+            $kompetensiArr = collect($listKompetensi)->shuffle()->take(rand(2,3))->values()->toArray();
+            $dosenData[] = [
+                'name' => $name,
+                'username' => $username,
+                'keahlian' => implode(', ', $keahlianArr),
+                'kompetensi' => implode(', ', $kompetensiArr),
+                'peran_dalam_kurikulum' => collect($listPeranKurikulum)->shuffle()->take(rand(2,3))->values()->toArray(),
+            ];
+        }
+        // 3. Sisa dosen (hingga total 120) diisi random dari list keahlian
+        $currentDosenCount = count($dosenData);
+        if ($currentDosenCount < $totalDosen) {
+            for ($i = $currentDosenCount; $i < $totalDosen; $i++) {
+                $name = $faker->unique()->name('male');
+                $username = strtolower(preg_replace('/[^a-z0-9]/', '', $faker->unique()->userName));
+                $keahlianArr = collect($listKeahlian)->shuffle()->take(rand(1,3))->values()->toArray();
+                $kompetensiArr = collect($listKompetensi)->shuffle()->take(rand(2,3))->values()->toArray();
+                $dosenData[] = [
+                    'name' => $name,
+                    'username' => $username,
+                    'keahlian' => implode(', ', $keahlianArr),
+                    'kompetensi' => implode(', ', $kompetensiArr),
+                    'peran_dalam_kurikulum' => collect($listPeranKurikulum)->shuffle()->take(rand(2,3))->values()->toArray(),
+                ];
             }
         }
-        unset($dosen); // break reference
+        // Tambahkan NID dan NIDN unik untuk setiap dosen
+        $nidStart = 20230001;
+        $nidnStart = 1234567001;
+        // --- Multi peran, maksimal 4 peran total, max 2 per blok & semester ---
+        $blokSemesterList = [];
+        foreach (MataKuliah::where('jenis', 'Blok')->get() as $mk) {
+            $blokSemesterList[] = [
+                'blok' => $mk->blok,
+                'semester' => $mk->semester,
+                'kode' => $mk->kode,
+            ];
+        }
+        // Ambil semua dosen (kecuali standby)
+        $allDosen = array_values(array_filter($dosenData, fn($d) => !isset($d['keahlian']) || $d['keahlian'] !== 'standby'));
+        $dosenCount = count($allDosen);
+        // Buat slot peran: 1 slot per blok/semester (atau bisa lebih jika ingin, misal 2x jumlah blokSemesterList)
+        $slotList = [];
+        foreach ($blokSemesterList as $bs) {
+            // 3 slot per blok/semester: ketua, anggota, mengajar
+            $slotList[] = array_merge($bs, ['tipe_peran' => 'ketua']);
+            $slotList[] = array_merge($bs, ['tipe_peran' => 'anggota']);
+            $slotList[] = array_merge($bs, ['tipe_peran' => 'mengajar']);
+        }
+        // Shuffle slot biar distribusi random
+        shuffle($slotList);
+        // Map untuk tracking peran per dosen
+        $dosenPeranMap = [];
+        foreach ($allDosen as $idx => $dosen) {
+            $dosenPeranMap[$dosen['username']] = [
+                'total' => 0,
+                'blok_semester' => [] // blok-semester => count
+            ];
+        }
+        // Assign dosen ke slot secara round robin
+        $slotCount = count($slotList);
+        for ($i = 0; $i < $slotCount; $i++) {
+            $dosenIdx = $i % $dosenCount;
+            $dosen = &$allDosen[$dosenIdx];
+            $slot = $slotList[$i];
+            $blokKey = $slot['blok'] . '-' . $slot['semester'];
+            $username = $dosen['username'];
+            // Cek max 2 per blok/semester dan max 4 total
+            if (($dosenPeranMap[$username]['blok_semester'][$blokKey] ?? 0) < 2 && $dosenPeranMap[$username]['total'] < 4) {
+                $dosen['dosen_peran'][] = [
+                    'tipe_peran' => $slot['tipe_peran'],
+                    'mata_kuliah_kode' => $slot['kode'],
+                    'semester' => $slot['semester'],
+                    'peran_kurikulum' => $listPeranKurikulum[array_rand($listPeranKurikulum)],
+                ];
+                $dosenPeranMap[$username]['blok_semester'][$blokKey] = ($dosenPeranMap[$username]['blok_semester'][$blokKey] ?? 0) + 1;
+                $dosenPeranMap[$username]['total']++;
+            }
+        }
+        // Pastikan semua dosen minimal dapat 1 assignment
+        foreach ($allDosen as &$dosen) {
+            if (empty($dosen['dosen_peran'])) {
+                // Cari slot kosong
+                foreach ($slotList as $slot) {
+                    $blokKey = $slot['blok'] . '-' . $slot['semester'];
+                    $username = $dosen['username'];
+                    if (($dosenPeranMap[$username]['blok_semester'][$blokKey] ?? 0) < 2 && $dosenPeranMap[$username]['total'] < 4) {
+                        $dosen['dosen_peran'][] = [
+                            'tipe_peran' => $slot['tipe_peran'],
+                            'mata_kuliah_kode' => $slot['kode'],
+                            'semester' => $slot['semester'],
+                            'peran_kurikulum' => $listPeranKurikulum[array_rand($listPeranKurikulum)],
+                        ];
+                        $dosenPeranMap[$username]['blok_semester'][$blokKey] = ($dosenPeranMap[$username]['blok_semester'][$blokKey] ?? 0) + 1;
+                        $dosenPeranMap[$username]['total']++;
+                        break;
+                    }
+                }
+            }
+        }
+        unset($dosen);
+        // Assign NID dan NIDN unik ke semua dosen (kecuali standby)
+        foreach ($allDosen as $i => &$dosen) {
+            $dosen['nid'] = (string)($nidStart + $i);
+            $dosen['nidn'] = (string)($nidnStart + $i);
+        }
+        unset($dosen);
+        // Gabungkan kembali ke $dosenData (biar proses insert tetap jalan)
+        $dosenData = array_merge($allDosen, array_filter($dosenData, fn($d) => isset($d['keahlian']) && $d['keahlian'] === 'standby'));
 
-        // Insert ke DB dengan field yang benar
-        foreach ($dosenData as $dosen) {
-            // Pastikan semua field ada
-            User::updateOrCreate(
-                ['username' => $dosen['username']],
-                [
-                    'name' => $dosen['name'],
-                    'username' => $dosen['username'],
-                    'nid' => $dosen['nid'] ?? '1980' . rand(10000, 99999),
-                    'nidn' => $dosen['nidn'] ?? '00' . rand(10000000, 99999999),
-                    'email' => $dosen['username'] . '@umj.ac.id',
-                    'telp' => $dosen['telp'] ?? '08' . rand(100000000, 999999999),
-                    'role' => 'dosen',
-                    'password' => Hash::make('password'),
-                    'peran_utama' => $dosen['peran_utama'] ?? null,
-                    'matkul_ketua_id' => $dosen['matkul_ketua_id'] ?? null,
-                    'matkul_anggota_id' => $dosen['matkul_anggota_id'] ?? null,
-                    'peran_kurikulum_mengajar' => $dosen['peran_kurikulum_mengajar'] ?? null,
-                    'kompetensi' => $dosen['kompetensi'] ?? null,
-                    'keahlian' => $dosen['keahlian'] ?? null,
-                    'peran_kurikulum' => $dosen['peran_dalam_kurikulum'] ?? null,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]
-            );
+        // === Tambahkan 5 dosen standby ===
+        $standbyDosen = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $standbyDosen[] = [
+                'name' => 'Dosen Standby ' . $i,
+                'username' => 'standby' . $i,
+                'keahlian' => 'standby',
+                'kompetensi' => null,
+                'nid' => (string)($nidStart + $totalDosen + $i),
+                'nidn' => (string)($nidnStart + $totalDosen + $i),
+            ];
         }
 
-        User::insert([
-            // Super Admin
+        // Tambah user super admin
+        User::updateOrCreate(
+            ['username' => 'superadmin'],
             [
-                'nip' => null,
-                'nid' => null,
-                'nidn' => null,
-                'nim' => null,
-                'gender' => null,
-                'ipk' => null,
-                'status' => null,
-                'angkatan' => null,
                 'name' => 'Super Admin',
                 'username' => 'superadmin',
                 'email' => 'superadmin@umj.ac.id',
                 'telp' => null,
-                'ket' => null,
                 'role' => 'super_admin',
                 'password' => Hash::make('password'),
                 'kompetensi' => null,
@@ -448,82 +325,174 @@ class UserSeeder extends Seeder
                 'is_logged_in' => false,
                 'current_token' => null,
                 'semester' => null,
-            ],
-            // Tim Akademik (4)
+            ]
+        );
+
+        // Tambah user tim akademik
+        User::updateOrCreate(
+            ['username' => 'andipratama'],
             [
-                'nip' => '1978123456', 'nid' => null, 'nidn' => null, 'nim' => null, 'gender' => null, 'ipk' => null, 'status' => null, 'angkatan' => null,
-                'name' => 'Andi Pratama', 'username' => 'andipratama', 'email' => 'andi@umj.ac.id', 'telp' => '081234567810', 'ket' => 'Ketua Tim', 'role' => 'tim_akademik', 'password' => Hash::make('password'),
+                'name' => 'Andi Pratama',
+                'username' => 'andipratama',
+                'email' => 'andi@umj.ac.id',
+                'telp' => '081234567810',
+                'role' => 'tim_akademik',
+                'password' => Hash::make('password'),
                 'kompetensi' => null,
                 'keahlian' => null,
                 'is_logged_in' => false,
                 'current_token' => null,
                 'semester' => null,
-            ],
+                'nip' => '100001',
+                'ket' => 'Tim Akademik Bagian Administrasi',
+            ]
+        );
+        User::updateOrCreate(
+            ['username' => 'saridewi'],
             [
-                'nip' => '1978123457', 'nid' => null, 'nidn' => null, 'nim' => null, 'gender' => null, 'ipk' => null, 'status' => null, 'angkatan' => null,
-                'name' => 'Sari Dewi', 'username' => 'saridewi', 'email' => 'sari@umj.ac.id', 'telp' => '081234567811', 'ket' => 'Sekretaris', 'role' => 'tim_akademik', 'password' => Hash::make('password'),
+                'name' => 'Sari Dewi',
+                'username' => 'saridewi',
+                'email' => 'sari@umj.ac.id',
+                'telp' => '081234567811',
+                'role' => 'tim_akademik',
+                'password' => Hash::make('password'),
                 'kompetensi' => null,
                 'keahlian' => null,
                 'is_logged_in' => false,
                 'current_token' => null,
                 'semester' => null,
-            ],
+                'nip' => '100002',
+                'ket' => 'Tim Akademik Bagian Kurikulum',
+            ]
+        );
+        User::updateOrCreate(
+            ['username' => 'bambangirawan'],
             [
-                'nip' => '1978123458', 'nid' => null, 'nidn' => null, 'nim' => null, 'gender' => null, 'ipk' => null, 'status' => null, 'angkatan' => null,
-                'name' => 'Bambang Irawan', 'username' => 'bambangirawan', 'email' => 'bambang@umj.ac.id', 'telp' => '081234567812', 'ket' => 'Anggota', 'role' => 'tim_akademik', 'password' => Hash::make('password'),
+                'name' => 'Bambang Irawan',
+                'username' => 'bambangirawan',
+                'email' => 'bambang@umj.ac.id',
+                'telp' => '081234567812',
+                'role' => 'tim_akademik',
+                'password' => Hash::make('password'),
                 'kompetensi' => null,
                 'keahlian' => null,
                 'is_logged_in' => false,
                 'current_token' => null,
                 'semester' => null,
-            ],
+                'nip' => '100003',
+                'ket' => 'Tim Akademik Bagian Data & Evaluasi',
+            ]
+        );
+        User::updateOrCreate(
+            ['username' => 'dewilestari'],
             [
-                'nip' => '1978123459', 'nid' => null, 'nidn' => null, 'nim' => null, 'gender' => null, 'ipk' => null, 'status' => null, 'angkatan' => null,
-                'name' => 'Dewi Lestari', 'username' => 'dewilestari', 'email' => 'dewi@umj.ac.id', 'telp' => '081234567813', 'ket' => 'Anggota', 'role' => 'tim_akademik', 'password' => Hash::make('password'),
+                'name' => 'Dewi Lestari',
+                'username' => 'dewilestari',
+                'email' => 'dewi@umj.ac.id',
+                'telp' => '081234567813',
+                'role' => 'tim_akademik',
+                'password' => Hash::make('password'),
                 'kompetensi' => null,
                 'keahlian' => null,
                 'is_logged_in' => false,
                 'current_token' => null,
                 'semester' => null,
-            ],
-            // Mahasiswa (100)
-            ...array_map(function($data, $i) {
-                // Generate angkatan yang bervariasi (2020-2024)
-                $angkatanList = ['2020', '2021', '2022', '2023', '2024'];
-                $selectedAngkatan = $angkatanList[$i % count($angkatanList)];
-                
-                // Generate status yang realistis
-                $statusOptions = ['aktif', 'aktif', 'aktif', 'aktif', 'aktif', 'aktif', 'cuti', 'lulus'];
-                $selectedStatus = $statusOptions[$i % count($statusOptions)];
-                
-                // Generate IPK yang realistis (2.50 - 4.00)
-                $ipkBase = 2.50 + (($i * 17) % 150) / 100; // Generates values between 2.50-4.00
-                $ipk = round($ipkBase, 2);
-                if ($ipk > 4.00) $ipk = 4.00;
-                
-                return [
-                    'nip' => null,
-                    'nid' => null,
-                    'nidn' => null,
-                    'nim' => $selectedAngkatan . str_pad($i + 1, 4, '0', STR_PAD_LEFT),
-                    'gender' => ($i + 1) % 2 === 0 ? 'Laki-laki' : 'Perempuan',
-                    'ipk' => $ipk,
-                    'status' => $selectedStatus,
-                    'angkatan' => $selectedAngkatan,
-                    'name' => $data['name'],
-                    'username' => $data['username'],
-                    'email' => $data['username'] . '@umj.ac.id',
-                    'telp' => '0812345679' . str_pad($i + 1, 2, '0', STR_PAD_LEFT),
-                    'ket' => null,
+                'nip' => '100004',
+                'ket' => 'Tim Akademik Bagian Layanan Mahasiswa',
+            ]
+        );
+
+        // Tambah mahasiswa
+        foreach ($mahasiswaData as $mahasiswa) {
+            User::updateOrCreate(
+                ['username' => $mahasiswa['username']],
+                [
+                    'name' => $mahasiswa['name'],
+                    'username' => $mahasiswa['username'],
+                    'email' => $mahasiswa['username'] . '@umj.ac.id',
+                    'telp' => '0812345679' . str_pad(rand(1, 99), 2, '0', STR_PAD_LEFT),
                     'role' => 'mahasiswa',
                     'password' => Hash::make('password'),
                     'kompetensi' => null,
                     'keahlian' => null,
                     'is_logged_in' => false,
                     'current_token' => null,
-                    'semester' => $data['semester'] ?? null,
-                ];
-            }, $mahasiswaData, array_keys($mahasiswaData)),
-        ]);
+                    'semester' => $mahasiswa['semester'] ?? null,
+                    'nim' => $mahasiswa['nim'] ?? null,
+                    'gender' => $mahasiswa['gender'] ?? null,
+                    'ipk' => $mahasiswa['ipk'] ?? null,
+                    'status' => $mahasiswa['status'] ?? null,
+                    'angkatan' => $mahasiswa['angkatan'] ?? null,
+                ]
+            );
+        }
+
+        // Ambil semua mata kuliah blok
+        $mataKuliahBlok = MataKuliah::where('jenis', 'Blok')->get();
+        // Tambah dosen ke tabel users dan dosen_peran ke tabel relasi
+        // Tambahkan dosen standby terlebih dahulu
+        foreach ($standbyDosen as $dosen) {
+            User::updateOrCreate(
+                ['username' => $dosen['username']],
+                [
+                    'name' => $dosen['name'],
+                    'username' => $dosen['username'],
+                    'email' => $dosen['username'] . '@umj.ac.id',
+                    'telp' => '0812345678' . str_pad(rand(1, 99), 2, '0', STR_PAD_LEFT),
+                    'role' => 'dosen',
+                    'password' => Hash::make('password'),
+                    'kompetensi' => null,
+                    'keahlian' => 'standby',
+                    'nid' => $dosen['nid'],
+                    'nidn' => $dosen['nidn'],
+                    'is_logged_in' => false,
+                    'current_token' => null,
+                    'semester' => null,
+                ]
+            );
+        }
+        foreach ($dosenData as $dosen) {
+            $user = User::updateOrCreate(
+                ['username' => $dosen['username']],
+                [
+                    'name' => $dosen['name'],
+                    'username' => $dosen['username'],
+                    'email' => $dosen['username'] . '@umj.ac.id',
+                    'telp' => '0812345678' . str_pad(rand(1, 99), 2, '0', STR_PAD_LEFT),
+                    'role' => 'dosen',
+                    'password' => Hash::make('password'),
+                    'kompetensi' => $dosen['kompetensi'] ?? null,
+                    'keahlian' => $dosen['keahlian'] ?? null,
+                    'nid' => $dosen['nid'],
+                    'nidn' => $dosen['nidn'],
+                    'is_logged_in' => false,
+                    'current_token' => null,
+                    'semester' => null,
+                ]
+            );
+            // Assign peran ke dosen
+            $peranCount = 0;
+            $blokSemesterMap = [];
+            $mataKuliahBlokShuffled = $mataKuliahBlok->shuffle();
+            foreach ($mataKuliahBlokShuffled as $mk) {
+                $blokKey = $mk->kode . '-' . $mk->semester;
+                if (!isset($blokSemesterMap[$blokKey])) $blokSemesterMap[$blokKey] = 0;
+                if ($blokSemesterMap[$blokKey] < 2 && $peranCount < 4) {
+                    $peranList = ['ketua', 'anggota', 'mengajar'];
+                    $peran = $peranList[array_rand($peranList)];
+                    DosenPeran::updateOrCreate([
+                        'user_id' => $user->id,
+                        'mata_kuliah_kode' => $mk->kode,
+                        'semester' => $mk->semester,
+                        'blok' => $mk->blok,
+                        'tipe_peran' => $peran,
+                        'peran_kurikulum' => $listPeranKurikulum[array_rand($listPeranKurikulum)],
+                    ], []);
+                    $blokSemesterMap[$blokKey]++;
+                    $peranCount++;
+                }
+                if ($peranCount >= 4) break;
+            }
+        }
     }
 }

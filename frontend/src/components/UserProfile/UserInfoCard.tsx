@@ -183,7 +183,7 @@ export default function UserInfoCard() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-3xl p-4 shadow-lg z-[100001]"
+              className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-[100001] max-h-[90vh] overflow-y-auto"
             >
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -199,9 +199,11 @@ export default function UserInfoCard() {
                 </svg>
               </button>
               <form onSubmit={handleSave}>
-                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-6">Edit Profile</h3>
-                <div className="space-y-4 mb-6">
-                  <div>
+                <div className="pb-4 sm:pb-6">
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">Edit Profile</h2>
+                </div>
+                <div>
+                  <div className="mb-3 sm:mb-4">
                     <label className="block mb-1 text-gray-700 dark:text-gray-300 font-medium text-sm">Nama</label>
                     <input
                       type="text"
@@ -212,7 +214,7 @@ export default function UserInfoCard() {
                       required
                     />
                   </div>
-                  <div>
+                  <div className="mb-3 sm:mb-4">
                     <label className="block mb-1 text-gray-700 dark:text-gray-300 font-medium text-sm">Username</label>
                     <input
                       type="text"
@@ -223,7 +225,7 @@ export default function UserInfoCard() {
                       required
                     />
                   </div>
-                  <div>
+                  <div className="mb-3 sm:mb-4">
                     <label className="block mb-1 text-gray-700 dark:text-gray-300 font-medium text-sm">Email</label>
                     <input
                       type="email"
@@ -234,7 +236,7 @@ export default function UserInfoCard() {
                       required
                     />
                   </div>
-                  <div>
+                  <div className="mb-3 sm:mb-4">
                     <label className="block mb-1 text-gray-700 dark:text-gray-300 font-medium text-sm">Password Saat Ini</label>
                     <div className="relative flex items-center">
                       <input
@@ -259,7 +261,7 @@ export default function UserInfoCard() {
                       </button>
                     </div>
                   </div>
-                  <div>
+                  <div className="mb-3 sm:mb-4">
                     <label className="block mb-1 text-gray-700 dark:text-gray-300 font-medium text-sm">Password Baru</label>
                     <div className="relative flex items-center">
                       <input
@@ -284,7 +286,7 @@ export default function UserInfoCard() {
                       </button>
                     </div>
                   </div>
-                  <div>
+                  <div className="mb-3 sm:mb-4">
                     <label className="block mb-1 text-gray-700 dark:text-gray-300 font-medium text-sm">Konfirmasi Password Baru</label>
                     <div className="relative flex items-center">
                       <input
@@ -315,7 +317,7 @@ export default function UserInfoCard() {
                     {error}
                   </div>
                 )}
-                <div className="flex items-center gap-3 mt-6 justify-end">
+                <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
                     className="px-4 py-2 rounded-lg bg-gray-100 text-sm font-medium shadow-theme-xs hover:bg-gray-200 transition dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"

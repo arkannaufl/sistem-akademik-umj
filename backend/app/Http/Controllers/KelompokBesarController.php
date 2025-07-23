@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\KelompokKecil;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class KelompokBesarController extends Controller
 {
@@ -33,19 +34,6 @@ class KelompokBesarController extends Controller
         $semester = $request->semester;
         $mahasiswaIds = $request->mahasiswa_ids;
 
-        // Cek rule: mahasiswa tidak boleh ada di semester lain
-        $sudahTerdaftar = KelompokBesar::whereIn('mahasiswa_id', $mahasiswaIds)
-            ->where('semester', '!=', $semester)
-            ->pluck('mahasiswa_id')
-            ->toArray();
-        if (count($sudahTerdaftar) > 0) {
-            $mahasiswa = User::whereIn('id', $sudahTerdaftar)->pluck('name', 'id');
-            return response()->json([
-                'message' => 'Beberapa mahasiswa sudah terdaftar di semester lain',
-                'mahasiswa' => $mahasiswa
-            ], 422);
-        }
-
         // Simpan (replace: hapus dulu data semester ini, lalu insert baru)
         DB::transaction(function() use ($semester, $mahasiswaIds) {
             KelompokBesar::where('semester', $semester)->delete();
@@ -56,6 +44,11 @@ class KelompokBesarController extends Controller
                 ]);
             }
         });
+
+        // Log aktivitas batch kelompok besar
+        activity()
+            ->causedBy(Auth::user())
+            ->log("Mengatur kelompok besar untuk semester {$semester} dengan " . count($mahasiswaIds) . " mahasiswa");
 
         return response()->json(['message' => 'Data kelompok besar berhasil disimpan']);
     }
@@ -93,12 +86,6 @@ class KelompokBesarController extends Controller
         ]);
     }
 
-    /**
-     * Batch get kelompok besar by semester list
-     * Endpoint: POST /kelompok-besar/batch-by-semester
-     * Body: { "semesters": ["Ganjil", "Genap"] }
-     * Response: { "Ganjil": [...], "Genap": [...] }
-     */
     public function batchBySemester(Request $request)
     {
         $semesters = $request->input('semesters', []);

@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class KelompokBesar extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'kelompok_besar';
 
@@ -15,6 +17,14 @@ class KelompokBesar extends Model
         'semester',
         'mahasiswa_id'
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn(string $eventName) => "Kelompok Besar Mahasiswa ID {$this->mahasiswa_id} (Semester {$this->semester}) telah di-{$eventName}");
+    }
 
     /**
      * Relasi ke mahasiswa

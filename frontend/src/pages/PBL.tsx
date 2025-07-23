@@ -53,10 +53,10 @@ export default function PBL() {
                     </button>
                     <button
                       onClick={() => navigate(`/pbl/generate/${blok.blokId}`)}
-                      className="flex-1 px-4 py-2 rounded-lg border border-brand-500 text-brand-500 bg-transparent hover:bg-brand-50 hover:text-brand-600 transition flex justify-center items-center gap-2 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-brand-900/10"
+                      className="flex-1 px-4 py-2 text-sm rounded-lg border border-brand-500 text-brand-500 bg-transparent hover:bg-brand-50 hover:text-brand-600 transition flex justify-center items-center gap-2 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-brand-900/10"
                     >
                       <FontAwesomeIcon icon={faCog} className="w-4 h-4" />
-                      Generate
+                      Generate Dosen
                     </button>
                   </div>
                 </div>

@@ -10,7 +10,8 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\MahasiswaImport;
 use App\Imports\TimAkademikImport;
 use Illuminate\Validation\Rule;
-use App\Services\ActivityLogService;
+use App\Models\DosenPeran;
+use Illuminate\Support\Facades\Auth;
 
 
 class UserController extends Controller
@@ -26,21 +27,21 @@ class UserController extends Controller
             $query->where('semester', $request->semester);
         }
         $users = $query->get();
-        // Tambahan: jika role dosen, tambahkan field peran utama detail
+        // Tambahan: jika role dosen, tambahkan field peran multi
         if ($request->role === 'dosen') {
             $users = $users->map(function ($user) {
                 $userArr = $user->toArray();
-                if ($user->peran_utama === 'ketua' && $user->matkulKetua) {
-                    $userArr['matkul_ketua_nama'] = $user->matkulKetua->nama;
-                    $userArr['matkul_ketua_semester'] = $user->matkulKetua->semester;
-                }
-                if ($user->peran_utama === 'anggota' && $user->matkulAnggota) {
-                    $userArr['matkul_anggota_nama'] = $user->matkulAnggota->nama;
-                    $userArr['matkul_anggota_semester'] = $user->matkulAnggota->semester;
-                }
-                if ($user->peran_utama === 'dosen_mengajar') {
-                    $userArr['peran_kurikulum_mengajar'] = $user->peran_kurikulum_mengajar;
-                }
+                $userArr['dosen_peran'] = $user->dosenPeran()->with('mataKuliah')->get()->map(function($peran) {
+                    return [
+                        'id' => $peran->id,
+                        'tipe_peran' => $peran->tipe_peran,
+                        'mata_kuliah_kode' => $peran->mata_kuliah_kode,
+                        'mata_kuliah_nama' => $peran->mataKuliah ? $peran->mataKuliah->nama : null,
+                        'blok' => $peran->blok,
+                        'semester' => $peran->semester,
+                        'peran_kurikulum' => $peran->peran_kurikulum,
+                    ];
+                });
                 return $userArr;
             });
         }
@@ -80,12 +81,8 @@ class UserController extends Controller
             'password' => 'required|string|min:6',
             'kompetensi' => 'nullable',
             'keahlian' => 'nullable',
-            'peran_kurikulum' => 'nullable|array',
             'semester' => 'nullable|integer|min:1|max:8',
-            'peran_utama' => 'required|in:ketua,anggota,dosen_mengajar,standby',
-            'matkul_ketua_id' => 'nullable|required_if:peran_utama,ketua|exists:mata_kuliah,kode',
-            'matkul_anggota_id' => 'nullable|required_if:peran_utama,anggota|exists:mata_kuliah,kode',
-            'peran_kurikulum_mengajar' => 'nullable|required_if:peran_utama,dosen_mengajar|string',
+            'dosen_peran' => 'nullable|array', // array of peran
         ]);
         $validated['password'] = Hash::make($validated['password']);
 
@@ -94,33 +91,39 @@ class UserController extends Controller
             $validated['kompetensi'] = array_map('trim', explode(',', $validated['kompetensi']));
         }
 
-        // Convert peran_kurikulum from string to array if it's a string
-        if (isset($validated['peran_kurikulum']) && is_string($validated['peran_kurikulum'])) {
-            $validated['peran_kurikulum'] = array_map('trim', explode(',', $validated['peran_kurikulum']));
-        }
+        // Hilangkan validasi dan assignment peran_utama dan peran_kurikulum
+        $dosenPeran = $request->input('dosen_peran', []);
 
-        // Validasi satu dosen hanya satu peran utama
-        if (User::where('nid', $request->nid)->where('peran_utama', '!=', null)->exists()) {
-            return response()->json(['message' => 'Dosen hanya boleh punya satu peran utama.'], 422);
+        // Tambahkan validasi: maksimal 2 peran di blok yang sama untuk satu dosen
+        $blokCount = [];
+        foreach ($dosenPeran as $peran) {
+            if (($peran['tipe_peran'] ?? null) !== 'mengajar' && !empty($peran['mata_kuliah_kode'])) {
+                $kode = $peran['mata_kuliah_kode'];
+                $blokCount[$kode] = ($blokCount[$kode] ?? 0) + 1;
+            }
         }
-        // Validasi satu matkul hanya satu ketua
-        if ($request->peran_utama === 'ketua' && User::where('matkul_ketua_id', $request->matkul_ketua_id)->where('peran_utama', 'ketua')->exists()) {
-            return response()->json(['message' => 'Mata kuliah ini sudah memiliki ketua.'], 422);
+        foreach ($blokCount as $kode => $count) {
+            if ($count > 2) {
+                // Ambil nama blok jika bisa
+                $mk = \App\Models\MataKuliah::where('kode', $kode)->first();
+                $nama = $mk ? $mk->nama : $kode;
+                return response()->json([
+                    'message' => "Maksimal 2 peran di blok $nama untuk satu dosen.",
+                ], 422);
+            }
         }
-        // Validasi anggota max 3 per matkul
-        if ($request->peran_utama === 'anggota' && User::where('matkul_anggota_id', $request->matkul_anggota_id)->where('peran_utama', 'anggota')->count() >= 3) {
-            return response()->json(['message' => 'Mata kuliah ini sudah memiliki 3 anggota.'], 422);
-        }
-
         $user = User::create($validated);
-
-        // Log activity
-        ActivityLogService::logCreate(
-            'USER',
-            "Menambahkan {$validated['role']} baru: {$validated['name']}",
-            $validated,
-            $request
-        );
+        // Simpan peran ke tabel dosen_peran
+        foreach ($dosenPeran as $peran) {
+            DosenPeran::create([
+                'user_id' => $user->id,
+                'tipe_peran' => $peran['tipe_peran'],
+                'mata_kuliah_kode' => $peran['tipe_peran'] === 'mengajar' ? null : $peran['mata_kuliah_kode'],
+                'peran_kurikulum' => $peran['peran_kurikulum'],
+                'blok' => $peran['tipe_peran'] === 'mengajar' ? null : ($peran['blok'] ?? null),
+                'semester' => $peran['tipe_peran'] === 'mengajar' ? null : ($peran['semester'] ?? null),
+            ]);
+        }
 
         return response()->json($user, 201);
     }
@@ -129,7 +132,6 @@ class UserController extends Controller
     public function update(Request $request, $id)
     {
         $user = User::findOrFail($id);
-        $oldData = $user->toArray();
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string',
@@ -161,50 +163,24 @@ class UserController extends Controller
             'role' => 'sometimes|required|in:super_admin,tim_akademik,dosen,mahasiswa',
             'password' => 'nullable|string|min:6',
             'kompetensi' => 'nullable',
-            'peran_kurikulum' => 'nullable|array',
+            'keahlian' => 'nullable',
             'semester' => 'nullable|integer|min:1|max:8',
-            'peran_utama' => 'sometimes|required|in:ketua,anggota,dosen_mengajar',
-            'matkul_ketua_id' => 'nullable|required_if:peran_utama,ketua|exists:mata_kuliah,kode',
-            'matkul_anggota_id' => 'nullable|required_if:peran_utama,anggota|exists:mata_kuliah,kode',
-            'peran_kurikulum_mengajar' => 'nullable|required_if:peran_utama,dosen_mengajar|string',
+            // Tidak boleh update dosen_peran dari sini
         ]);
         if (!empty($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         } else {
             unset($validated['password']);
         }
-
-        // Convert kompetensi from string to array if it's a string (e.g., from form input)
         if (isset($validated['kompetensi']) && is_string($validated['kompetensi'])) {
             $validated['kompetensi'] = array_map('trim', explode(',', $validated['kompetensi']));
         }
-
-        // Convert peran_kurikulum from string to array if it's a string
-        if (isset($validated['peran_kurikulum']) && is_string($validated['peran_kurikulum'])) {
-            $validated['peran_kurikulum'] = array_map('trim', explode(',', $validated['peran_kurikulum']));
+        // Tambahkan konversi keahlian jika string
+        if (isset($validated['keahlian']) && is_string($validated['keahlian'])) {
+            $validated['keahlian'] = array_map('trim', explode(',', $validated['keahlian']));
         }
-
-        // Jika update peran utama, validasi ulang
-        if (isset($validated['peran_utama'])) {
-            if ($validated['peran_utama'] === 'ketua' && User::where('matkul_ketua_id', $validated['matkul_ketua_id'])->where('peran_utama', 'ketua')->where('id', '!=', $id)->exists()) {
-                return response()->json(['message' => 'Mata kuliah ini sudah memiliki ketua.'], 422);
-            }
-            if ($validated['peran_utama'] === 'anggota' && User::where('matkul_anggota_id', $validated['matkul_anggota_id'])->where('peran_utama', 'anggota')->where('id', '!=', $id)->count() >= 3) {
-                return response()->json(['message' => 'Mata kuliah ini sudah memiliki 3 anggota.'], 422);
-            }
-        }
-
         $user->update($validated);
-
-        // Log activity
-        ActivityLogService::logUpdate(
-            'USER',
-            "Mengupdate data {$user->role}: {$user->name}",
-            $oldData,
-            $validated,
-            $request
-        );
-
+        
         return response()->json($user);
     }
 
@@ -212,7 +188,6 @@ class UserController extends Controller
     public function destroy($id)
     {
         $user = User::findOrFail($id);
-        $oldData = $user->toArray();
 
         // Reset login status and delete all tokens
         $user->is_logged_in = 0;
@@ -220,14 +195,6 @@ class UserController extends Controller
         $user->save();
         $user->tokens()->delete();
         $user->delete();
-
-        // Log activity
-        ActivityLogService::logDelete(
-            'USER',
-            "Menghapus {$user->role}: {$user->name}",
-            $oldData,
-            request()
-        );
 
         return response()->json(['message' => 'User deleted']);
     }
@@ -253,14 +220,9 @@ class UserController extends Controller
 
         $importedCount = $totalRows - count($failedRows);
 
-        // Log activity
-        ActivityLogService::logImport(
-            'USER',
-            "Import data dosen dari file: {$request->file('file')->getClientOriginalName()}",
-            $request->file('file')->getClientOriginalName(),
-            $importedCount,
-            $request
-        );
+        activity()
+            ->causedBy(Auth::user())
+            ->log("Mengimpor {$importedCount} data dosen dari file: {$request->file('file')->getClientOriginalName()}");
 
         if ($importedCount > 0) {
             // Ada data valid yang berhasil diimpor
@@ -300,14 +262,9 @@ class UserController extends Controller
 
         $importedCount = $totalRows - count($failedRows);
 
-        // Log activity
-        ActivityLogService::logImport(
-            'USER',
-            "Import data mahasiswa dari file: {$request->file('file')->getClientOriginalName()}",
-            $request->file('file')->getClientOriginalName(),
-            $importedCount,
-            $request
-        );
+        activity()
+            ->causedBy(Auth::user())
+            ->log("Mengimpor {$importedCount} data mahasiswa dari file: {$request->file('file')->getClientOriginalName()}");
 
         if ($importedCount > 0) {
             // Ada data valid yang berhasil diimpor
@@ -347,14 +304,9 @@ class UserController extends Controller
 
         $importedCount = $totalRows - count($failedRows);
 
-        // Log activity
-        ActivityLogService::logImport(
-            'USER',
-            "Import data tim akademik dari file: {$request->file('file')->getClientOriginalName()}",
-            $request->file('file')->getClientOriginalName(),
-            $importedCount,
-            $request
-        );
+        activity()
+            ->causedBy(Auth::user())
+            ->log("Mengimpor {$importedCount} data tim akademik dari file: {$request->file('file')->getClientOriginalName()}");
 
         if ($importedCount > 0) {
             // Ada data valid yang berhasil diimpor

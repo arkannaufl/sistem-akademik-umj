@@ -6,9 +6,9 @@ use Illuminate\Http\Request;
 use App\Models\PBL;
 use App\Models\MataKuliah;
 use Illuminate\Http\Response;
-use App\Services\ActivityLogService;
 use App\Models\PBLMapping;
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 
 class MataKuliahPBLController extends Controller
 {
@@ -32,8 +32,7 @@ class MataKuliahPBLController extends Controller
         ]);
         $validated['mata_kuliah_kode'] = $kode;
         $pbl = PBL::create($validated);
-        // Logging
-        ActivityLogService::logCreate('PBL', "Menambah PBL modul ke-{$pbl->modul_ke} pada {$kode}: {$pbl->nama_modul}", $pbl->toArray());
+        
         return response()->json($pbl, Response::HTTP_CREATED);
     }
 
@@ -57,37 +56,8 @@ class MataKuliahPBLController extends Controller
             'nama_modul' => 'sometimes|required|string',
         ]);
         
-        // Simpan data lama untuk perbandingan
-        $oldData = $pbl->toArray();
-        $oldModulKe = $pbl->modul_ke;
-        $oldNamaModul = $pbl->nama_modul;
-        
         $pbl->update($validated);
         
-        // Buat deskripsi detail perubahan
-        $changes = [];
-        
-        // Cek perubahan modul_ke
-        if ($oldModulKe !== $pbl->modul_ke) {
-            $oldModulKeDisplay = $oldModulKe ?: '(kosong)';
-            $newModulKeDisplay = $pbl->modul_ke ?: '(kosong)';
-            $changes[] = "modul_ke: {$oldModulKeDisplay} → {$newModulKeDisplay}";
-        }
-        
-        // Cek perubahan nama_modul
-        if ($oldNamaModul !== $pbl->nama_modul) {
-            $oldNamaModulDisplay = $oldNamaModul ?: '(kosong)';
-            $newNamaModulDisplay = $pbl->nama_modul ?: '(kosong)';
-            $changes[] = "nama_modul: {$oldNamaModulDisplay} → {$newNamaModulDisplay}";
-        }
-
-        $description = "Mengupdate PBL modul ke-{$pbl->modul_ke} pada {$pbl->mata_kuliah_kode}";
-        if (!empty($changes)) {
-            $description .= " (" . implode(', ', $changes) . ")";
-        }
-        
-        // Logging
-        ActivityLogService::logUpdate('PBL', $description, ['before' => $oldData, 'after' => $pbl->toArray()]);
         return response()->json($pbl);
     }
 
@@ -97,10 +67,8 @@ class MataKuliahPBLController extends Controller
     public function destroy($id)
     {
         $pbl = \App\Models\PBL::findOrFail($id);
-        $old = $pbl->toArray();
         $pbl->delete();
-        // Logging
-        ActivityLogService::logDelete('PBL', "Menghapus PBL modul ke-{$old['modul_ke']} pada {$old['mata_kuliah_kode']}: {$old['nama_modul']}", $old);
+        
         return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
@@ -172,6 +140,16 @@ class MataKuliahPBLController extends Controller
             'pbl_id' => $pblId,
             'dosen_id' => $validated['dosen_id'],
         ]);
+        
+        activity()
+            ->causedBy(Auth::user())
+            ->performedOn($pbl)
+            ->withProperties(['attributes' => ['dosen_id' => $validated['dosen_id']]])
+            ->log("Dosen dengan ID {$validated['dosen_id']} di-assign ke PBL");
+
+        // Tambahkan increment pbl_assignment_count
+        $user = \App\Models\User::find($validated['dosen_id']);
+        if ($user) $user->increment('pbl_assignment_count');
         return response()->json($mapping->load('dosen'));
     }
 
@@ -184,7 +162,18 @@ class MataKuliahPBLController extends Controller
         if (!$mapping) {
             return response()->json(['message' => 'Mapping tidak ditemukan'], 404);
         }
+        $pbl = $mapping->pbl;
         $mapping->delete();
+        
+        activity()
+            ->causedBy(Auth::user())
+            ->performedOn($pbl)
+            ->withProperties(['attributes' => ['dosen_id' => $dosenId]])
+            ->log("Dosen dengan ID {$dosenId} di-unassign dari PBL");
+
+        // Decrement pbl_assignment_count
+        $user = \App\Models\User::find($dosenId);
+        if ($user && $user->pbl_assignment_count > 0) $user->decrement('pbl_assignment_count');
         return response()->json(['message' => 'Dosen unassigned']);
     }
 
@@ -209,6 +198,10 @@ class MataKuliahPBLController extends Controller
         $result = [];
         $pbls = PBL::with('dosen')->whereIn('id', $validated['pbl_ids'])->get();
         foreach ($pbls as $pbl) {
+            // Pastikan pbl_assignment_count di-load untuk setiap dosen
+            $pbl->dosen->each(function($dosen) {
+                $dosen->pbl_assignment_count = $dosen->pbl_assignment_count ?? 0;
+            });
             $result[$pbl->id] = $pbl->dosen;
         }
         return response()->json($result);
@@ -221,6 +214,12 @@ class MataKuliahPBLController extends Controller
     {
         $pbl = PBL::findOrFail($pblId);
         $deleted = PBLMapping::where('pbl_id', $pblId)->delete();
+        
+        activity()
+            ->causedBy(Auth::user())
+            ->performedOn($pbl)
+            ->log("Semua dosen pada PBL ini telah di-reset");
+
         return response()->json(['message' => 'Semua dosen pada PBL ini telah direset', 'deleted' => $deleted]);
     }
 
@@ -269,6 +268,16 @@ class MataKuliahPBLController extends Controller
                 'pbl_id' => $item['pbl_id'],
                 'dosen_id' => $item['dosen_id'],
             ]);
+            // Increment pbl_assignment_count
+            $user = \App\Models\User::find($item['dosen_id']);
+            if ($user) $user->increment('pbl_assignment_count');
+            
+            activity()
+                ->causedBy(Auth::user())
+                ->performedOn($pbl)
+                ->withProperties(['attributes' => ['dosen_id' => $item['dosen_id']]])
+                ->log("Dosen dengan ID {$item['dosen_id']} di-assign ke PBL (batch)");
+
             $results[] = [
                 'pbl_id' => $item['pbl_id'],
                 'dosen_id' => $item['dosen_id'],
@@ -288,6 +297,13 @@ class MataKuliahPBLController extends Controller
             'pbl_ids.*' => 'required|integer|exists:pbls,id',
         ]);
         foreach ($data['pbl_ids'] as $pblId) {
+            $pbl = PBL::find($pblId);
+            if ($pbl) {
+                activity()
+                    ->causedBy(Auth::user())
+                    ->performedOn($pbl)
+                    ->log("Semua dosen pada PBL ini telah di-reset (batch)");
+            }
             PBLMapping::where('pbl_id', $pblId)->delete();
         }
         return response()->json(['message' => 'Batch reset selesai']);

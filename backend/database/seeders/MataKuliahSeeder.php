@@ -14,6 +14,20 @@ class MataKuliahSeeder extends Seeder
         $blokData = [];
         $nonBlokData = [];
 
+        $allPossiblePeran = [
+            'Tutor PBL',
+            'Koordinator Praktikum',
+            'Pengampu',
+            'Ketua Tim Pengajar',
+            'Anggota Tim Pengajar',
+            'Penanggung Jawab OSCE',
+            'Koordinator Ujian Blok',
+            'Pembimbing Skill Lab',
+            'Penguji Skill Lab',
+            'Moderator Seminar',
+            'Pembimbing Tugas Akhir',
+        ];
+
         for ($semester = 1; $semester <= 7; $semester++) {
             $isGanjil = $semester % 2 !== 0;
             $periode = $isGanjil ? 'Ganjil' : 'Genap';
@@ -26,6 +40,8 @@ class MataKuliahSeeder extends Seeder
             $currentBlokStart = clone $startDate;
             for ($blok = 1; $blok <= 4; $blok++) {
                 $blokEnd = (clone $currentBlokStart)->copy()->addWeeks(4)->subDay();
+                $peranBlok = $allPossiblePeran;
+                shuffle($peranBlok);
                 $blokData[] = [
                     'kode' => 'MKB' . $semester . '0' . $blok,
                     'nama' => $this->getBlokName($semester, $blok),
@@ -37,11 +53,7 @@ class MataKuliahSeeder extends Seeder
                     'tanggal_akhir' => $blokEnd->format('Y-m-d'),
                     'blok' => $blok,
                     'durasi_minggu' => 4,
-                    'peran_dalam_kurikulum' => [
-                        'Tutor PBL Blok ' . $blok,
-                        'Koordinator Praktikum ' . $this->getBlokName($semester, $blok),
-                        'Pengampu ' . $this->getBlokName($semester, $blok),
-                    ],
+                    'peran_dalam_kurikulum' => array_slice($peranBlok, 0, 2),
                 ];
                 $currentBlokStart = (clone $blokEnd)->copy()->addDay();
             }
@@ -49,6 +61,8 @@ class MataKuliahSeeder extends Seeder
             // 2. Tambah hanya 1 matakuliah Non Blok per semester
             $nonBlokEndDate = (clone $startDate)->copy()->addWeeks(20)->subDay();
             $tipe_non_block = in_array($semester, [1, 2, 4, 7]) ? 'CSR' : 'Non-CSR';
+            $peranNonBlok = $allPossiblePeran;
+            shuffle($peranNonBlok);
             $nonBlokData[] = [
                 'kode' => 'MKU' . str_pad($semester, 3, '0', STR_PAD_LEFT),
                 'nama' => $this->getNonBlokName($semester),
@@ -61,10 +75,7 @@ class MataKuliahSeeder extends Seeder
                 'blok' => null,
                 'durasi_minggu' => 20,
                 'tipe_non_block' => $tipe_non_block,
-                'peran_dalam_kurikulum' => [
-                    'Pengampu ' . $this->getNonBlokName($semester),
-                    'Koordinator ' . $this->getNonBlokName($semester),
-                ],
+                'peran_dalam_kurikulum' => array_slice($peranNonBlok, 0, 2),
             ];
 
             if (!$isGanjil) {

@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Kegiatan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Services\ActivityLogService;
 
 class KegiatanController extends Controller
 {
@@ -36,14 +35,6 @@ class KegiatanController extends Controller
 
         $kegiatan = Kegiatan::create($request->all());
 
-        // Log activity
-        ActivityLogService::logCreate(
-            'KEGIATAN',
-            "Menambahkan kegiatan baru: {$kegiatan->nama}",
-            $request->all(),
-            $request
-        );
-
         return response()->json($kegiatan, 201);
     }
 
@@ -71,17 +62,7 @@ class KegiatanController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        $oldData = $kegiatan->toArray();
         $kegiatan->update($request->all());
-
-        // Log activity
-        ActivityLogService::logUpdate(
-            'KEGIATAN',
-            "Mengupdate kegiatan: {$kegiatan->nama}",
-            $oldData,
-            $request->all(),
-            $request
-        );
 
         return response()->json($kegiatan);
     }
@@ -91,16 +72,7 @@ class KegiatanController extends Controller
      */
     public function destroy(Kegiatan $kegiatan)
     {
-        $oldData = $kegiatan->toArray();
         $kegiatan->delete();
-
-        // Log activity
-        ActivityLogService::logDelete(
-            'KEGIATAN',
-            "Menghapus kegiatan: {$oldData['nama']}",
-            $oldData,
-            request()
-        );
 
         return response()->json(null, 204);
     }

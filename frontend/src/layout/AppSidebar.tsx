@@ -52,7 +52,7 @@ const navItems: NavItem[] = [
   },
   {
     icon: <PlusIcon />,
-    name: "Generate",
+    name: "Generate Mahasiswa",
     subItems: [
       { name: "Kelompok", path: "/generate/kelompok" },
       { name: "Kelas", path: "/generate/kelas" },

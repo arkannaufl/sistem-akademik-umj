@@ -31,6 +31,7 @@ type MataKuliah = {
   tanggal_akhir?: string;
   durasi_minggu?: number | null;
   peran_dalam_kurikulum?: string[];
+  keahlian_required?: string[];
 };
 
 // Fungsi untuk menghitung durasi dalam minggu
@@ -43,7 +44,7 @@ const calculateWeeks = (startDate: string, endDate: string): number | null => {
   return diffWeeks;
 };
 
-const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 const JENIS_OPTIONS = ["Blok", "Non Blok"];
 const SEMESTER_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 const BLOK_OPTIONS = [1, 2, 3, 4];
@@ -127,6 +128,13 @@ interface CSRItem {
   keahlian_required?: string[]; // tambahkan property ini
 }
 
+// Tambahkan tipe untuk PBL
+type PBLItem = {
+  id?: number;
+  modul_ke: string;
+  nama_modul: string;
+};
+
 export default function MataKuliah() {
   const [data, setData] = useState<MataKuliah[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,13 +154,14 @@ export default function MataKuliah() {
     durasiMinggu: null,
     tipe_non_block: 'Non-CSR',
     peran_dalam_kurikulum: [],
+    keahlian_required: [],
   });
   const [importedFile, setImportedFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [cellErrors, setCellErrors] = useState<{ row: number, field: string, message: string, kode?: string }[]>([]);
   const [previewPage, setPreviewPage] = useState(1);
-  const [previewPageSize, setPreviewPageSize] = useState(5);
+  const [previewPageSize, setPreviewPageSize] = useState(10);
   const previewTotalPages = Math.ceil(previewData.length / previewPageSize);
   const paginatedPreviewData = previewData.slice((previewPage - 1) * previewPageSize, previewPage * previewPageSize);
   const [editingCell, setEditingCell] = useState<{ row: number; key: string } | null>(null);
@@ -166,17 +175,15 @@ export default function MataKuliah() {
   const [page, setPage] = useState(1);
   const [editMode, setEditMode] = useState(false);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteModalBulk, setShowDeleteModalBulk] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   // Tambahan state untuk evaluasi dinamis
-  const [jumlahCSR, setJumlahCSR] = useState(1);
   const [csrList, setCsrList] = useState<CSRItem[]>([]);
   const [jumlahPBL, setJumlahPBL] = useState(1);
-  const [pblList, setPblList] = useState<{ modul_ke: string; nama_modul: string }[]>([]);
+  const [pblList, setPblList] = useState<PBLItem[]>([]);
   // Tambahan state untuk CSR yang dihapus
   const [deletedCsrIds, setDeletedCsrIds] = useState<number[]>([]);
   // State untuk menyimpan CSR asli dari backend saat edit
@@ -186,6 +193,12 @@ export default function MataKuliah() {
   // Tambahkan state untuk daftar peran kurikulum global
   const [peranKurikulumInput, setPeranKurikulumInput] = useState('');
   const [peranKurikulumList, setPeranKurikulumList] = useState<string[]>([]);
+  // Tambahkan state untuk input dan list keahlian
+  const [keahlianInput, setKeahlianInput] = useState('');
+  const [keahlianList, setKeahlianList] = useState<string[]>([]);
+  // State untuk menyimpan PBL asli dari backend saat edit
+  const [oldPblList, setOldPblList] = useState<PBLItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const mataKuliahToDelete = data.find(mk => mk.kode === selectedDeleteKode);
 
@@ -218,11 +231,9 @@ export default function MataKuliah() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      setError(null);
       const response = await api.get('/mata-kuliah');
       setData(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      setError('Gagal mengambil data mata kuliah');
       setData([]);
     } finally {
       setLoading(false);
@@ -241,10 +252,21 @@ export default function MataKuliah() {
     });
   }, []);
 
+  // Fetch daftar keahlian global (bisa dari API atau hardcode dulu)
+  useEffect(() => {
+    api.get('/mata-kuliah/keahlian-options').then(res => {
+      if (Array.isArray(res.data)) setKeahlianList(res.data);
+    }).catch(() => {
+      // fallback jika API belum ada
+      setKeahlianList([
+        'Anatomi', 'Fisiologi', 'Biokimia Dasar', 'Patologi', 'Farmakologi', 'Kardiologi', 'Pulmonologi', 'Gastroenterologi', 'Neurologi', 'Radiologi', 'Pediatri', 'Ginekologi', 'Psikiatri', 'Dermatologi', 'Oftalmologi', 'Imunologi', 'Bedah', 'Nutrisi', 'Epidemiologi', 'Kesehatan Masyarakat'
+      ]);
+    });
+  }, []);
+
   const handleSaveData = async () => {
     setIsSaving(true);
     try {
-      setError(null);
       setSuccess(null);
       // Validasi custom sebelum submit
       // 1. Non Blok hanya boleh 1 per semester
@@ -295,11 +317,38 @@ export default function MataKuliah() {
         tanggal_akhir: form.tanggalAkhir,
         durasi_minggu: form.durasiMinggu,
         peran_dalam_kurikulum: form.peran_dalam_kurikulum,
+        keahlian_required: form.keahlian_required,
       };
 
       if (editMode) {
         await api.put(`/mata-kuliah/${form.kode}`, formData);
         setSuccess('Data mata kuliah berhasil diperbarui');
+        // --- Sinkronisasi PBL ---
+        if (form.jenis === 'Blok') {
+          // 1. Hapus modul yang dihapus
+          const oldIds = oldPblList.map(p => p.id);
+          const newIds = pblList.map(p => p.id).filter(Boolean);
+          const deletedIds = oldIds.filter(id => !newIds.includes(id));
+          await Promise.all(deletedIds.map(id => api.delete(`/pbls/${id}`)));
+          // 2. Update modul yang sudah ada
+          await Promise.all(
+            pblList.filter(p => p.id).map((p, idx) =>
+              api.put(`/pbls/${p.id}`, {
+                modul_ke: String(idx + 1),
+                nama_modul: p.nama_modul,
+              })
+            )
+          );
+          // 3. Tambah modul baru
+          await Promise.all(
+            pblList.filter(p => !p.id).map((p, idx) =>
+              api.post(`/mata-kuliah/${form.kode}/pbls`, {
+                modul_ke: String(idx + 1),
+                nama_modul: p.nama_modul,
+              })
+            )
+          );
+        }
         // Sinkronisasi CSR
         // 1. Update/POST
         await Promise.all(csrList.map(async (csr) => {
@@ -348,7 +397,10 @@ export default function MataKuliah() {
           })));
         }
         if (form.jenis === 'Blok' && pblList.length > 0) {
-          await Promise.all(pblList.map(pbl => api.post(`/mata-kuliah/${form.kode}/pbls`, pbl)));
+          await Promise.all(pblList.map((pbl, idx) => api.post(`/mata-kuliah/${form.kode}/pbls`, {
+            modul_ke: String(idx + 1),
+            nama_modul: pbl.nama_modul,
+          })));
         }
       }
     } catch (error: any) {
@@ -373,7 +425,6 @@ export default function MataKuliah() {
     if (selectedDeleteKode) {
       setIsDeleting(true);
       try {
-        setError(null);
         setSuccess(null);
         await api.delete(`/mata-kuliah/${selectedDeleteKode}`);
         setSuccess('Data mata kuliah berhasil dihapus');
@@ -400,6 +451,7 @@ export default function MataKuliah() {
       durasiMinggu: mk.durasi_minggu || null,
       tipe_non_block: mk.tipe_non_block || 'Non-CSR',
       peran_dalam_kurikulum: Array.isArray(mk.peran_dalam_kurikulum) ? mk.peran_dalam_kurikulum : [],
+      keahlian_required: Array.isArray(mk.keahlian_required) ? mk.keahlian_required : [],
     });
     setShowModal(true);
     setEditMode(true);
@@ -414,6 +466,20 @@ export default function MataKuliah() {
       setOldCsrList([]);
       setDeletedCsrIds([]);
     }
+    // Fetch PBL dari backend jika jenis Blok
+    if (mk.jenis === 'Blok') {
+      try {
+        const pblRes = await api.get(`/mata-kuliah/${mk.kode}/pbls`);
+        setPblList(Array.isArray(pblRes.data) ? pblRes.data : []);
+        setOldPblList(Array.isArray(pblRes.data) ? pblRes.data : []);
+      } catch (e) {
+        setPblList([]);
+        setOldPblList([]);
+      }
+    } else {
+      setPblList([]);
+      setOldPblList([]);
+    }
   };
 
   const handleImportExcel = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -426,7 +492,6 @@ export default function MataKuliah() {
       setPreviewData(excelParsedData);
       setValidationErrors(validationResult.errors);
       setCellErrors(validationResult.cellErrors);
-      setError("");
     } catch (err: any) {
       setError(err.message || "Gagal membaca file Excel");
       setPreviewData([]);
@@ -441,7 +506,6 @@ export default function MataKuliah() {
     if (!previewData || previewData.length === 0) return;
     
     setLoading(true);
-    setError(null);
     setSuccess(null);
     setCellErrors([]);
     setValidationErrors([]);
@@ -513,9 +577,9 @@ export default function MataKuliah() {
       durasiMinggu: null,
       tipe_non_block: 'Non-CSR',
       peran_dalam_kurikulum: [],
+      keahlian_required: [],
     });
     setEditMode(false);
-    setJumlahCSR(1);
     setCsrList([]);
     setJumlahPBL(1);
     setPblList([]);
@@ -804,7 +868,6 @@ export default function MataKuliah() {
       const jumlahBlok = blokDiSemester.length || 4;
       // Jangan overwrite csrList jika jumlah baris sama dan tipe_non_block tidak berubah
       if (csrList.length === jumlahBlok && oldCsrList.length > 0) return;
-      setJumlahCSR(jumlahBlok);
       setCsrList(Array.from({ length: jumlahBlok }, (_, i) => {
         const blokKe = i + 1;
         const nomor_csr = `${form.semester}.${blokKe}`;
@@ -1211,6 +1274,7 @@ export default function MataKuliah() {
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Durasi Minggu</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Tipe Non-Blok</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Peran dalam Kurikulum</th>
+                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Keahlian Dibutuhkan</th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-center text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
@@ -1221,7 +1285,7 @@ export default function MataKuliah() {
                     <td className="px-4 py-4">
                       <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
                     </td>
-                    {Array.from({ length: 12 }).map((_, colIdx) => (
+                    {Array.from({ length: 13 }).map((_, colIdx) => (
                       <td key={colIdx} className="px-6 py-4">
                         <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse opacity-80"></div>
                       </td>
@@ -1272,6 +1336,11 @@ export default function MataKuliah() {
                         ? mk.peran_dalam_kurikulum.join(', ')
                         : '-'}
                     </td>
+                    <td className="px-6 py-4 whitespace-pre-line text-gray-800 dark:text-white/90 align-middle min-w-[200px]">
+                      {Array.isArray(mk.keahlian_required) && mk.keahlian_required.length > 0
+                        ? mk.keahlian_required.join(', ')
+                        : '-'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center align-middle">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -1296,7 +1365,7 @@ export default function MataKuliah() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={12} className="text-center py-8 text-gray-400 dark:text-gray-500">Belum ada data.</td>
+                  <td colSpan={13} className="text-center py-8 text-gray-400 dark:text-gray-500">Belum ada data.</td>
                 </tr>
               )}
             </tbody>
@@ -1596,41 +1665,45 @@ export default function MataKuliah() {
                 {/* Input PBL jika Blok */}
                 {form.jenis === 'Blok' && (
                   <div className="mb-3 sm:mb-4">
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Jumlah PBL</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={jumlahPBL}
-                      onChange={e => setJumlahPBL(Number(e.target.value))}
-                      className="w-28 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white font-medium text-base focus:outline-none focus:ring-2 focus:ring-brand-500 transition placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-sm"
-                      placeholder="Jumlah PBL"
-                    />
-                    <div className="mt-4 flex flex-col gap-3">
-                      {pblList.map((pbl, idx) => (
-                        <div key={idx} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-sm">
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            placeholder="Modul Ke"
-                            value={pbl.modul_ke}
-                            onChange={e => {
-                              // Hanya izinkan angka
-                              const val = e.target.value.replace(/[^0-9]/g, '');
-                              setPblList(list => list.map((c, i) => i === idx ? { ...c, modul_ke: val } : c));
-                            }}
-                            className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white font-medium text-base focus:outline-none focus:ring-2 focus:ring-brand-500 transition placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                          />
-                          <input
-                            type="text"
-                            placeholder="Nama Modul"
-                            value={pbl.nama_modul}
-                            onChange={e => setPblList(list => list.map((c, i) => i === idx ? { ...c, nama_modul: e.target.value } : c))}
-                            className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white font-medium text-base focus:outline-none focus:ring-2 focus:ring-brand-500 transition placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                          />
-                        </div>
-                      ))}
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Daftar Modul PBL</label>
+                    <div className="mt-2 flex flex-col gap-3">
+                      {pblList.length === 0 ? (
+                        <div className="text-gray-500 dark:text-gray-400 text-sm">Belum ada modul PBL.</div>
+                      ) : (
+                        pblList.map((pbl, idx) => (
+                          <div key={idx} className="flex gap-2 items-center bg-gray-50 dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                            <span className="w-24 text-xs font-medium text-gray-700 dark:text-gray-300 text-center">Modul Ke-{idx + 1}</span>
+                            <input
+                              type="text"
+                              value={String(idx + 1)}
+                              readOnly
+                              className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 text-center cursor-not-allowed"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Nama Modul"
+                              value={pbl.nama_modul}
+                              onChange={e => setPblList(list => list.map((c, i) => i === idx ? { ...c, nama_modul: e.target.value } : c))}
+                              className="flex-1 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setPblList(list => list.filter((_, i) => i !== idx))}
+                              className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setPblList(list => [...list, { modul_ke: String(list.length + 1), nama_modul: '' }])}
+                      className="mt-3 px-4 py-2 text-xs bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+                    >
+                      Tambah Modul PBL
+                    </button>
                   </div>
                 )}
                 {form.jenis === "Blok" && (
@@ -1796,6 +1869,109 @@ export default function MataKuliah() {
                       }}
                       className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium shadow-theme-xs hover:bg-brand-600 transition flex items-center justify-center"
                       disabled={!peranKurikulumInput.trim() || peranKurikulumList.includes(peranKurikulumInput.trim())}
+                    >
+                      Tambah
+                    </button>
+                  </div>
+                </div>
+                <div className="mb-3 sm:mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Keahlian Dibutuhkan</label>
+                  <Listbox
+                    value={Array.isArray(form.keahlian_required) ? form.keahlian_required : []}
+                    onChange={val => setForm(f => ({ ...f, keahlian_required: val }))}
+                    multiple
+                  >
+                    {({ open }) => (
+                      <div className="relative">
+                        <Listbox.Button className="relative w-full cursor-default rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 pl-3 pr-10 text-left text-gray-800 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm">
+                          <span className="block truncate">
+                            {Array.isArray(form.keahlian_required) && form.keahlian_required.length > 0
+                              ? form.keahlian_required.join(", ")
+                              : "Pilih Keahlian"}
+                          </span>
+                          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                            <FontAwesomeIcon
+                              icon={faChevronDown}
+                              className="h-5 w-5 text-gray-400"
+                              aria-hidden="true"
+                            />
+                          </span>
+                        </Listbox.Button>
+                        <Transition
+                          show={open}
+                          as={"div"}
+                          leave="transition ease-in duration-100"
+                          leaveFrom="opacity-100"
+                          leaveTo="opacity-0"
+                          className="absolute z-50 mt-1 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm max-h-60 hide-scroll"
+                        >
+                          <Listbox.Options static>
+                            {keahlianList.length === 0 ? (
+                              <Listbox.Option
+                                className="relative cursor-default select-none py-2.5 pl-4 pr-4 text-gray-400 dark:text-gray-500"
+                                value=""
+                                disabled
+                              >
+                                Belum ada keahlian
+                              </Listbox.Option>
+                            ) : (
+                              keahlianList.map((keahlian) => (
+                                <Listbox.Option
+                                  key={keahlian}
+                                  className={({ active }) =>
+                                    `relative cursor-default select-none py-2.5 pl-4 pr-4 ${active
+                                      ? 'bg-brand-100 text-brand-900 dark:bg-brand-700/20 dark:text-white'
+                                      : 'text-gray-900 dark:text-gray-100'
+                                    }`
+                                  }
+                                  value={keahlian}
+                                >
+                                  {({ selected }) => (
+                                    <div className="flex items-center justify-between">
+                                      <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>{keahlian}</span>
+                                      {selected && (
+                                        <span className="text-brand-500">
+                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </Listbox.Option>
+                              ))
+                            )}
+                          </Listbox.Options>
+                        </Transition>
+                      </div>
+                    )}
+                  </Listbox>
+                  <div className="flex gap-2 mt-3">
+                    <input
+                      type="text"
+                      value={keahlianInput}
+                      onChange={e => setKeahlianInput(e.target.value)}
+                      placeholder="Tambah keahlian baru"
+                      className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (keahlianInput.trim() && !keahlianList.includes(keahlianInput.trim())) {
+                          setKeahlianList(prev => [...prev, keahlianInput.trim()].sort());
+                          setForm(prev => ({
+                            ...prev,
+                            keahlian_required: Array.isArray(prev.keahlian_required)
+                              ? [...prev.keahlian_required, keahlianInput.trim()]
+                              : (typeof prev.keahlian_required === 'string' && String(prev.keahlian_required || '').trim() !== '')
+                                ? [...String(prev.keahlian_required || '').split(',').map((k: any) => String(k).trim()).filter((k: string) => k !== ''), keahlianInput.trim()]
+                                : [keahlianInput.trim()]
+                          }));
+                          setKeahlianInput("");
+                        }
+                      }}
+                      className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium shadow-theme-xs hover:bg-brand-600 transition flex items-center justify-center"
+                      disabled={!keahlianInput.trim() || keahlianList.includes(keahlianInput.trim())}
                     >
                       Tambah
                     </button>

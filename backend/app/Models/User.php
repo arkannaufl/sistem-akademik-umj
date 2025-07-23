@@ -7,11 +7,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, LogsActivity;
 
     /**
      * The attributes that are mass assignable.
@@ -22,12 +24,12 @@ class User extends Authenticatable
         'name', 'username', 'email', 'password', 'avatar',
         'nip', 'nid', 'nidn', 'nim', 'gender', 'ipk', 'status', 'angkatan',
         'telp', 'ket', 'role',
-        'kompetensi', 'peran_kurikulum',
+        'kompetensi',
         'keahlian',
         'is_logged_in',
         'current_token',
         'semester',
-        'peran_utama', 'matkul_ketua_id', 'matkul_anggota_id', 'peran_kurikulum_mengajar',
+        'matkul_ketua_id', 'matkul_anggota_id', 'peran_kurikulum_mengajar',
     ];
 
     /**
@@ -51,9 +53,17 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'kompetensi' => 'array',
-            'peran_kurikulum' => 'array',
             'keahlian' => 'array',
         ];
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontLogIfAttributesChangedOnly(['password', 'current_token', 'remember_token', 'is_logged_in', 'updated_at'])
+            ->setDescriptionForEvent(fn(string $eventName) => "User {$this->name} telah di-{$eventName}");
     }
 
     public function matkulKetua()
@@ -64,5 +74,10 @@ class User extends Authenticatable
     public function matkulAnggota()
     {
         return $this->belongsTo(MataKuliah::class, 'matkul_anggota_id', 'kode');
+    }
+
+    public function dosenPeran()
+    {
+        return $this->hasMany(DosenPeran::class, 'user_id');
     }
 }

@@ -5,10 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Kelas extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'kelas';
 
@@ -17,6 +19,14 @@ class Kelas extends Model
         'nama_kelas',
         'deskripsi'
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn(string $eventName) => "Kelas {$this->nama_kelas} (Semester {$this->semester}) telah di-{$eventName}");
+    }
 
     /**
      * Relasi ke kelompok kecil melalui tabel pivot
