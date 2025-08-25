@@ -1,0 +1,29 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class JadwalAgendaKhusus extends Model
+{
+    use HasFactory;
+
+    protected $table = 'jadwal_agenda_khusus';
+
+    protected $fillable = [
+        'mata_kuliah_kode',
+        'agenda',
+        'ruangan_id',
+        'kelompok_besar_id',
+        'use_ruangan',
+        'tanggal',
+        'jam_mulai',
+        'jam_selesai',
+        'jumlah_sesi',
+    ];
+
+    // Relasi
+    public function mataKuliah() { return $this->belongsTo(MataKuliah::class, 'mata_kuliah_kode', 'kode'); }
+    public function ruangan() { return $this->belongsTo(Ruangan::class, 'ruangan_id'); }
+}
