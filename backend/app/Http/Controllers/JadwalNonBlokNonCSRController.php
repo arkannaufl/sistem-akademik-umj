@@ -378,6 +378,20 @@ class JadwalNonBlokNonCSRController extends Controller
                 ->get()
         );
 
+        // Cek bentrok dengan kelompok besar (jika ada kelompok_besar_id di jadwal lain)
+        $kelompokBesarBentrok = $this->checkKelompokBesarBentrok($request, $ruanganId, $jamMulai, $jamSelesai);
+        if ($kelompokBesarBentrok) {
+            return $kelompokBesarBentrok;
+        }
+
+        // Cek bentrok antar Kelompok Besar (Kelompok Besar vs Kelompok Besar)
+        if (isset($request->kelompok_besar_id) && $request->kelompok_besar_id) {
+            $kelompokBesarVsKelompokBesarBentrok = $this->checkKelompokBesarVsKelompokBesarBentrok($request, $ruanganId, $jamMulai, $jamSelesai);
+            if ($kelompokBesarVsKelompokBesarBentrok) {
+                return $kelompokBesarVsKelompokBesarBentrok;
+            }
+        }
+
         // Untuk jadwal materi, cek juga bentrok dengan pengampu
         if ($jenisBaris === 'materi' && $dosenId) {
             $jadwalLain = $jadwalLain->merge(
@@ -560,5 +574,115 @@ class JadwalNonBlokNonCSRController extends Controller
             ]);
         }
         return response()->json([]);
+    }
+
+    private function checkKelompokBesarBentrok(Request $request, $ruanganId, $jamMulai, $jamSelesai)
+    {
+        $tanggal = $request->tanggal;
+        $kelompokBesarId = $request->kelompok_besar_id;
+
+        if (!$kelompokBesarId) {
+            return false;
+        }
+
+        // Ambil mahasiswa dalam kelompok besar yang dipilih
+        $mahasiswaIds = \App\Models\KelompokBesar::where('semester', $kelompokBesarId)
+            ->pluck('mahasiswa_id')
+            ->toArray();
+
+        if (empty($mahasiswaIds)) {
+            return false;
+        }
+
+        // Cek bentrok dengan jadwal PBL yang menggunakan kelompok kecil dari mahasiswa yang sama
+        $pblBentrok = \App\Models\JadwalPBL::where('tanggal', $tanggal)
+            ->where(function($q) use ($jamMulai, $jamSelesai) {
+                $q->where('jam_mulai', '<', $jamSelesai)
+                   ->where('jam_selesai', '>', $jamMulai);
+            })
+            ->whereHas('kelompokKecil', function($q) use ($mahasiswaIds) {
+                $q->whereIn('mahasiswa_id', $mahasiswaIds);
+            })
+            ->exists();
+
+        // Cek bentrok dengan jadwal Jurnal Reading yang menggunakan kelompok kecil dari mahasiswa yang sama
+        $jurnalBentrok = \App\Models\JadwalJurnalReading::where('tanggal', $tanggal)
+            ->where(function($q) use ($jamMulai, $jamSelesai) {
+                $q->where('jam_mulai', '<', $jamSelesai)
+                   ->where('jam_selesai', '>', $jamMulai);
+            })
+            ->whereHas('kelompokKecil', function($q) use ($mahasiswaIds) {
+                $q->whereIn('mahasiswa_id', $mahasiswaIds);
+            })
+            ->exists();
+
+        if ($pblBentrok) {
+            return "Jadwal bentrok dengan Jadwal PBL pada tanggal " . 
+                   date('d/m/Y', strtotime($tanggal)) . " jam " . 
+                   str_replace(':', '.', $jamMulai) . "-" . str_replace(':', '.', $jamSelesai) . 
+                   " (Kelompok Besar vs Kelompok Kecil)";
+        }
+
+        if ($jurnalBentrok) {
+            return "Jadwal bentrok dengan Jadwal Jurnal Reading pada tanggal " . 
+                   date('d/m/Y', strtotime($tanggal)) . " jam " . 
+                   str_replace(':', '.', $jamMulai) . "-" . str_replace(':', '.', $jamSelesai) . 
+                   " (Kelompok Besar vs Kelompok Kecil)";
+        }
+
+        return false;
+    }
+
+    private function checkKelompokBesarVsKelompokBesarBentrok(Request $request, $ruanganId, $jamMulai, $jamSelesai)
+    {
+        // Cek bentrok dengan jadwal Kuliah Besar yang menggunakan kelompok besar yang sama
+        $kuliahBesarBentrok = \App\Models\JadwalKuliahBesar::where('tanggal', $request->tanggal)
+            ->where('kelompok_besar_id', $request->kelompok_besar_id)
+            ->where(function($q) use ($jamMulai, $jamSelesai) {
+                $q->where('jam_mulai', '<', $jamSelesai)
+                   ->where('jam_selesai', '>', $jamMulai);
+            })
+            ->exists();
+
+        // Cek bentrok dengan jadwal Agenda Khusus yang menggunakan kelompok besar yang sama
+        $agendaKhususBentrok = \App\Models\JadwalAgendaKhusus::where('tanggal', $request->tanggal)
+            ->where('kelompok_besar_id', $request->kelompok_besar_id)
+            ->where(function($q) use ($jamMulai, $jamSelesai) {
+                $q->where('jam_mulai', '<', $jamSelesai)
+                   ->where('jam_selesai', '>', $jamMulai);
+            })
+            ->exists();
+
+        // Cek bentrok dengan jadwal Non-Blok Non-CSR lain yang menggunakan kelompok besar yang sama
+        $nonBlokNonCSRBentrok = JadwalNonBlokNonCSR::where('tanggal', $request->tanggal)
+            ->where('kelompok_besar_id', $request->kelompok_besar_id)
+            ->where(function($q) use ($jamMulai, $jamSelesai) {
+                $q->where('jam_mulai', '<', $jamSelesai)
+                   ->where('jam_selesai', '>', $jamMulai);
+            })
+            ->exists();
+
+        if ($kuliahBesarBentrok) {
+            return "Jadwal bentrok dengan Jadwal Kuliah Besar pada tanggal " . 
+                   date('d/m/Y', strtotime($request->tanggal)) . " jam " . 
+                   str_replace(':', '.', $jamMulai) . "-" . str_replace(':', '.', $jamSelesai) . 
+                   " (Kelompok Besar vs Kelompok Besar: Kelompok Besar Semester " . $request->kelompok_besar_id . ")";
+        }
+
+        if ($agendaKhususBentrok) {
+            return "Jadwal bentrok dengan Jadwal Agenda Khusus pada tanggal " . 
+                   date('d/m/Y', strtotime($request->tanggal)) . " jam " . 
+                   str_replace(':', '.', $jamMulai) . "-" . str_replace(':', '.', $jamSelesai) . 
+                   " (Kelompok Besar vs Kelompok Besar: Kelompok Besar Semester " . $request->kelompok_besar_id . ")";
+        }
+
+        if ($nonBlokNonCSRBentrok) {
+            return "Jadwal bentrok dengan Jadwal Non-Blok Non-CSR pada tanggal " . 
+                   date('d/m/Y', strtotime($request->tanggal)) . " jam " . 
+                   str_replace(':', '.', $jamMulai) . "-" . str_replace(':', '.', $jamSelesai) . 
+                   " (Kelompok Besar vs Kelompok Besar: Kelompok Besar Semester " . $request->kelompok_besar_id . ")";
+        }
+
+        return false;
     }
 } 

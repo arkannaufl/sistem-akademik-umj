@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import PetaAkademik from '../components/PetaAkademik';
-import api from '../api/axios';
+import api from '../utils/api';
 import { AnimatePresence, motion } from "framer-motion";
 
 function PetaAkademikSkeleton() {
@@ -160,10 +160,14 @@ export default function PetaAkademikPage() {
           const endDate = item.tanggalAkhir || item.tanggal_akhir;
           
           if (startDate) {
-              try { yearsToFetch.add(new Date(startDate).getFullYear()); } catch (e) {}
+              try { yearsToFetch.add(new Date(startDate).getFullYear()); } catch (error) {
+                // Silent fail - skip invalid dates
+              }
           }
           if (endDate) {
-              try { yearsToFetch.add(new Date(endDate).getFullYear()); } catch (e) {}
+              try { yearsToFetch.add(new Date(endDate).getFullYear()); } catch (error) {
+                // Silent fail - skip invalid dates
+              }
           }
         });
       }

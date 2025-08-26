@@ -24,6 +24,9 @@ use App\Http\Controllers\JadwalNonBlokNonCSRController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/login', function () {
+    return response()->json(['message' => 'Unauthorized'], 401);
+});
 
 Route::middleware('auth:sanctum')->post('/logout', [AuthController::class, 'logout']);
 
@@ -245,7 +248,18 @@ Route::middleware('auth:sanctum')->prefix('jurnal-reading')->group(function () {
     Route::post('/jadwal/{kode}', [App\Http\Controllers\JadwalJurnalReadingController::class, 'store']);
     Route::put('/jadwal/{kode}/{id}', [App\Http\Controllers\JadwalJurnalReadingController::class, 'update']);
     Route::delete('/jadwal/{kode}/{id}', [App\Http\Controllers\JadwalJurnalReadingController::class, 'destroy']);
-    Route::get('/download/{kode}/{id}', [App\Http\Controllers\JadwalJurnalReadingController::class, 'downloadFile']);
+});
+
+// Route download tanpa auth untuk memudahkan akses file
+Route::get('/jurnal-reading/download/{kode}/{id}', [App\Http\Controllers\JadwalJurnalReadingController::class, 'downloadFile'])->name('jurnal.download');
+
+// Route test untuk debugging
+Route::get('/test-jurnal-download', function() {
+    return response()->json([
+        'message' => 'Route test berhasil',
+        'timestamp' => now(),
+        'storage_path' => storage_path('app/public/jurnal_reading')
+    ]);
 });
 
 // Reference data endpoints untuk CSR

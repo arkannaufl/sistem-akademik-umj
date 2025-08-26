@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import api from "../../api/axios";
+import api, { BASE_URL } from "../../utils/api";
 
 export default function UserMetaCard() {
   const [user, setUser] = useState<any>(null);
@@ -36,7 +36,6 @@ export default function UserMetaCard() {
   };
 
   const initials = getInitials(user.name || "");
-  const BASE_URL = "http://localhost:8000";
   const avatarUrl = user.avatar
     ? (typeof user.avatar === 'string' && user.avatar.startsWith("http")
       ? user.avatar

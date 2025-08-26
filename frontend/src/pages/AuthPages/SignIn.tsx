@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EyeCloseIcon, EyeIcon } from "../../icons";
 import { ThemeToggleButton } from "../../components/common/ThemeToggleButton";
-import api from "../../api/axios";
+import api from "../../utils/api";
 
 export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);

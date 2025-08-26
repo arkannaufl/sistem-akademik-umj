@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import api from '../api/axios';
+import api from '../utils/api';
 import { ChevronLeftIcon } from '../icons';
 import Select from 'react-select';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -131,8 +131,8 @@ export default function DetailNonBlokCSR() {
     topik: '',
   });
   const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [errorForm, setErrorForm] = useState(''); // Error dari backend
-  const [frontendError, setFrontendError] = useState(''); // Error dari frontend validasi
+  const [errorForm, setErrorForm] = useState(''); // Error frontend (validasi form)
+  const [errorBackend, setErrorBackend] = useState(''); // Error backend (response API)
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedDeleteIndex, setSelectedDeleteIndex] = useState<number | null>(null);
   const [selectedKategoriValue, setSelectedKategoriValue] = useState<string | null>(null); // State untuk value dropdown
@@ -166,26 +166,28 @@ export default function DetailNonBlokCSR() {
       const tglAkhir = new Date(data.tanggal_akhir || data.tanggalAkhir || '');
       const tglInput = new Date(value);
       if (tglMulai && tglInput < tglMulai) {
-        setFrontendError('Tanggal tidak boleh sebelum tanggal mulai!');
+        setErrorForm('Tanggal tidak boleh sebelum tanggal mulai!');
       } else if (tglAkhir && tglInput > tglAkhir) {
-        setFrontendError('Tanggal tidak boleh setelah tanggal akhir!');
+        setErrorForm('Tanggal tidak boleh setelah tanggal akhir!');
       } else {
-        setFrontendError('');
+        setErrorForm('');
       }
     }
+    // Reset error backend when form changes
+    setErrorBackend('');
     setForm(newForm);
   }
 
   async function handleTambahJadwal() {
     setErrorForm('');
-    setFrontendError('');
+    setErrorBackend('');
     
     if (!form.jenis_csr || !form.tanggal || !form.jam_mulai || !form.jam_selesai || !form.dosen_id || !form.ruangan_id || !form.kelompok_kecil_id || !form.kategori_id || !form.topik) {
-      setFrontendError('Semua field harus diisi!');
+      setErrorForm('Semua field harus diisi!');
       return;
     }
 
-    if (frontendError) return;
+    if (errorForm) return;
 
     setIsSaving(true);
     try {
@@ -222,7 +224,7 @@ export default function DetailNonBlokCSR() {
     setEditIndex(null);
     } catch (error: any) {
       console.error('Error saving jadwal:', error);
-      setErrorForm(error.response?.data?.message || 'Gagal menyimpan jadwal CSR');
+      setErrorBackend(error.response?.data?.message || 'Gagal menyimpan jadwal CSR');
     } finally {
       setIsSaving(false);
     }
@@ -291,7 +293,7 @@ export default function DetailNonBlokCSR() {
     setEditIndex(idx);
     setShowModal(true);
     setErrorForm('');
-    setFrontendError('');
+    setErrorBackend('');
   }
 
   async function handleDeleteJadwal(idx: number) {
@@ -306,7 +308,7 @@ export default function DetailNonBlokCSR() {
       setSelectedDeleteIndex(null);
     } catch (error: any) {
       console.error('Error deleting jadwal:', error);
-      setErrorForm(error.response?.data?.message || 'Gagal menghapus jadwal CSR');
+      setErrorBackend(error.response?.data?.message || 'Gagal menghapus jadwal CSR');
     }
   }
   
@@ -548,7 +550,7 @@ export default function DetailNonBlokCSR() {
               setEditIndex(null);
               setShowModal(true);
               setErrorForm('');
-              setFrontendError('');
+              setErrorBackend('');
             }}
             className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium shadow-theme-xs hover:bg-brand-600 transition"
           >
@@ -740,7 +742,7 @@ export default function DetailNonBlokCSR() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hari/Tanggal</label>
                 <input type="date" name="tanggal" value={form.tanggal} onChange={handleFormChange} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                {frontendError && <div className="text-sm text-red-500 mt-2">{frontendError}</div>}
+                {errorForm && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
@@ -1192,15 +1194,13 @@ export default function DetailNonBlokCSR() {
                 )}
               </div>
               {/* Error dari backend */}
-              {errorForm && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              {errorBackend && (
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-center">
+                    <svg className="w-8 h-8 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-red-700 dark:text-red-300 text-sm font-medium">
-                      {errorForm}
-                    </span>
+                    <span className="text-sm text-red-700 dark:text-red-300">{errorBackend}</span>
                   </div>
                 </div>
               )}

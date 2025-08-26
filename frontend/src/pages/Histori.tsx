@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from '../api/axios';
+import api, { handleApiError } from '../utils/api';
 import {
   DownloadIcon,
   UserCircleIcon,
@@ -105,7 +105,7 @@ const Histori: React.FC = () => {
         page: pagination.current_page.toString(),
         per_page: pagination.per_page.toString(),
       });
-      const response = await axios.get(`/reporting?${params}`);
+      const response = await api.get(`/reporting?${params}`);
       setLogs(response.data.data.data);
       setPagination({
         current_page: response.data.data.current_page,
@@ -127,7 +127,7 @@ const Histori: React.FC = () => {
         start_date: filters.start_date,
         end_date: filters.end_date,
       });
-      const response = await axios.get(`/reporting/summary?${params}`);
+      const response = await api.get(`/reporting/summary?${params}`);
       setSummary(response.data.data);
     } catch (error) {
       setSummary(null);
@@ -152,7 +152,7 @@ const Histori: React.FC = () => {
   const handleExport = async () => {
     try {
       const params = new URLSearchParams(filters);
-      const response = await axios.get(`/reporting/export?${params}`);
+      const response = await api.get(`/reporting/export?${params}`);
       const blob = new Blob([JSON.stringify(response.data.data, null, 2)], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -162,7 +162,10 @@ const Histori: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (error) {}
+    } catch (error) {
+      const errorMessage = handleApiError(error, 'Export Histori');
+      // Bisa ditambahkan toast notification di sini
+    }
   };
 
   const getActionColor = (action: string) => {

@@ -4,7 +4,7 @@ import { ChevronLeftIcon } from "../icons";
 import SignaturePad from "react-signature-canvas";
 import React, { useRef } from "react";
 import * as XLSX from "xlsx";
-import api from "../api/axios";
+import api from "../utils/api";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface PenilaianJurnal {

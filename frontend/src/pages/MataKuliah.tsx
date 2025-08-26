@@ -2,7 +2,7 @@ import { useState, ChangeEvent, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileExcel, faPenToSquare, faTrash, faDownload, faChevronDown, faEye, faUpload } from "@fortawesome/free-solid-svg-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import api from '../api/axios';
+import api from '../utils/api';
 import * as XLSX from 'xlsx';
 import { Listbox, Transition } from '@headlessui/react';
 import { useNavigate } from "react-router-dom";
@@ -354,7 +354,7 @@ export default function MataKuliah() {
         }
       } catch (paginationError) {
         // Jika pagination gagal, gunakan endpoint tanpa pagination
-        console.log('Pagination failed, using all data endpoint');
+
         response = await api.get('/mata-kuliah-with-materi-all');
         const mataKuliahData = Array.isArray(response.data) ? response.data : [];
         setData(mataKuliahData);
@@ -1482,6 +1482,19 @@ export default function MataKuliah() {
     } catch (e) {
       setExistingMateriItems([]);
     }
+  };
+
+  // Helper function untuk truncate nama file
+  const truncateFileName = (fileName: string, maxLength: number = 20) => {
+    if (!fileName) return '';
+    if (fileName.length <= maxLength) return fileName;
+    
+    const dotIdx = fileName.lastIndexOf('.');
+    if (dotIdx === -1) return fileName.slice(0, maxLength - 3) + '...';
+    
+    const ext = fileName.slice(dotIdx);
+    const base = fileName.slice(0, maxLength - 3 - ext.length);
+    return base + '...' + ext;
   };
 
   const handleViewMateri = async (mk: MataKuliah) => {
@@ -4137,10 +4150,10 @@ export default function MataKuliah() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title={materi.judul || materi.filename}>
-                                {materi.judul || materi.filename}
+                                {truncateFileName(materi.judul || materi.filename, 35)}
                               </p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {materi.filename} • {(materi.file_size / 1024 / 1024).toFixed(2)} MB
+                                {truncateFileName(materi.filename, 25)} • {(materi.file_size / 1024 / 1024).toFixed(2)} MB
                               </p>
                             </div>
                           </div>

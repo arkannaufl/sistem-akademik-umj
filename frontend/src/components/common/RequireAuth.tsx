@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useEffect } from "react";
-import api from "../../api/axios";
+import api from "../../utils/api";
 import { useSession } from "../../context/SessionContext";
 
 export default function RequireAuth() {

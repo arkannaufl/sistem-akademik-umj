@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ChevronLeftIcon } from "../icons";
-import api from "../api/axios";
+import api from "../utils/api";
 import SignaturePad from "react-signature-canvas";
 import React, { useRef } from "react";
 import { AnimatePresence } from "framer-motion";

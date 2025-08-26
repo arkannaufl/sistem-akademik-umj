@@ -288,10 +288,22 @@ class JadwalKuliahBesarController extends Controller
                 $q->where('jam_mulai', '<', $data['jam_selesai'])
                    ->where('jam_selesai', '>', $data['jam_mulai']);
             });
+
+        // Cek bentrok dengan kelompok besar (jika ada kelompok_besar_id)
+        $kelompokBesarBentrok = false;
+        if (isset($data['kelompok_besar_id']) && $data['kelompok_besar_id']) {
+            $kelompokBesarBentrok = $this->checkKelompokBesarBentrok($data, $ignoreId);
+        }
+
+        // Cek bentrok antar Kelompok Besar (Kelompok Besar vs Kelompok Besar)
+        $kelompokBesarVsKelompokBesarBentrok = false;
+        if (isset($data['kelompok_besar_id']) && $data['kelompok_besar_id']) {
+            $kelompokBesarVsKelompokBesarBentrok = $this->checkKelompokBesarVsKelompokBesarBentrok($data, $ignoreId);
+        }
             
         return $kuliahBesarBentrok->exists() || $pblBentrok->exists() || 
                $agendaKhususBentrok->exists() || $praktikumBentrok->exists() || 
-               $jurnalBentrok->exists();
+               $jurnalBentrok->exists() || $kelompokBesarBentrok || $kelompokBesarVsKelompokBesarBentrok;
     }
 
     private function checkBentrokWithDetail($data, $ignoreId = null): ?string
@@ -314,9 +326,10 @@ class JadwalKuliahBesarController extends Controller
         if ($jadwalBentrokKuliahBesar) {
             $jamMulaiFormatted = str_replace(':', '.', $jadwalBentrokKuliahBesar->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $jadwalBentrokKuliahBesar->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $jadwalBentrokKuliahBesar);
             return "Jadwal bentrok dengan Jadwal Kuliah Besar pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
         
         // Cek bentrok dengan jadwal PBL
@@ -334,11 +347,12 @@ class JadwalKuliahBesarController extends Controller
         if ($pblBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $pblBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $pblBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $pblBentrok);
             return "Jadwal bentrok dengan Jadwal PBL pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
-            
+        
         // Cek bentrok dengan jadwal Agenda Khusus
         $agendaKhususBentrok = \App\Models\JadwalAgendaKhusus::where('tanggal', $data['tanggal'])
             ->where('ruangan_id', $data['ruangan_id'])
@@ -351,16 +365,15 @@ class JadwalKuliahBesarController extends Controller
         if ($agendaKhususBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $agendaKhususBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $agendaKhususBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $agendaKhususBentrok);
             return "Jadwal bentrok dengan Jadwal Agenda Khusus pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
-            
+        
         // Cek bentrok dengan jadwal Praktikum
         $praktikumBentrok = \App\Models\JadwalPraktikum::where('tanggal', $data['tanggal'])
-            ->where(function($q) use ($data) {
-                $q->where('ruangan_id', $data['ruangan_id']);
-            })
+            ->where('ruangan_id', $data['ruangan_id'])
             ->where(function($q) use ($data) {
                 $q->where('jam_mulai', '<', $data['jam_selesai'])
                    ->where('jam_selesai', '>', $data['jam_mulai']);
@@ -370,11 +383,12 @@ class JadwalKuliahBesarController extends Controller
         if ($praktikumBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $praktikumBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $praktikumBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $praktikumBentrok);
             return "Jadwal bentrok dengan Jadwal Praktikum pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
-            
+        
         // Cek bentrok dengan jadwal Jurnal Reading
         $jurnalBentrok = \App\Models\JadwalJurnalReading::where('tanggal', $data['tanggal'])
             ->where(function($q) use ($data) {
@@ -390,52 +404,160 @@ class JadwalKuliahBesarController extends Controller
         if ($jurnalBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $jurnalBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $jurnalBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $jurnalBentrok);
             return "Jadwal bentrok dengan Jadwal Jurnal Reading pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
 
-        // Cek bentrok dengan jadwal CSR
-        $csrBentrok = \App\Models\JadwalCSR::where('tanggal', $data['tanggal'])
-            ->where(function($q) use ($data) {
-                $q->where('dosen_id', $data['dosen_id'])
-                  ->orWhere('ruangan_id', $data['ruangan_id']);
-            })
-            ->where(function($q) use ($data) {
-                $q->where('jam_mulai', '<', $data['jam_selesai'])
-                   ->where('jam_selesai', '>', $data['jam_mulai']);
-            })
-            ->first();
-            
-        if ($csrBentrok) {
-            $jamMulaiFormatted = str_replace(':', '.', $csrBentrok->jam_mulai);
-            $jamSelesaiFormatted = str_replace(':', '.', $csrBentrok->jam_selesai);
-            return "Jadwal bentrok dengan Jadwal CSR pada tanggal " . 
-                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+        // Cek bentrok dengan kelompok besar (jika ada kelompok_besar_id)
+        if (isset($data['kelompok_besar_id']) && $data['kelompok_besar_id']) {
+            $kelompokBesarBentrokMessage = $this->checkKelompokBesarBentrokWithDetail($data, $ignoreId);
+            if ($kelompokBesarBentrokMessage) {
+                return $kelompokBesarBentrokMessage;
+            }
         }
 
-        // Cek bentrok dengan jadwal Non-Blok Non-CSR
-        $nonBlokNonCSRBentrok = \App\Models\JadwalNonBlokNonCSR::where('tanggal', $data['tanggal'])
-            ->where(function($q) use ($data) {
-                $q->where('dosen_id', $data['dosen_id'])
-                  ->orWhere('ruangan_id', $data['ruangan_id']);
-            })
-            ->where(function($q) use ($data) {
-                $q->where('jam_mulai', '<', $data['jam_selesai'])
-                   ->where('jam_selesai', '>', $data['jam_mulai']);
-            })
-            ->first();
-            
-        if ($nonBlokNonCSRBentrok) {
-            $jamMulaiFormatted = str_replace(':', '.', $nonBlokNonCSRBentrok->jam_mulai);
-            $jamSelesaiFormatted = str_replace(':', '.', $nonBlokNonCSRBentrok->jam_selesai);
-            return "Jadwal bentrok dengan Jadwal Non-Blok Non-CSR pada tanggal " . 
-                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+        // Cek bentrok antar Kelompok Besar (Kelompok Besar vs Kelompok Besar)
+        if (isset($data['kelompok_besar_id']) && $data['kelompok_besar_id']) {
+            $kelompokBesarVsKelompokBesarBentrokMessage = $this->checkKelompokBesarVsKelompokBesarBentrokWithDetail($data, $ignoreId);
+            if ($kelompokBesarVsKelompokBesarBentrokMessage) {
+                return $kelompokBesarVsKelompokBesarBentrokMessage;
+            }
         }
 
         return null; // Tidak ada bentrok
+    }
+
+    /**
+     * Mendapatkan alasan bentrok yang detail
+     */
+    private function getBentrokReason($data, $jadwalBentrok): string
+    {
+        $reasons = [];
+        
+        // Cek bentrok dosen
+        if (isset($data['dosen_id']) && isset($jadwalBentrok->dosen_id) && $data['dosen_id'] == $jadwalBentrok->dosen_id) {
+            $dosen = \App\Models\User::find($data['dosen_id']);
+            $reasons[] = "Dosen: " . ($dosen ? $dosen->name : 'Tidak diketahui');
+        }
+        
+        // Cek bentrok ruangan
+        if (isset($data['ruangan_id']) && isset($jadwalBentrok->ruangan_id) && $data['ruangan_id'] == $jadwalBentrok->ruangan_id) {
+            $ruangan = \App\Models\Ruangan::find($data['ruangan_id']);
+            $reasons[] = "Ruangan: " . ($ruangan ? $ruangan->nama : 'Tidak diketahui');
+        }
+        
+        // Cek bentrok kelompok kecil
+        if (isset($data['kelompok_kecil_id']) && isset($jadwalBentrok->kelompok_kecil_id) && $data['kelompok_kecil_id'] == $jadwalBentrok->kelompok_kecil_id) {
+            $kelompokKecil = \App\Models\KelompokKecil::find($data['kelompok_kecil_id']);
+            $reasons[] = "Kelompok Kecil: " . ($kelompokKecil ? $kelompokKecil->nama_kelompok : 'Tidak diketahui');
+        }
+        
+        // Cek bentrok kelas praktikum
+        if (isset($data['kelas_praktikum']) && isset($jadwalBentrok->kelas_praktikum) && $data['kelas_praktikum'] == $jadwalBentrok->kelas_praktikum) {
+            $reasons[] = "Kelas Praktikum: " . $data['kelas_praktikum'];
+        }
+        
+        return implode(', ', $reasons);
+    }
+
+    /**
+     * Cek bentrok dengan kelompok besar
+     */
+    private function checkKelompokBesarBentrok($data, $ignoreId = null): bool
+    {
+        // Ambil mahasiswa dalam kelompok besar yang dipilih
+        $mahasiswaIds = \App\Models\KelompokBesar::where('semester', $data['kelompok_besar_id'])
+            ->pluck('mahasiswa_id')
+            ->toArray();
+
+        if (empty($mahasiswaIds)) {
+            return false;
+        }
+
+        // Cek bentrok dengan jadwal PBL yang menggunakan kelompok kecil dari mahasiswa yang sama
+        $pblBentrok = \App\Models\JadwalPBL::where('tanggal', $data['tanggal'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            })
+            ->whereHas('kelompokKecil', function($q) use ($mahasiswaIds) {
+                $q->whereIn('mahasiswa_id', $mahasiswaIds);
+            })
+            ->exists();
+
+        // Cek bentrok dengan jadwal Jurnal Reading yang menggunakan kelompok kecil dari mahasiswa yang sama
+        $jurnalBentrok = \App\Models\JadwalJurnalReading::where('tanggal', $data['tanggal'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            })
+            ->whereHas('kelompokKecil', function($q) use ($mahasiswaIds) {
+                $q->whereIn('mahasiswa_id', $mahasiswaIds);
+            })
+            ->exists();
+
+        return $pblBentrok || $jurnalBentrok;
+    }
+
+    /**
+     * Cek bentrok dengan kelompok besar dengan detail
+     */
+    private function checkKelompokBesarBentrokWithDetail($data, $ignoreId = null): ?string
+    {
+        // Ambil mahasiswa dalam kelompok besar yang dipilih
+        $mahasiswaIds = \App\Models\KelompokBesar::where('semester', $data['kelompok_besar_id'])
+            ->pluck('mahasiswa_id')
+            ->toArray();
+
+        if (empty($mahasiswaIds)) {
+            return null;
+        }
+
+        // Cek bentrok dengan jadwal PBL yang menggunakan kelompok kecil dari mahasiswa yang sama
+        $pblBentrok = \App\Models\JadwalPBL::where('tanggal', $data['tanggal'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            })
+            ->whereHas('kelompokKecil', function($q) use ($mahasiswaIds) {
+                $q->whereIn('mahasiswa_id', $mahasiswaIds);
+            })
+            ->first();
+
+        if ($pblBentrok) {
+            $jamMulaiFormatted = str_replace(':', '.', $pblBentrok->jam_mulai);
+            $jamSelesaiFormatted = str_replace(':', '.', $pblBentrok->jam_selesai);
+            $kelompokKecil = \App\Models\KelompokKecil::find($pblBentrok->kelompok_kecil_id);
+            $bentrokReason = "Kelompok Besar vs Kelompok Kecil: " . ($kelompokKecil ? $kelompokKecil->nama_kelompok : 'Tidak diketahui');
+            return "Jadwal bentrok dengan Jadwal PBL pada tanggal " . 
+                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
+        }
+
+        // Cek bentrok dengan jadwal Jurnal Reading yang menggunakan kelompok kecil dari mahasiswa yang sama
+        $jurnalBentrok = \App\Models\JadwalJurnalReading::where('tanggal', $data['tanggal'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            })
+            ->whereHas('kelompokKecil', function($q) use ($mahasiswaIds) {
+                $q->whereIn('mahasiswa_id', $mahasiswaIds);
+            })
+            ->first();
+
+        if ($jurnalBentrok) {
+            $jamMulaiFormatted = str_replace(':', '.', $jurnalBentrok->jam_mulai);
+            $jamSelesaiFormatted = str_replace(':', '.', $jurnalBentrok->jam_selesai);
+            $kelompokKecil = \App\Models\KelompokKecil::find($jurnalBentrok->kelompok_kecil_id);
+            $bentrokReason = "Kelompok Besar vs Kelompok Kecil: " . ($kelompokKecil ? $kelompokKecil->nama_kelompok : 'Tidak diketahui');
+            return "Jadwal bentrok dengan Jadwal Jurnal Reading pada tanggal " . 
+                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
+        }
+
+        return null;
     }
 
     /**
@@ -479,5 +601,81 @@ class JadwalKuliahBesarController extends Controller
     {
         $mataKuliah = \App\Models\MataKuliah::where('kode', $kode)->first();
         return $mataKuliah ? $mataKuliah->semester : null;
+    }
+
+    /**
+     * Cek bentrok antar Kelompok Besar (Kelompok Besar vs Kelompok Besar)
+     */
+    private function checkKelompokBesarVsKelompokBesarBentrok($data, $ignoreId = null): bool
+    {
+        // Cek bentrok dengan jadwal Kuliah Besar lain yang menggunakan kelompok besar yang sama
+        $kuliahBesarBentrok = JadwalKuliahBesar::where('tanggal', $data['tanggal'])
+            ->where('kelompok_besar_id', $data['kelompok_besar_id'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            });
+        
+        if ($ignoreId) {
+            $kuliahBesarBentrok->where('id', '!=', $ignoreId);
+        }
+
+        // Cek bentrok dengan jadwal Agenda Khusus yang menggunakan kelompok besar yang sama
+        $agendaKhususBentrok = \App\Models\JadwalAgendaKhusus::where('tanggal', $data['tanggal'])
+            ->where('kelompok_besar_id', $data['kelompok_besar_id'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            });
+
+        return $kuliahBesarBentrok->exists() || $agendaKhususBentrok->exists();
+    }
+
+    /**
+     * Cek bentrok antar Kelompok Besar dengan detail
+     */
+    private function checkKelompokBesarVsKelompokBesarBentrokWithDetail($data, $ignoreId = null): ?string
+    {
+        // Cek bentrok dengan jadwal Kuliah Besar lain yang menggunakan kelompok besar yang sama
+        $kuliahBesarBentrok = JadwalKuliahBesar::where('tanggal', $data['tanggal'])
+            ->where('kelompok_besar_id', $data['kelompok_besar_id'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            });
+        
+        if ($ignoreId) {
+            $kuliahBesarBentrok->where('id', '!=', $ignoreId);
+        }
+
+        $jadwalBentrokKuliahBesar = $kuliahBesarBentrok->first();
+        if ($jadwalBentrokKuliahBesar) {
+            $jamMulaiFormatted = str_replace(':', '.', $jadwalBentrokKuliahBesar->jam_mulai);
+            $jamSelesaiFormatted = str_replace(':', '.', $jadwalBentrokKuliahBesar->jam_selesai);
+            $bentrokReason = "Kelompok Besar vs Kelompok Besar: Kelompok Besar Semester " . $data['kelompok_besar_id'];
+            return "Jadwal bentrok dengan Jadwal Kuliah Besar pada tanggal " . 
+                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
+        }
+
+        // Cek bentrok dengan jadwal Agenda Khusus yang menggunakan kelompok besar yang sama
+        $agendaKhususBentrok = \App\Models\JadwalAgendaKhusus::where('tanggal', $data['tanggal'])
+            ->where('kelompok_besar_id', $data['kelompok_besar_id'])
+            ->where(function($q) use ($data) {
+                $q->where('jam_mulai', '<', $data['jam_selesai'])
+                   ->where('jam_selesai', '>', $data['jam_mulai']);
+            })
+            ->first();
+
+        if ($agendaKhususBentrok) {
+            $jamMulaiFormatted = str_replace(':', '.', $agendaKhususBentrok->jam_mulai);
+            $jamSelesaiFormatted = str_replace(':', '.', $agendaKhususBentrok->jam_selesai);
+            $bentrokReason = "Kelompok Besar vs Kelompok Besar: Kelompok Besar Semester " . $data['kelompok_besar_id'];
+            return "Jadwal bentrok dengan Jadwal Agenda Khusus pada tanggal " . 
+                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
+        }
+
+        return null;
     }
 }

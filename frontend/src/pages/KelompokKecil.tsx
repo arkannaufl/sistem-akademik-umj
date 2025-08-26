@@ -89,8 +89,28 @@ const KelompokKecil: React.FC = () => {
     []
   );
 
+  // State untuk data semua semester
+  const [allSemesterData, setAllSemesterData] = useState<KelompokKecil[]>([]);
+
   // Tambahkan state untuk pesan error
   const [errorMsg, setErrorMsg] = useState<string>("");
+
+  // Fungsi untuk mengambil data dari semua semester
+  const loadAllSemesterData = async () => {
+    try {
+      // Ambil data dari semester 1-14 (cakupan semester yang mungkin ada)
+      const allSemesters = Array.from({ length: 14 }, (_, i) => String(i + 1));
+      const promises = allSemesters.map(sem => 
+        kelompokKecilApi.getBySemester(sem).catch(() => ({ data: [] }))
+      );
+      
+      const responses = await Promise.all(promises);
+      const allData = responses.flatMap(response => response.data || []);
+      setAllSemesterData(allData);
+    } catch (error) {
+      setAllSemesterData([]);
+    }
+  };
 
   // Refactor: Buat loadData di luar useEffect agar bisa dipanggil ulang
   const loadData = async () => {
@@ -132,7 +152,7 @@ const KelompokKecil: React.FC = () => {
         });
         setMahasiswa(updatedMahasiswa);
         setTimeout(() => {
-          console.log("[DEBUG][RELOAD] mahasiswa:", updatedMahasiswa);
+
         }, 100);
         setJumlahKelompok(
           kelompokKecilData.length > 0
@@ -158,6 +178,7 @@ const KelompokKecil: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    loadAllSemesterData(); // Load data semua semester
   }, [semester]);
 
   // Fungsi untuk menyimpan data pengelompokan ke API
@@ -353,8 +374,6 @@ const KelompokKecil: React.FC = () => {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  useEffect(() => {}, [hasUnsavedChanges]);
-
   const handleBack = () => {
     if (hasUnsavedChanges) {
       setShowLeaveModal(() => () => navigate("/generate/kelompok"));
@@ -415,17 +434,13 @@ const KelompokKecil: React.FC = () => {
     }
     setIsGenerating(true);
     try {
-      console.log("Kirim ke API:", {
-        semester: String(mapSemesterToNumber(semester)),
-        mahasiswa_ids: selectedMahasiswa.map((id) => parseInt(id)),
-        jumlah_kelompok: jumlahKelompok,
-      });
+
       const res = await kelompokKecilApi.generate({
         semester: String(mapSemesterToNumber(semester)),
         mahasiswa_ids: selectedMahasiswa.map((id) => parseInt(id)),
         jumlah_kelompok: jumlahKelompok,
       });
-      console.log("Response generate:", res);
+
       await loadData();
       setShowKelompok(true);
       setHasUnsavedChanges(false);
@@ -758,20 +773,20 @@ const KelompokKecil: React.FC = () => {
           </p>
 
           {/* Informasi Data Tersimpan */}
-          {kelompokKecilData.length > 0 && (
+          {allSemesterData.length > 0 && (
             <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg">
               <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                 <div className="w-5 h-5 rounded-full bg-gray-500 flex items-center justify-center">
                   <span className="text-white text-xs">📊</span>
                 </div>
                 <span className="text-sm font-medium">
-                  Total {kelompokKecilData.length} semester memiliki data
+                  Total {new Set(allSemesterData.map(item => item.semester)).size} semester memiliki data
                   pengelompokan tersimpan
                 </span>
               </div>
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                 Semester:{" "}
-                {kelompokKecilData.map((item) => item.semester).join(", ")}
+                {Array.from(new Set(allSemesterData.map(item => item.semester))).sort().join(", ")}
               </div>
             </div>
           )}

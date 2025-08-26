@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPenToSquare, faTrash, faChevronDown } from "@fortawesome/free-solid-svg-icons";
 import { motion, AnimatePresence } from "framer-motion";
 import React from "react";
-import api from "../api/axios"; // Import the api instance
+import api from "../utils/api"; // Import the api instance
 
 // Define interfaces for our data structures
 interface Semester {

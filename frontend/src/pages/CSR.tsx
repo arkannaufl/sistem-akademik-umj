@@ -166,7 +166,7 @@ const CSR: React.FC = () => {
 
   // Handle form submission
   const handleSubmit = async () => {
-    console.log("handleSubmit called");
+
     setIsSaving(true);
     try {
       if (selectedCSR && selectedCSR.id) {
@@ -205,7 +205,7 @@ const CSR: React.FC = () => {
       }
     } finally {
       setIsSaving(false);
-      console.log("handleSubmit finally, isSaving:", isSaving);
+
     }
   };
 

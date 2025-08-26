@@ -50,13 +50,13 @@ class MataKuliahController extends Controller
             return response()->json(['error' => 'File RPS tidak ditemukan'], 404);
         }
 
-        $filePath = 'public/rps/' . $mataKuliah->rps_file;
+        $filePath = 'rps/' . $mataKuliah->rps_file;
 
-        if (!Storage::exists($filePath)) {
+        if (!Storage::disk('public')->exists($filePath)) {
             return response()->json(['error' => 'File RPS tidak ditemukan di storage'], 404);
         }
 
-        return Storage::download($filePath, $mataKuliah->rps_file);
+        return Storage::disk('public')->download($filePath, $mataKuliah->rps_file);
     }
 
     /**
@@ -70,11 +70,11 @@ class MataKuliahController extends Controller
             return response()->json(['error' => 'File RPS tidak ditemukan'], 404);
         }
 
-        $filePath = 'public/rps/' . $mataKuliah->rps_file;
+        $filePath = 'rps/' . $mataKuliah->rps_file;
 
         // Delete file from storage
-        if (Storage::exists($filePath)) {
-            Storage::delete($filePath);
+        if (Storage::disk('public')->exists($filePath)) {
+            Storage::disk('public')->delete($filePath);
         }
 
         // Update database

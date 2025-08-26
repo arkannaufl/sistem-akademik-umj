@@ -65,7 +65,10 @@ const Kelas: React.FC = () => {
       try {
         const res = await mahasiswaApi.getAll();
         setMahasiswaList(res.data);
-      } catch {}
+      } catch (error) {
+        // Silent fail - mahasiswa data is not critical for this page
+        // Could be improved with handleApiError if needed
+      }
     };
     fetchMahasiswa();
   }, []);

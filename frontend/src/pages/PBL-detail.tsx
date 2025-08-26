@@ -12,7 +12,7 @@ import {
   faEye,
 } from "@fortawesome/free-solid-svg-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import api from "../api/axios";
+import api from "../utils/api";
 import { useParams, useNavigate } from "react-router-dom";
 
 type MataKuliah = {
@@ -94,7 +94,9 @@ function parseKeahlian(val: string[] | string | undefined): string[] {
     try {
       const arr = JSON.parse(val);
       if (Array.isArray(arr)) return arr;
-    } catch {}
+    } catch (error) {
+      // Silent fail - fallback to string parsing
+    }
     return val
       .split(",")
       .map((k) => k.trim())
@@ -248,7 +250,7 @@ export default function PBL() {
   // Fungsi untuk menangani assignment dosen
   const handleAssignDosen = async (dosen: Dosen, pbl: PBL, mk: MataKuliah) => {
     try {
-      console.log(`Assigning dosen ${dosen.id} to PBL ${pbl.id}`);
+
       
       // Cari semua PBL dalam semester yang sama
       const currentSemester = mk.semester;
@@ -259,7 +261,7 @@ export default function PBL() {
           return mk && mk.semester === currentSemester;
         });
 
-      console.log(`Found ${semesterPBLs.length} PBLs in semester ${currentSemester}`);
+
 
       // Assign dosen ke semua PBL dalam semester yang sama
       const assignPromises = semesterPBLs.map(async (semesterPbl) => {
@@ -269,7 +271,7 @@ export default function PBL() {
           });
           return { pblId: semesterPbl.id, success: true, response };
         } catch (error: any) {
-          console.log(`Failed to assign to PBL ${semesterPbl.id}:`, error?.response?.data?.message);
+
           return { pblId: semesterPbl.id, success: false, error: error?.response?.data?.message };
         }
       });
@@ -288,7 +290,9 @@ export default function PBL() {
         setAssignedDosen(prev => {
           const updated = { ...prev };
           pblIds.forEach(pblId => {
-            updated[pblId] = assignedRes.data[pblId] || [];
+            if (pblId !== undefined) {
+              updated[pblId] = assignedRes.data[pblId] || [];
+            }
           });
           return updated;
         });
@@ -499,7 +503,7 @@ export default function PBL() {
       // Fetch assigned dosen batch (all pblId)
       const allPbls = Object.values(pblMap).flat();
       const pblIds = allPbls.map((pbl) => pbl.id).filter(Boolean);
-      console.log('Debug - PBL IDs to fetch:', pblIds);
+
       
       if (pblIds.length > 0) {
         try {
@@ -513,13 +517,13 @@ export default function PBL() {
               assignedRes = await api.post("/pbls/assigned-dosen-batch", {
                 pbl_ids: pblIds,
               });
-                        console.log('Debug - Assigned Response:', assignedRes.data);
-          console.log('Debug - Response keys:', Object.keys(assignedRes.data || {}));
+
+
           setAssignedDosen(assignedRes.data || {});
           
           // Trigger statistics calculation after data is set
           setTimeout(() => {
-            console.log('Debug - Triggering statistics calculation after data set');
+
             if (blokMataKuliah.length > 0) {
               api.get("/kelompok-kecil").then((kelompokKecilRes) => {
                 let filteredBlokMataKuliah = blokMataKuliah;
@@ -550,7 +554,7 @@ export default function PBL() {
           setAssignedDosen({});
         }
       } else {
-        console.log('Debug - No PBL IDs to fetch');
+
         setAssignedDosen({});
       }
     } catch (err) {
@@ -687,8 +691,8 @@ export default function PBL() {
               if (!uniqueDosenForMk.has(dosen.id)) {
                 uniqueDosenForMk.add(dosen.id);
                 
-                console.log(`Debug - Processing dosen ${dosen.name} (ID: ${dosen.id})`);
-                console.log(`Debug - Dosen peran:`, dosen.dosen_peran);
+
+
                 
                 // Check if this dosen has a role in dosen_peran
                 if (dosen.dosen_peran && Array.isArray(dosen.dosen_peran)) {
@@ -697,39 +701,32 @@ export default function PBL() {
                       (peran.mata_kuliah_kode === mk.kode || peran.mata_kuliah_nama === mk.nama) &&
                       mapSemesterToNumber(peran.semester) === mk.semester
                     );
-                    console.log(`Debug - Peran check for ${dosen.name}:`, {
-                      peran: peran,
-                      mk_kode: mk.kode,
-                      mk_nama: mk.nama,
-                      mk_semester: mk.semester,
-                      peran_semester: peran.semester,
-                      match: match
-                    });
+
                     return match;
                   });
 
                   if (relevantPeran) {
-                    console.log(`Debug - Found relevant peran for ${dosen.name}:`, relevantPeran);
+
                     if (relevantPeran.tipe_peran === "koordinator") {
                       peranKetuaCount++;
-                      console.log(`Debug - Counted as Koordinator: ${dosen.name}`);
+
                     } else if (relevantPeran.tipe_peran === "tim_blok") {
                       peranAnggotaCount++;
-                      console.log(`Debug - Counted as Tim Blok: ${dosen.name}`);
+
                     } else {
                       // If role is not koordinator or tim_blok, count as Dosen Mengajar
                       dosenMengajarCount++;
-                      console.log(`Debug - Counted as Dosen Mengajar (other role): ${dosen.name}`);
+
                     }
                   } else {
                     // If no specific role found, count as Dosen Mengajar
                     dosenMengajarCount++;
-                    console.log(`Debug - Counted as Dosen Mengajar (no relevant peran): ${dosen.name}`);
+
                   }
                 } else {
                   // If no dosen_peran, count as Dosen Mengajar
                   dosenMengajarCount++;
-                  console.log(`Debug - Counted as Dosen Mengajar (no dosen_peran): ${dosen.name}`);
+
                 }
               }
             });
@@ -743,23 +740,23 @@ export default function PBL() {
 
 
     // Debug: Log the counts to see what's happening
-    console.log('Debug - Filtered Mata Kuliah:', filteredMataKuliah.length);
-    console.log('Debug - Assigned Dosen Keys:', Object.keys(assignedDosen));
-    console.log('Debug - PBL Data Keys:', Object.keys(pblData));
-    console.log('Debug - Peran Ketua Count:', peranKetuaCount);
-    console.log('Debug - Peran Anggota Count:', peranAnggotaCount);
-    console.log('Debug - Dosen Mengajar Count:', dosenMengajarCount);
+
+
+
+
+
+
     
     // Debug: Log sample data
     if (filteredMataKuliah.length > 0) {
       const sampleMk = filteredMataKuliah[0];
-      console.log('Debug - Sample MK:', sampleMk.kode);
-      console.log('Debug - Sample PBLs:', pblData[sampleMk.kode]);
+
+
       if (pblData[sampleMk.kode] && pblData[sampleMk.kode].length > 0) {
         const samplePbl = pblData[sampleMk.kode][0];
-        console.log('Debug - Sample PBL ID:', samplePbl.id);
+
         if (samplePbl.id) {
-          console.log('Debug - Sample Assigned Dosen:', assignedDosen[samplePbl.id]);
+
         }
       }
     }
@@ -773,13 +770,13 @@ export default function PBL() {
     
     // Listen for PBL generation completion
     const handlePblGenerateCompleted = () => {
-      console.log('Debug - PBL Generate completed, refreshing data...');
+
       fetchAll();
     };
     
     // Listen for PBL assignment updates
     const handlePblAssignmentUpdated = () => {
-      console.log('Debug - PBL Assignment updated, refreshing data...');
+
       fetchAll();
     };
     
@@ -795,8 +792,8 @@ export default function PBL() {
   // Recalculate statistics when active semester changes or assignedDosen changes
   useEffect(() => {
     if (blokMataKuliah.length > 0 && dosenList.length > 0) {
-      console.log('Debug - Recalculating statistics due to dependency change');
-      console.log('Debug - Assigned Dosen state:', Object.keys(assignedDosen));
+
+
       
       // We need to fetch kelompok kecil data again since it depends on active semester
       api
@@ -1132,11 +1129,11 @@ export default function PBL() {
       const pblList = pblData[mk.kode] || [];
       if (filterStatus === "belum") {
         return pblList.some(
-          (pbl) => (assignedDosen[pbl.id!] || []).length === 0
+          (pbl) => pbl.id && (assignedDosen[pbl.id] || []).length === 0
         );
       }
       if (filterStatus === "sudah") {
-        return pblList.some((pbl) => (assignedDosen[pbl.id!] || []).length > 0);
+        return pblList.some((pbl) => pbl.id && (assignedDosen[pbl.id] || []).length > 0);
       }
       return true;
     });
@@ -1169,7 +1166,7 @@ export default function PBL() {
       sudah = 0;
     allFilteredMataKuliah.forEach((mk) => {
       (pblData[mk.kode] || []).forEach((pbl) => {
-        const assigned = assignedDosen[pbl.id!] || [];
+        const assigned = pbl.id ? (assignedDosen[pbl.id] || []) : [];
         if (assigned.length > 0) sudah++;
         else belum++;
       });
@@ -1766,11 +1763,13 @@ export default function PBL() {
                                   const assignedDosenSet = new Set<number>();
                                   semesterPBLs.forEach((mk) => {
                                     (pblData[mk.kode] || []).forEach((pbl) => {
-                                      (assignedDosen[pbl.id!] || []).forEach(
-                                        (dosen) => {
-                                          assignedDosenSet.add(dosen.id);
-                                        }
-                                      );
+                                      if (pbl.id) {
+                                        (assignedDosen[pbl.id] || []).forEach(
+                                          (dosen) => {
+                                            assignedDosenSet.add(dosen.id);
+                                          }
+                                        );
+                                      }
                                     });
                                   });
                                   return `${assignedDosenSet.size} dosen`;
@@ -1875,7 +1874,7 @@ export default function PBL() {
                           return pblList.length === 0
                             ? null
                             : pblList.map((pbl, pblIdx) => {
-                                const assigned = assignedDosen[pbl.id!] || [];
+                                const assigned = pbl.id ? (assignedDosen[pbl.id] || []) : [];
                                 // Dosen yang cocok berdasarkan keahlian mata kuliah
                                 const availableDosen = dosenList.filter((d) => {
                                   const keahlianArr = Array.isArray(d.keahlian)
@@ -1930,7 +1929,7 @@ export default function PBL() {
                                         return;
                                       // Jika dosen sudah ada di PBL target, tolak
                                       if (
-                                        (assignedDosen[pbl.id!] || []).some(
+                                        pbl.id && (assignedDosen[pbl.id] || []).some(
                                           (d) => d.id === draggedDosen.id
                                         )
                                       ) {

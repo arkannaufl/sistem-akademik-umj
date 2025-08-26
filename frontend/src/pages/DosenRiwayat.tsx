@@ -238,7 +238,7 @@ export default function DosenRiwayat() {
         return;
       }
   
-      console.log("Memulai export PDF...");
+
       const doc = new jsPDF();
       const margin = 20; // Mengurangi margin dari 20 ke 15
       let yPos = margin;
@@ -558,7 +558,7 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
       const fileName = `Laporan_Kinerja_Dosen_${dosenData.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
   
-      console.log("Export PDF berhasil!");
+
     } catch (error) {
       console.error("Error saat export PDF:", error);
       alert("Gagal export PDF. Silakan coba lagi.");
@@ -623,16 +623,7 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
     const blokStr = jadwal.blok ? String(jadwal.blok) : "";
     const matchBlok = !filterBlok || blokStr === filterBlok;
     
-    // Debug logging hanya jika ada filter yang aktif
-    if (filterSemester || filterJenis || filterBlok) {
-      console.log(`Jadwal ${jadwal.id}:`, {
-        mata_kuliah: jadwal.mata_kuliah_nama,
-        semester: `${jadwal.semester} (${matchSemester ? '✓' : '✗'})`,
-        blok: `${jadwal.blok || 'null'} (${matchBlok ? '✓' : '✗'})`,
-        jenis: `${jadwal.jenis_jadwal} (${matchJenis ? '✓' : '✗'})`,
-        result: matchSemester && matchJenis && matchBlok ? 'SHOW' : 'HIDE'
-      });
-    }
+
     
     return matchSemester && matchJenis && matchBlok;
   });

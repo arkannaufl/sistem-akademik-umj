@@ -28,6 +28,12 @@ class JadwalKuliahBesar extends Model
     public function mataKuliah() { return $this->belongsTo(MataKuliah::class, 'mata_kuliah_kode', 'kode'); }
     public function dosen() { return $this->belongsTo(User::class, 'dosen_id'); }
     public function ruangan() { return $this->belongsTo(Ruangan::class, 'ruangan_id'); }
-    // Kelompok besar sekarang disimpan sebagai semester, bukan ID
-    // public function kelompokBesar() { return $this->belongsTo(KelompokBesar::class, 'kelompok_besar_id'); }
+    
+    /**
+     * Relasi ke kelompok besar berdasarkan semester
+     */
+    public function kelompokBesar()
+    {
+        return $this->hasMany(KelompokBesar::class, 'semester', 'kelompok_besar_id');
+    }
 }

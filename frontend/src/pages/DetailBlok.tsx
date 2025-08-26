@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
-import api from '../api/axios';
+import api, { API_BASE_URL } from '../utils/api';
 import { ChevronLeftIcon } from '../icons';
 import { AnimatePresence, motion } from 'framer-motion';
 import Select from 'react-select';
@@ -143,7 +143,8 @@ export default function DetailBlok() {
     useRuangan: true,
     fileJurnal: null,
   });
-  const [errorForm, setErrorForm] = useState('');
+  const [errorForm, setErrorForm] = useState(''); // Error frontend (validasi form)
+  const [errorBackend, setErrorBackend] = useState(''); // Error backend (response API)
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [dosenList, setDosenList] = useState<DosenType[]>([]);
   const [ruanganList, setRuanganList] = useState<RuanganType[]>([]);
@@ -184,7 +185,9 @@ export default function DetailBlok() {
     try {
       const res = await api.get(`/kuliah-besar/materi?blok=${data.blok}&semester=${data.semester}`);
       setMateriOptions(Array.isArray(res.data) ? res.data : []);
-    } catch {}
+    } catch (error) {
+      // Silent fail - materi options are not critical
+    }
   };
 
   // Fetch pengampu dinamis setelah materi dipilih
@@ -193,7 +196,9 @@ export default function DetailBlok() {
     try {
       const res = await api.get(`/kuliah-besar/pengampu?keahlian=${encodeURIComponent(materi)}&blok=${data.blok}&semester=${data.semester}`);
       setPengampuOptions(Array.isArray(res.data) ? res.data : []);
-    } catch {}
+    } catch (error) {
+      // Silent fail - pengampu options are not critical
+    }
   };
 
   // Fetch kelompok besar options
@@ -228,7 +233,8 @@ export default function DetailBlok() {
     try {
       const res = await api.get(`/praktikum/materi/${data.blok}/${data.semester}`);
       setMateriPraktikumOptions(Array.isArray(res.data) ? res.data : []);
-    } catch (err: any) {
+    } catch (error) {
+      // Silent fail - materi praktikum options are not critical
     }
   };
 
@@ -238,7 +244,8 @@ export default function DetailBlok() {
     try {
       const res = await api.get(`/kelas/semester/${data.semester}`);
       setKelasPraktikumOptions(Array.isArray(res.data) ? res.data.map((k: any) => k.nama_kelas) : []);
-    } catch (err: any) {
+    } catch (error) {
+      // Silent fail - kelas praktikum options are not critical
     }
   };
 
@@ -248,7 +255,8 @@ export default function DetailBlok() {
     try {
       const res = await api.get(`/praktikum/pengampu/${encodeURIComponent(materi)}/${data.blok}/${data.semester}`);
       setPengampuPraktikumOptions(Array.isArray(res.data) ? res.data : []);
-    } catch (err: any) {
+    } catch (error) {
+      // Silent fail - pengampu praktikum options are not critical
     }
   };
 
@@ -258,9 +266,17 @@ export default function DetailBlok() {
       if (form.jenisBaris === 'materi') {
         fetchMateriOptions();
         fetchKelompokBesarOptions();
+        // Reset pengampu options jika materi belum dipilih
+        if (!form.materi) {
+          setPengampuOptions([]);
+        }
       } else if (form.jenisBaris === 'praktikum') {
         fetchMateriPraktikum();
         fetchKelasPraktikum();
+        // Reset pengampu options jika materi belum dipilih
+        if (!form.materi) {
+          setPengampuPraktikumOptions([]);
+        }
       } else if (form.jenisBaris === 'agenda') {
         fetchKelompokBesarAgendaOptions();
       }
@@ -286,6 +302,20 @@ export default function DetailBlok() {
       setPengampuPraktikumOptions([]);
     }
   }, [form.jenisBaris, form.materi]);
+
+  // Reset pengampu options ketika jenis baris berubah
+  useEffect(() => {
+    if (form.jenisBaris !== 'materi') {
+      setPengampuOptions([]);
+    }
+    if (form.jenisBaris !== 'praktikum') {
+      setPengampuPraktikumOptions([]);
+    }
+    // Reset materi ketika jenis baris berubah
+    if (form.materi) {
+      setForm(f => ({ ...f, materi: '', pengampu: form.jenisBaris === 'praktikum' ? [] : null }));
+    }
+  }, [form.jenisBaris]);
 
 
   // Fungsi untuk format tanggal yang konsisten seperti di Agenda Khusus
@@ -349,6 +379,7 @@ export default function DetailBlok() {
     if (errorForm && !errorForm.includes('Tanggal tidak boleh') && !errorForm.includes('Hari/Tanggal sudah ada')) {
       setErrorForm('');
     }
+    setErrorBackend(''); // Reset error backend
   }
 
   // Helper function untuk reset form dengan semua field yang diperlukan
@@ -358,7 +389,7 @@ export default function DetailBlok() {
       jamMulai: '',
       jumlahKali: 2,
       jamSelesai: '',
-      pengampu: null,
+      pengampu: jenisBaris === 'praktikum' ? [] : null,
       materi: '',
       topik: '',
       lokasi: null,
@@ -433,8 +464,8 @@ export default function DetailBlok() {
     }
     
     // Reset error dari backend ketika user mengubah form (untuk memberikan kesempatan retry)
-    if (errorForm && (errorForm.includes('bentrok') || errorForm.includes('sudah terpakai'))) {
-      setErrorForm('');
+    if (errorBackend) {
+      setErrorBackend('');
     }
   }
 
@@ -646,11 +677,16 @@ export default function DetailBlok() {
         !form.hariTanggal ||
         !form.jamMulai ||
         !form.jamSelesai ||
-        !form.agenda ||
-        form.lokasi == null
+        !form.agenda
       ) {
         setErrorForm('Semua field wajib diisi!');
         throw new Error('Semua field wajib diisi!');
+      }
+      
+      // Validasi ruangan hanya jika menggunakan ruangan
+      if (form.useRuangan && !form.lokasi) {
+        setErrorForm('Ruangan wajib dipilih jika menggunakan ruangan!');
+        throw new Error('Ruangan wajib dipilih jika menggunakan ruangan!');
       }
       
       // Gunakan handler khusus untuk agenda khusus
@@ -679,13 +715,7 @@ export default function DetailBlok() {
       return;
     }
     
-    // ...existing logic untuk baris non-PBL (materi, agenda, praktikum, jurnal) tetap pakai state lokal
-    // ... existing code ...
   }
-
-
-
-
 
   // Hapus useEffect yang tidak perlu karena data sudah dalam format yang benar
 
@@ -1188,6 +1218,7 @@ export default function DetailBlok() {
   // Fungsi tambah jadwal PBL
   async function handleTambahJadwalPBL(formPBL: JadwalPBLType) {
     setErrorJadwal('');
+    setErrorBackend('');
     // Reset error state
 
     // Pastikan jumlah_sesi sesuai dengan pbl_tipe
@@ -1201,9 +1232,9 @@ export default function DetailBlok() {
       fetchBatchData();
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {
-        setErrorJadwal(err.response.data.message);
+        setErrorBackend(err.response.data.message);
       } else {
-        setErrorJadwal('Gagal menambah jadwal PBL');
+        setErrorBackend('Gagal menambah jadwal PBL');
       }
       throw err; // Re-throw error agar bisa ditangkap oleh caller
     }
@@ -1212,6 +1243,7 @@ export default function DetailBlok() {
   // Fungsi edit jadwal PBL
   async function handleEditJadwalPBL(id: number, formPBL: JadwalPBLType) {
     setErrorJadwal('');
+    setErrorBackend('');
           // Reset error state
 
     
@@ -1226,9 +1258,9 @@ export default function DetailBlok() {
       fetchBatchData();
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {
-        setErrorJadwal(err.response.data.message);
+        setErrorBackend(err.response.data.message);
       } else {
-        setErrorJadwal('Gagal mengedit jadwal PBL');
+        setErrorBackend('Gagal mengedit jadwal PBL');
       }
       throw err;
     }
@@ -1266,6 +1298,7 @@ export default function DetailBlok() {
   // Handler tambah jadwal kuliah besar
   async function handleTambahJadwalKuliahBesar() {
     setErrorForm('');
+    setErrorBackend('');
     // Validasi field wajib
     if (!form.hariTanggal || !form.jamMulai || !form.jamSelesai || !form.materi || !form.pengampu || !form.lokasi) {
       setErrorForm('Semua field wajib diisi!');
@@ -1298,7 +1331,7 @@ export default function DetailBlok() {
       setExistingFileJurnal(null);
       setEditIndex(null);
     } catch (err: any) {
-      setErrorForm(err?.response?.data?.message || 'Gagal menyimpan jadwal kuliah besar');
+      setErrorBackend(err?.response?.data?.message || 'Gagal menyimpan jadwal kuliah besar');
       throw err;
     }
   }
@@ -1327,7 +1360,7 @@ export default function DetailBlok() {
       });
     setEditIndex(idx);
     setShowModal(true);
-    setErrorForm('');
+    resetErrorForm();
   }
 
   // Handler hapus jadwal kuliah besar
@@ -1345,6 +1378,7 @@ export default function DetailBlok() {
   // Handler tambah jadwal agenda khusus
   async function handleTambahJadwalAgendaKhusus() {
     setErrorForm('');
+    setErrorBackend('');
     // Validasi field wajib
     if (!form.hariTanggal || !form.jamMulai || !form.jamSelesai || !form.agenda) {
       setErrorForm('Semua field wajib diisi!');
@@ -1383,7 +1417,7 @@ export default function DetailBlok() {
       setExistingFileJurnal(null);
       setEditIndex(null);
     } catch (err: any) {
-      setErrorForm(err?.response?.data?.message || 'Gagal menyimpan jadwal agenda khusus');
+      setErrorBackend(err?.response?.data?.message || 'Gagal menyimpan jadwal agenda khusus');
       throw err;
     }
   }
@@ -1412,7 +1446,7 @@ export default function DetailBlok() {
     });
     setEditIndex(idx);
     setShowModal(true);
-    setErrorForm('');
+    resetErrorForm();
   }
 
   // Handler hapus jadwal agenda khusus
@@ -1443,6 +1477,7 @@ export default function DetailBlok() {
   // Handler tambah jadwal praktikum
   async function handleTambahJadwalPraktikum() {
     setErrorForm('');
+    setErrorBackend('');
     // Validasi field wajib
     if (!form.hariTanggal || !form.jamMulai || !form.jamSelesai || !form.materi || !form.kelasPraktikum || !form.lokasi || !form.pengampu || (Array.isArray(form.pengampu) && form.pengampu.length === 0)) {
       setErrorForm('Semua field wajib diisi!');
@@ -1475,7 +1510,7 @@ export default function DetailBlok() {
       setExistingFileJurnal(null);
       setEditIndex(null);
     } catch (err: any) {
-      setErrorForm(err?.response?.data?.message || 'Gagal menyimpan jadwal praktikum');
+      setErrorBackend(err?.response?.data?.message || 'Gagal menyimpan jadwal praktikum');
       throw err;
     }
   }
@@ -1504,7 +1539,7 @@ export default function DetailBlok() {
     });
     setEditIndex(idx);
     setShowModal(true);
-    setErrorForm('');
+    resetErrorForm();
   }
 
   // Handler hapus jadwal praktikum
@@ -1535,6 +1570,7 @@ export default function DetailBlok() {
   // Handler tambah jadwal jurnal reading
   async function handleTambahJadwalJurnalReading() {
     setErrorForm('');
+    setErrorBackend('');
     // Validasi field wajib
     if (!form.hariTanggal || !form.jamMulai || !form.jamSelesai || !form.topik || !form.kelompok || !form.pengampu || !form.lokasi) {
       setErrorForm('Semua field wajib diisi!');
@@ -1593,7 +1629,11 @@ export default function DetailBlok() {
           editFormData.append('topik', payload.topik);
           editFormData.append('file_jurnal', form.fileJurnal);
           
-          await api.post(`/jurnal-reading/jadwal/${data!.kode}/${jadwalJurnalReading[editIndex].id}`, editFormData);
+          await api.post(`/jurnal-reading/jadwal/${data!.kode}/${jadwalJurnalReading[editIndex].id}`, editFormData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          });
         } else {
           // Tidak ada file baru, gunakan JSON
           const jsonPayload = {
@@ -1610,7 +1650,11 @@ export default function DetailBlok() {
         }
       } else {
         // Tambah mode - selalu gunakan FormData
-        await api.post(`/jurnal-reading/jadwal/${data!.kode}`, formData);
+        await api.post(`/jurnal-reading/jadwal/${data!.kode}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
       }
       
       await fetchBatchData();
@@ -1619,7 +1663,7 @@ export default function DetailBlok() {
       setExistingFileJurnal(null);
       setEditIndex(null);
     } catch (err: any) {
-      setErrorForm(err?.response?.data?.message || 'Gagal menyimpan jadwal jurnal reading');
+      setErrorBackend(err?.response?.data?.message || 'Gagal menyimpan jadwal jurnal reading');
       throw err;
     }
   }
@@ -1660,7 +1704,7 @@ export default function DetailBlok() {
     
     setEditIndex(idx);
     setShowModal(true);
-    setErrorForm('');
+    resetErrorForm();
   }
 
   // Handler hapus jadwal jurnal reading
@@ -1681,7 +1725,7 @@ export default function DetailBlok() {
       await api.delete(`/jurnal-reading/jadwal/${data!.kode}/${row.id}`);
       await fetchBatchData();
     } catch (err: any) {
-      setErrorForm('Gagal menghapus jadwal jurnal reading');
+      setErrorBackend('Gagal menghapus jadwal jurnal reading');
     }
     setIsSaving(false);
     setShowDeleteJurnalReadingModal(false);
@@ -2093,7 +2137,7 @@ export default function DetailBlok() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hari/Tanggal</label>
                     <input type="date" name="hariTanggal" value={form.hariTanggal || ''} onChange={handleFormChange} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                        {errorForm && !errorForm.includes('bentrok') && !errorForm.includes('Kapasitas ruangan tidak mencukupi') && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
+                        {errorForm && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1">
@@ -2204,7 +2248,17 @@ export default function DetailBlok() {
                           <Select
                             options={materiOptions.map((m: string) => ({ value: m, label: m }))}
                             value={materiOptions.map((m: string) => ({ value: m, label: m })).find((opt: any) => opt.value === form.materi) || null}
-                            onChange={opt => setForm(f => ({ ...f, materi: opt?.value || '' }))}
+                            onChange={opt => {
+                              setForm(f => ({ 
+                                ...f, 
+                                materi: opt?.value || '',
+                                pengampu: null // Reset pengampu ketika materi berubah
+                              }));
+                              // Reset pengampu options jika materi di-clear
+                              if (!opt?.value) {
+                                setPengampuOptions([]);
+                              }
+                            }}
                             placeholder="Pilih Materi"
                             isClearable
                             classNamePrefix="react-select"
@@ -2271,18 +2325,18 @@ export default function DetailBlok() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pengampu</label>
-                        {pengampuOptions.length === 0 ? (
+                        {form.materi && pengampuOptions.length === 0 ? (
                           <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
                             <div className="flex items-center gap-2">
                               <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                               </svg>
                               <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
-                                Belum ada dosen yang ditambahkan untuk mata kuliah ini
+                                Belum ada dosen yang memiliki keahlian "{form.materi}" untuk mata kuliah ini
                               </span>
                             </div>
                             <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
-                              Silakan tambahkan dosen terlebih dahulu di halaman Dosen Detail
+                              Silakan tambahkan dosen dengan keahlian "{form.materi}" terlebih dahulu di halaman Dosen Detail
                             </p>
                           </div>
                         ) : (
@@ -2293,7 +2347,8 @@ export default function DetailBlok() {
                               setForm(f => ({ ...f, pengampu: opt ? Number(opt.value) : null }));
                               resetErrorForm();
                             }}
-                            placeholder="Pilih Dosen"
+                            placeholder={form.materi ? "Pilih Dosen" : "Pilih materi terlebih dahulu"}
+                            isDisabled={!form.materi}
                             isClearable
                             classNamePrefix="react-select"
                             className="react-select-container"
@@ -2546,7 +2601,7 @@ export default function DetailBlok() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hari/Tanggal</label>
                         <input type="date" name="hariTanggal" value={form.hariTanggal || ''} onChange={handleFormChange} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                        {errorForm && !errorForm.includes('bentrok') && !errorForm.includes('Kapasitas ruangan tidak mencukupi') && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
+                        {errorForm && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
                       </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kelas Praktikum</label>
@@ -2745,7 +2800,19 @@ export default function DetailBlok() {
                             options={form.jenisBaris === 'praktikum' ? materiPraktikumOptions.map(m => ({ value: m, label: m })) : materiOptions.map((m: string) => ({ value: m, label: m }))}
                             value={(form.jenisBaris === 'praktikum' ? materiPraktikumOptions.map(m => ({ value: m, label: m })) : materiOptions.map((m: string) => ({ value: m, label: m }))).find((opt: any) => opt.value === form.materi) || null}
                             onChange={opt => {
-                              setForm(f => ({ ...f, materi: opt?.value || '' }));
+                              setForm(f => ({ 
+                                ...f, 
+                                materi: opt?.value || '',
+                                pengampu: form.jenisBaris === 'praktikum' ? [] : null // Reset pengampu ketika materi berubah
+                              }));
+                              // Reset pengampu options jika materi di-clear
+                              if (!opt?.value) {
+                                if (form.jenisBaris === 'praktikum') {
+                                  setPengampuPraktikumOptions([]);
+                                } else {
+                                  setPengampuOptions([]);
+                                }
+                              }
                               resetErrorForm();
                             }}
                             placeholder="Pilih Materi"
@@ -2826,18 +2893,18 @@ export default function DetailBlok() {
                                 </span>
                               </div>
                             </div>
-                          ) : (form.jenisBaris === 'praktikum' && pengampuPraktikumOptions.length === 0) ? (
+                          ) : (form.jenisBaris === 'praktikum' && form.materi && pengampuPraktikumOptions.length === 0) ? (
                             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
                               <div className="flex items-center gap-2">
                                 <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                 </svg>
                                 <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
-                                  Belum ada dosen yang ditambahkan untuk mata kuliah ini
+                                  Belum ada dosen yang memiliki keahlian "{form.materi}" untuk mata kuliah ini
                                 </span>
                               </div>
                               <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
-                                Silakan tambahkan dosen terlebih dahulu di halaman Dosen Detail
+                                Silakan tambahkan dosen dengan keahlian "{form.materi}" terlebih dahulu di halaman Dosen Detail
                               </p>
                             </div>
                           ) : (['pbl', 'jurnal'].includes(form.jenisBaris)) && (!hasAssignedPBL || assignedDosenPBL.length === 0) ? (
@@ -2893,9 +2960,18 @@ export default function DetailBlok() {
                               }
                               resetErrorForm();
                             }}
-                              placeholder={loadingAssignedPBL && (['pbl', 'jurnal'].includes(form.jenisBaris)) ? "Memuat..." : "Pilih Pengampu"}
+                              placeholder={(() => {
+                                if (loadingAssignedPBL && (['pbl', 'jurnal'].includes(form.jenisBaris))) {
+                                  return "Memuat...";
+                                } else if (form.jenisBaris === 'praktikum') {
+                                  return form.materi ? "Pilih Pengampu" : "Pilih materi terlebih dahulu";
+                                } else {
+                                  return "Pilih Pengampu";
+                                }
+                              })()}
                             isClearable
                             isMulti={form.jenisBaris === 'praktikum'}
+                            isDisabled={form.jenisBaris === 'praktikum' && !form.materi}
                               isLoading={loadingAssignedPBL && (['pbl', 'jurnal'].includes(form.jenisBaris))}
                             classNamePrefix="react-select"
                             className="react-select-container"
@@ -3177,7 +3253,7 @@ export default function DetailBlok() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hari/Tanggal</label>
                         <input type="date" name="hariTanggal" value={form.hariTanggal || ''} onChange={handleFormChange} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                        {errorForm && !errorForm.includes('bentrok') && !errorForm.includes('Kapasitas ruangan') && !errorForm.includes('tidak mencukupi') && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
+                        {errorForm && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1">
@@ -3499,7 +3575,7 @@ export default function DetailBlok() {
                           onChange={handleFormChange}
                           className="w-full px-3 sa py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         />
-                        {errorForm && !errorForm.includes('bentrok') && !errorForm.includes('Kapasitas ruangan tidak mencukupi') && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
+                        {errorForm && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipe PBL</label>
@@ -3986,7 +4062,7 @@ export default function DetailBlok() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hari/Tanggal</label>
                         <input type="date" name="hariTanggal" value={form.hariTanggal || ''} onChange={handleFormChange} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                        {errorForm && !errorForm.includes('bentrok') && !errorForm.includes('Kapasitas ruangan tidak mencukupi') && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
+                        {errorForm && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1">
@@ -4459,23 +4535,20 @@ export default function DetailBlok() {
                     </>
                   )}
                 </div>
-                {errorForm && 
-                  !errorForm.includes('Tanggal tidak boleh') && 
-                  !errorForm.includes('Hari/Tanggal sudah ada') && 
-                  !errorForm.includes('Semua field wajib diisi') && 
-                  !errorForm.includes('Kelompok kecil tidak valid') && 
-                  !errorForm.includes('Kelompok tidak ditemukan') && 
-                  !errorForm.includes('Ruangan wajib dipilih') && 
-                  (form.jenisBaris !== 'agenda' || (form.jenisBaris === 'agenda' && (errorForm.includes('bentrok') || errorForm.includes('Kapasitas ruangan') || errorForm.includes('tidak mencukupi')))) && (
+
+                
+                {/* Error Backend */}
+                {errorBackend && (
                   <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                     <div className="flex items-center">
                       <svg className="w-8 h-8 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span className="text-sm text-red-700 dark:text-red-300">{errorForm}</span>
+                      <span className="text-sm text-red-700 dark:text-red-300">{errorBackend}</span>
                     </div>
                   </div>
                 )}
+                
                 <div className="flex justify-end gap-2 pt-6">
                   <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition">Batal</button>
                   <button
@@ -4557,7 +4630,7 @@ export default function DetailBlok() {
       setEditIndex(null);
     } catch (err: any) {
       // Jika ada error dari API, tampilkan pesan error tapi modal tetap terbuka
-      setErrorForm(err?.response?.data?.message || 'Terjadi kesalahan saat menyimpan data');
+      setErrorBackend(err?.response?.data?.message || 'Terjadi kesalahan saat menyimpan data');
     }
     
     setIsSaving(false);
@@ -4579,7 +4652,7 @@ export default function DetailBlok() {
       form.pengampu == null ||
       form.lokasi == null
     )) ||
-    (form.jenisBaris === 'jurnal' && (!form.hariTanggal || !form.jamMulai || !form.jamSelesai || !form.kelompok || !form.topik || !form.pengampu || (!form.fileJurnal && !existingFileJurnal) || !form.lokasi))
+    (form.jenisBaris === 'jurnal' && (!form.hariTanggal || !form.jamMulai || !form.jamSelesai || !form.kelompok || !form.topik || !form.pengampu || !form.lokasi))
   }
 >
   {isSaving ? (
@@ -4629,7 +4702,7 @@ export default function DetailBlok() {
               setExistingFileJurnal(null);
               setEditIndex(null);
               setShowModal(true);
-              setErrorForm(''); // Reset error form saat modal dibuka
+              resetErrorForm(); // Reset error form saat modal dibuka
               // Fetch semua ruangan
               fetchRuanganForModal();
             }}
@@ -4890,7 +4963,7 @@ export default function DetailBlok() {
                             </div>
                             <div className="flex-shrink-0">
                               <a 
-                                href={`http://localhost:8000/api/jurnal-reading/download/${data!.kode}/${row.id}`} 
+                                href={`${API_BASE_URL}/jurnal-reading/download/${data!.kode}/${row.id}`} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 rounded-md transition-colors duration-200"

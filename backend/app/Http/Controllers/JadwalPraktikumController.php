@@ -8,6 +8,7 @@ use App\Models\Ruangan;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 class JadwalPraktikumController extends Controller
 {
@@ -217,14 +218,17 @@ class JadwalPraktikumController extends Controller
         // Cek bentrok dengan jadwal Jurnal Reading
         $jurnalBentrok = \App\Models\JadwalJurnalReading::where('tanggal', $data['tanggal'])
             ->where('ruangan_id', $data['ruangan_id'])
-            ->where(function ($q) use ($data) {
+            ->where(function($q) use ($data) {
                 $q->where('jam_mulai', '<', $data['jam_selesai'])
                    ->where('jam_selesai', '>', $data['jam_mulai']);
             });
+
+        // Cek bentrok dengan kelompok besar (jika ada kelompok_besar_id di jadwal lain)
+        $kelompokBesarBentrok = $this->checkKelompokBesarBentrok($data, $ignoreId);
             
         return $praktikumBentrok->exists() || $pblBentrok->exists() || 
                $kuliahBesarBentrok->exists() || $agendaKhususBentrok->exists() || 
-               $jurnalBentrok->exists();
+               $jurnalBentrok->exists() || $kelompokBesarBentrok;
     }
 
     private function checkBentrokWithDetail($data, $ignoreId = null): ?string
@@ -247,9 +251,10 @@ class JadwalPraktikumController extends Controller
         if ($jadwalBentrokPraktikum) {
             $jamMulaiFormatted = str_replace(':', '.', $jadwalBentrokPraktikum->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $jadwalBentrokPraktikum->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $jadwalBentrokPraktikum);
             return "Jadwal bentrok dengan Jadwal Praktikum pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
 
         // Cek bentrok dengan jadwal PBL
@@ -264,11 +269,12 @@ class JadwalPraktikumController extends Controller
         if ($pblBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $pblBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $pblBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $pblBentrok);
             return "Jadwal bentrok dengan Jadwal PBL pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
-            
+        
         // Cek bentrok dengan jadwal Kuliah Besar
         $kuliahBesarBentrok = \App\Models\JadwalKuliahBesar::where('tanggal', $data['tanggal'])
             ->where('ruangan_id', $data['ruangan_id'])
@@ -281,14 +287,14 @@ class JadwalPraktikumController extends Controller
         if ($kuliahBesarBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $kuliahBesarBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $kuliahBesarBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $kuliahBesarBentrok);
             return "Jadwal bentrok dengan Jadwal Kuliah Besar pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
-            
-        // Cek bentrok dengan jadwal Agenda Khusus (hanya yang menggunakan ruangan)
+        
+        // Cek bentrok dengan jadwal Agenda Khusus
         $agendaKhususBentrok = \App\Models\JadwalAgendaKhusus::where('tanggal', $data['tanggal'])
-            ->where('use_ruangan', true)
             ->where('ruangan_id', $data['ruangan_id'])
             ->where(function ($q) use ($data) {
                 $q->where('jam_mulai', '<', $data['jam_selesai'])
@@ -299,11 +305,12 @@ class JadwalPraktikumController extends Controller
         if ($agendaKhususBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $agendaKhususBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $agendaKhususBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $agendaKhususBentrok);
             return "Jadwal bentrok dengan Jadwal Agenda Khusus pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
-            
+        
         // Cek bentrok dengan jadwal Jurnal Reading
         $jurnalBentrok = \App\Models\JadwalJurnalReading::where('tanggal', $data['tanggal'])
             ->where('ruangan_id', $data['ruangan_id'])
@@ -316,47 +323,34 @@ class JadwalPraktikumController extends Controller
         if ($jurnalBentrok) {
             $jamMulaiFormatted = str_replace(':', '.', $jurnalBentrok->jam_mulai);
             $jamSelesaiFormatted = str_replace(':', '.', $jurnalBentrok->jam_selesai);
+            $bentrokReason = $this->getBentrokReason($data, $jurnalBentrok);
             return "Jadwal bentrok dengan Jadwal Jurnal Reading pada tanggal " . 
                    date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
-        }
-
-        // Cek bentrok dengan jadwal CSR
-        $csrBentrok = \App\Models\JadwalCSR::where('tanggal', $data['tanggal'])
-            ->where('ruangan_id', $data['ruangan_id'])
-            ->where(function ($q) use ($data) {
-                $q->where('jam_mulai', '<', $data['jam_selesai'])
-                   ->where('jam_selesai', '>', $data['jam_mulai']);
-            })
-            ->first();
-            
-        if ($csrBentrok) {
-            $jamMulaiFormatted = str_replace(':', '.', $csrBentrok->jam_mulai);
-            $jamSelesaiFormatted = str_replace(':', '.', $csrBentrok->jam_selesai);
-            return "Jadwal bentrok dengan Jadwal CSR pada tanggal " . 
-                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
-        }
-
-        // Cek bentrok dengan jadwal Non-Blok Non-CSR (hanya yang menggunakan ruangan)
-        $nonBlokNonCSRBentrok = \App\Models\JadwalNonBlokNonCSR::where('tanggal', $data['tanggal'])
-            ->where('use_ruangan', true)
-            ->where('ruangan_id', $data['ruangan_id'])
-            ->where(function ($q) use ($data) {
-                $q->where('jam_mulai', '<', $data['jam_selesai'])
-                   ->where('jam_selesai', '>', $data['jam_mulai']);
-            })
-            ->first();
-            
-        if ($nonBlokNonCSRBentrok) {
-            $jamMulaiFormatted = str_replace(':', '.', $nonBlokNonCSRBentrok->jam_mulai);
-            $jamSelesaiFormatted = str_replace(':', '.', $nonBlokNonCSRBentrok->jam_selesai);
-            return "Jadwal bentrok dengan Jadwal Non-Blok Non-CSR pada tanggal " . 
-                   date('d/m/Y', strtotime($data['tanggal'])) . " jam " . 
-                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted;
+                   $jamMulaiFormatted . "-" . $jamSelesaiFormatted . " (" . $bentrokReason . ")";
         }
 
         return null; // Tidak ada bentrok
+    }
+
+    /**
+     * Mendapatkan alasan bentrok yang detail
+     */
+    private function getBentrokReason($data, $jadwalBentrok): string
+    {
+        $reasons = [];
+        
+        // Cek bentrok ruangan
+        if (isset($data['ruangan_id']) && isset($jadwalBentrok->ruangan_id) && $data['ruangan_id'] == $jadwalBentrok->ruangan_id) {
+            $ruangan = \App\Models\Ruangan::find($data['ruangan_id']);
+            $reasons[] = "Ruangan: " . ($ruangan ? $ruangan->nama : 'Tidak diketahui');
+        }
+        
+        // Cek bentrok kelas praktikum
+        if (isset($data['kelas_praktikum']) && isset($jadwalBentrok->kelas_praktikum) && $data['kelas_praktikum'] == $jadwalBentrok->kelas_praktikum) {
+            $reasons[] = "Kelas Praktikum: " . $data['kelas_praktikum'];
+        }
+        
+        return implode(', ', $reasons);
     }
 
     /**
@@ -377,8 +371,23 @@ class JadwalPraktikumController extends Controller
         $kelasPraktikum = \App\Models\Kelas::where('nama_kelas', $data['kelas_praktikum'])->first();
         $semesterKelas = $kelasPraktikum ? $kelasPraktikum->semester : $semester;
         
-        // Hitung mahasiswa berdasarkan semester kelas praktikum
-        $jumlahMahasiswa = \App\Models\KelompokKecil::where('semester', $semesterKelas)->count();
+        // Hitung mahasiswa yang HANYA ada di kelas praktikum ini
+        $jumlahMahasiswa = 0;
+        if ($kelasPraktikum) {
+            // Ambil kelompok yang ada di kelas ini
+            $kelompokIds = DB::table('kelas_kelompok')
+                ->where('kelas_id', $kelasPraktikum->id)
+                ->pluck('nama_kelompok')
+                ->toArray();
+            
+            // Hitung mahasiswa yang ada di kelompok tersebut
+            $jumlahMahasiswa = \App\Models\KelompokKecil::where('semester', $semesterKelas)
+                ->whereIn('nama_kelompok', $kelompokIds)
+                ->count();
+        } else {
+            // Fallback: hitung semua mahasiswa di semester jika kelas tidak ditemukan
+            $jumlahMahasiswa = \App\Models\KelompokKecil::where('semester', $semesterKelas)->count();
+        }
 
         // Hitung jumlah dosen yang dipilih
         $jumlahDosen = count($data['dosen_ids']);
@@ -403,6 +412,15 @@ class JadwalPraktikumController extends Controller
         }
 
         return null; // Kapasitas mencukupi
+    }
+
+    /**
+     * Cek bentrok dengan kelompok besar
+     */
+    private function checkKelompokBesarBentrok($data, $ignoreId = null): bool
+    {
+        // Praktikum tidak menggunakan kelompok besar, jadi tidak ada bentrok
+        return false;
     }
 
     /**

@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import api from '../api/axios';
+import api from '../utils/api';
 import { ChevronLeftIcon } from '../icons';
 import { AnimatePresence, motion } from 'framer-motion';
 import Select from 'react-select';
@@ -88,8 +88,8 @@ export default function DetailNonBlokNonCSR() {
     kelompokBesar: null as number | null,
     useRuangan: true,
   });
-  const [errorForm, setErrorForm] = useState(''); // Error dari backend
-  const [frontendError, setFrontendError] = useState(''); // Error dari frontend validasi
+  const [errorForm, setErrorForm] = useState(''); // Error frontend (validasi form)
+  const [errorBackend, setErrorBackend] = useState(''); // Error backend (response API)
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedDeleteIndex, setSelectedDeleteIndex] = useState<number | null>(null);
@@ -118,7 +118,7 @@ export default function DetailNonBlokNonCSR() {
     });
     setEditIndex(null);
     setErrorForm('');
-    setFrontendError('');
+    setErrorBackend('');
   };
 
   // Fetch kelompok besar options untuk agenda khusus
@@ -232,16 +232,16 @@ export default function DetailNonBlokNonCSR() {
       const tglAkhir = new Date(data.tanggal_akhir || data.tanggalAkhir || '');
       const tglInput = new Date(value);
       if (tglMulai && tglInput < tglMulai) {
-        setFrontendError('Tanggal tidak boleh sebelum tanggal mulai!');
+        setErrorForm('Tanggal tidak boleh sebelum tanggal mulai!');
       } else if (tglAkhir && tglInput > tglAkhir) {
-        setFrontendError('Tanggal tidak boleh setelah tanggal akhir!');
+        setErrorForm('Tanggal tidak boleh setelah tanggal akhir!');
       } else {
-        setFrontendError('');
+        setErrorForm('');
       }
     }
     // Reset backend error when form changes
     if (name === 'hariTanggal' || name === 'jamMulai' || name === 'jumlahKali' || name === 'materi' || name === 'agenda' || name === 'pengampu' || name === 'lokasi') {
-      setErrorForm('');
+      setErrorBackend('');
     }
     setForm(newForm);
   }
@@ -284,7 +284,7 @@ export default function DetailNonBlokNonCSR() {
     setEditIndex(idx);
     setShowModal(true);
     setErrorForm('');
-    setFrontendError('');
+    setErrorBackend('');
   }
 
   async function handleDeleteJadwal(idx: number) {
@@ -299,14 +299,15 @@ export default function DetailNonBlokNonCSR() {
       setSelectedDeleteIndex(null);
     } catch (error: any) {
       console.error('Error deleting jadwal:', error);
-      setErrorForm(error.response?.data?.message || 'Gagal menghapus jadwal');
+      setErrorBackend(error.response?.data?.message || 'Gagal menghapus jadwal');
     }
   }
 
   async function handleTambahJadwal() {
     setErrorForm('');
+    setErrorBackend('');
     if (!form.hariTanggal || (form.jenisBaris === 'materi' && (!form.jamMulai || !form.jumlahKali || !form.pengampu || !form.materi || !form.lokasi)) || (form.jenisBaris === 'agenda' && (!form.agenda || (form.useRuangan && !form.lokasi)))) {
-      setFrontendError('Semua field wajib harus diisi!');
+      setErrorForm('Semua field wajib harus diisi!');
       return;
     }
     
@@ -340,9 +341,9 @@ export default function DetailNonBlokNonCSR() {
       resetForm();
     } catch (error: any) {
       if (error.response?.data?.message) {
-        setErrorForm(error.response.data.message);
+        setErrorBackend(error.response.data.message);
     } else {
-        setErrorForm('Gagal menyimpan jadwal');
+        setErrorBackend('Gagal menyimpan jadwal');
       }
     } finally {
       setIsSaving(false);
@@ -530,6 +531,8 @@ export default function DetailNonBlokNonCSR() {
           onClick={() => {
             resetForm();
             setShowModal(true);
+            setErrorForm('');
+            setErrorBackend('');
           }}
           className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium shadow-theme-xs hover:bg-brand-600 transition-all duration-300"
         >
@@ -654,7 +657,7 @@ export default function DetailNonBlokNonCSR() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hari/Tanggal</label>
                   <input type="date" name="hariTanggal" value={form.hariTanggal} onChange={handleFormChange} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                  {frontendError && <div className="text-sm text-red-500 mt-2">{frontendError}</div>}
+                  {errorForm && <div className="text-sm text-red-500 mt-2">{errorForm}</div>}
                 </div>
                {form.jenisBaris === 'agenda' && (
                  <>
@@ -1157,13 +1160,13 @@ export default function DetailNonBlokNonCSR() {
                     )}
                   </div>
                 )}
-                {errorForm && (
+                {errorBackend && (
                   <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                     <div className="flex items-center">
                       <svg className="w-8 h-8 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span className="text-sm text-red-700 dark:text-red-300">{errorForm}</span>
+                      <span className="text-sm text-red-700 dark:text-red-300">{errorBackend}</span>
                     </div>
                   </div>
                 )}
@@ -1173,7 +1176,7 @@ export default function DetailNonBlokNonCSR() {
                   setShowModal(false);
                   resetForm();
                 }} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition">Batal</button>
-                <button onClick={handleTambahJadwal} className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium shadow-theme-xs hover:bg-brand-600 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled={!form.hariTanggal || (form.jenisBaris === 'materi' && (!form.jamMulai || !form.jumlahKali || !form.pengampu || !form.materi || !form.lokasi)) || (form.jenisBaris === 'agenda' && (!form.agenda || (form.useRuangan && !form.lokasi))) || !!frontendError || isSaving}>{editIndex !== null ? 'Simpan' : 'Tambah Jadwal'}</button>
+                <button onClick={handleTambahJadwal} className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium shadow-theme-xs hover:bg-brand-600 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled={!form.hariTanggal || (form.jenisBaris === 'materi' && (!form.jamMulai || !form.jumlahKali || !form.pengampu || !form.materi || !form.lokasi)) || (form.jenisBaris === 'agenda' && (!form.agenda || (form.useRuangan && !form.lokasi))) || !!errorForm || isSaving}>{editIndex !== null ? 'Simpan' : 'Tambah Jadwal'}</button>
               </div>
             </motion.div>
           </div>

@@ -807,7 +807,7 @@ const KelasDetail: React.FC = () => {
                                   {mhsInKelompok.map((m: any) => {
                                     // Debug log untuk cek field nama
                                     if (!m.nama && !m.name) {
-                                      console.log('Mahasiswa tanpa nama:', m);
+
                                     }
                                     return (
                                       <li key={m.id} className="flex flex-col sm:flex-row justify-start items-start gap-2 text-gray-700 dark:text-gray-200 text-sm">

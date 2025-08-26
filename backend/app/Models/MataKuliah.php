@@ -29,6 +29,7 @@ class MataKuliah extends Model
         'durasi_minggu',
         'keahlian_required',
         'peran_dalam_kurikulum',
+        'rps_file',
     ];
 
     protected $casts = [

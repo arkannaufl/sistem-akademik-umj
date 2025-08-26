@@ -7,7 +7,7 @@ import {
   faPlus,
 } from "@fortawesome/free-solid-svg-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import api from "../api/axios";
+import api from "../utils/api";
 import { useNavigate } from "react-router-dom";
 
 type MataKuliah = {

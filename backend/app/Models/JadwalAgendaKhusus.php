@@ -26,4 +26,12 @@ class JadwalAgendaKhusus extends Model
     // Relasi
     public function mataKuliah() { return $this->belongsTo(MataKuliah::class, 'mata_kuliah_kode', 'kode'); }
     public function ruangan() { return $this->belongsTo(Ruangan::class, 'ruangan_id'); }
+    
+    /**
+     * Relasi ke kelompok besar berdasarkan semester
+     */
+    public function kelompokBesar()
+    {
+        return $this->hasMany(KelompokBesar::class, 'semester', 'kelompok_besar_id');
+    }
 }

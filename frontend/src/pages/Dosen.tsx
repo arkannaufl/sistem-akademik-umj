@@ -267,7 +267,7 @@ export default function Dosen() {
   // PERBAIKAN: Pindahkan function ke level component agar bisa diakses
   const fetchSemesterAndMatkul = async () => {
       try {
-      console.log("=== FETCH SEMESTER AND MATKUL START ===");
+  
       const [tahunRes, mkRes, pblRes] = await Promise.all([
         api.get("/tahun-ajaran"),
         api.get("/mata-kuliah"),
@@ -302,9 +302,7 @@ export default function Dosen() {
       });
       setPblData(transformedPblData);
 
-      console.log("=== FETCH SEMESTER AND MATKUL END ===");
-      console.log("matkulList updated:", mkList);
-      console.log("pblData updated:", pblRes.data);
+      
       } catch (e) {
       console.error("Failed to fetch semester and matkul data:", e);
         setMatkulList([]);
@@ -1320,9 +1318,9 @@ export default function Dosen() {
 
   // Function untuk fetch assignment data
   const fetchAssignmentData = async () => {
-    console.log("=== FETCH ASSIGNMENT DATA CALLED ===");
+
     try {
-      console.log("=== FETCH ASSIGNMENT DATA START ===");
+      
 
       // Langsung ambil data assignment dari /pbls/assigned-dosen-batch
       // tanpa perlu fetch /pbls/all yang bermasalah
@@ -1333,29 +1331,17 @@ export default function Dosen() {
         ], // Hardcode PBL IDs yang ada
       });
 
-      console.log("=== API RESPONSE DETAILS ===");
-      console.log("Assignment Response Status:", assignedRes.status);
-      console.log("Assignment Response Data:", assignedRes.data);
-      console.log("Assignment Data Keys:", Object.keys(assignedRes.data || {}));
-      console.log(
-        "Assignment Data Values:",
-        Object.values(assignedRes.data || {})
-      );
-      console.log(
-        "Assignment Data Length:",
-        Object.keys(assignedRes.data || {}).length
-      );
+
+
+
+
+
       
-      // Debug: Log setiap PBL ID dan dosen yang di-assign
-      if (assignedRes.data) {
-        Object.entries(assignedRes.data).forEach(([pblId, dosenList]) => {
-          console.log(`PBL ${pblId} has ${Array.isArray(dosenList) ? dosenList.length : 0} assigned dosen:`, dosenList);
-        });
-      }
+
 
       setAssignmentData(assignedRes.data || {});
 
-      console.log("=== FETCH ASSIGNMENT DATA END ===");
+
     } catch (error: any) {
       console.error("Failed to fetch assignment data:", error);
       console.error("Error details:", error.response?.data);
@@ -1365,10 +1351,10 @@ export default function Dosen() {
 
   // Function untuk menghitung assignment count per dosen
   const getAssignmentCount = (dosenId: number): number => {
-    console.log(`=== getAssignmentCount called for dosenId: ${dosenId} ===`);
-    console.log(`assignmentData:`, assignmentData);
-    console.log(`pblData:`, pblData);
-    console.log(`matkulList:`, matkulList);
+
+
+
+
     
     const uniqueMataKuliah = new Set<string>();
 
@@ -1386,14 +1372,14 @@ export default function Dosen() {
       });
     }
     
-    console.log(`excludedMataKuliah:`, Array.from(excludedMataKuliah));
+
 
     // GUNAKAN PBL MAPPING - Dosen Mengajar di-generate dari PBL assignment
     Object.entries(assignmentData).forEach(([pblId, dosenList]) => {
-      console.log(`Checking PBL ID: ${pblId}, dosenList:`, dosenList);
+
       dosenList.forEach((dosen: { id: number }) => {
         if (dosen.id === dosenId) {
-          console.log(`Found matching dosen ${dosen.id} in PBL ${pblId}`);
+
           
           // Ambil data PBL untuk mendapatkan mata kuliah
           const pblIdNum = parseInt(pblId);
@@ -1401,51 +1387,51 @@ export default function Dosen() {
 
                   // Cari di data PBL yang sudah di-fetch (sama seperti PBL-detail.tsx)
         if (pblData && Object.keys(pblData).length > 0) {
-          console.log(`Searching in pblData for PBL ${pblIdNum}`);
-          console.log(`pblData keys:`, Object.keys(pblData));
-          console.log(`pblData values:`, Object.values(pblData));
+
+
+
           
           // Loop melalui semua mata kuliah untuk mencari PBL yang sesuai
           Object.entries(pblData).forEach(([mkKode, pblList]) => {
             // PERBAIKAN: Tambah null check dan type safety
             if (!pblList || !Array.isArray(pblList)) {
-              console.log(`pblList for ${mkKode} is not an array:`, pblList);
+
               return; // Skip jika bukan array
             }
             
             const pbls = pblList as any[];
-            console.log(`Checking ${mkKode}:`, pbls);
+
             const foundPBL = pbls.find(pbl => pbl && pbl.id === pblIdNum);
             
             if (foundPBL) {
               mataKuliahKode = mkKode;
-              console.log(`Found PBL ${pblIdNum} in ${mkKode} for dosen ${dosen.id}`);
+
             }
           });
         } else {
-          console.log(`pblData is empty or undefined`);
-          console.log(`pblData type:`, typeof pblData);
-          console.log(`pblData value:`, pblData);
+
+
+
         }
           
           // Jika tidak ditemukan di pblData, gunakan fallback yang sudah diperbaiki
           if (!mataKuliahKode) {
-            console.log(`PBL ${pblIdNum} not found in pblData for dosen ${dosen.id}`);
+
           }
 
           // Hanya tambahkan jika mata kuliah tidak di-exclude (bukan Tim Blok/Koordinator)
           if (mataKuliahKode && !excludedMataKuliah.has(mataKuliahKode)) {
             uniqueMataKuliah.add(mataKuliahKode);
-            console.log(`Added mata kuliah ${mataKuliahKode} for dosen ${dosen.id}`);
+
           } else {
-            console.log(`Skipped mata kuliah ${mataKuliahKode} for dosen ${dosen.id} (excluded: ${excludedMataKuliah.has(mataKuliahKode)})`);
+
           }
         }
       });
     });
 
-    console.log(`Final uniqueMataKuliah for dosen ${dosenId}:`, Array.from(uniqueMataKuliah));
-    console.log(`Returning count: ${uniqueMataKuliah.size}`);
+
+
     return uniqueMataKuliah.size;
   };
 
@@ -1468,17 +1454,17 @@ export default function Dosen() {
       });
     }
 
-    console.log("getAssignmentDetails called for dosenId:", dosenId);
-    console.log("assignmentData:", assignmentData);
-    console.log("excludedMataKuliah:", Array.from(excludedMataKuliah));
+
+
+
 
     // GUNAKAN PBL MAPPING - Dosen Mengajar di-generate dari PBL assignment
   // PERBAIKAN: Gunakan data yang sama dengan PBL-detail.tsx untuk konsistensi
     Object.entries(assignmentData).forEach(([pblId, dosenList]) => {
-      console.log("Checking PBL ID:", pblId, "dosenList:", dosenList);
+
       dosenList.forEach((dosen: { id: number }) => {
         if (dosen.id === dosenId) {
-          console.log("Found matching dosen:", dosen);
+
         
         // PERBAIKAN: Gunakan data yang sama dengan PBL-detail.tsx
           const pblIdNum = parseInt(pblId);
@@ -1492,7 +1478,7 @@ export default function Dosen() {
           Object.entries(pblData).forEach(([mkKode, pblList]) => {
             // PERBAIKAN: Tambah null check dan type safety
             if (!pblList || !Array.isArray(pblList)) {
-              console.log(`pblList for ${mkKode} is not an array:`, pblList);
+
               return; // Skip jika bukan array
             }
             
@@ -1510,7 +1496,7 @@ export default function Dosen() {
                 mataKuliahKode = mataKuliah.kode;
                 semester = mataKuliah.semester;
                 blok = mataKuliah.blok || 1;
-                console.log(`Found PBL ${pblIdNum} in ${mkKode}: Semester ${semester}, Blok ${blok}`);
+
               }
             }
           });
@@ -1518,7 +1504,7 @@ export default function Dosen() {
         
         // PERBAIKAN: Jika tidak ditemukan, gunakan data dari backend yang sudah benar
         if (!mataKuliahKode) {
-          console.log("PBL not found in real data, checking backend data...");
+
           
                      // Coba ambil dari data yang sudah ada di backend
            // Ini akan menggunakan data yang sama dengan PBL-detail.tsx
@@ -1528,7 +1514,7 @@ export default function Dosen() {
                // PERBAIKAN: Tambah null check dan type safety
                const pbls = pblData[mk.kode];
                if (!pbls || !Array.isArray(pbls)) {
-                 console.log(`pblData[${mk.kode}] is not an array:`, pbls);
+
                  return false; // Skip jika bukan array
                }
                return pbls.some((pbl: any) => pbl && pbl.id === pblIdNum);
@@ -1538,9 +1524,9 @@ export default function Dosen() {
             mataKuliahKode = backendMataKuliah.kode;
             semester = backendMataKuliah.semester;
             blok = backendMataKuliah.blok || 1;
-            console.log(`Found in backend data: ${mataKuliahKode} Semester ${semester}, Blok ${blok}`);
+
           } else {
-            console.log("Not found in backend data, using fallback mapping");
+
             // PERBAIKAN: Fallback mapping yang benar sesuai dengan data yang di-generate
             // PBL ID = Blok number, semester = dari data yang sebenarnya
             if (pblIdNum >= 1 && pblIdNum <= 4) {
@@ -1549,7 +1535,7 @@ export default function Dosen() {
               mataKuliahKode = `MKB10${pblIdNum}`; // Format kode mata kuliah
               blok = pblIdNum; // Blok = PBL ID
               // Semester harus dari data yang sebenarnya, bukan hardcode
-              console.log(`Warning: Using fallback mapping for PBL ${pblIdNum}, but semester should come from actual data`);
+
             }
           }
           }
@@ -1560,25 +1546,25 @@ export default function Dosen() {
             const matkulNama = getMataKuliahNama(mataKuliahKode);
             const detail = `${mataKuliahKode} - ${matkulNama} Semester ${semester} | Blok ${blok}`;
             details.push(detail);
-            console.log("Added detail:", detail);
+
           } else {
-            console.log("Skipped:", mataKuliahKode, "unique:", uniqueMataKuliah.has(mataKuliahKode), "excluded:", excludedMataKuliah.has(mataKuliahKode));
+
           }
         }
       });
     });
     
-    console.log("Final details:", details);
+
     return details;
   };
 
   // Fetch assignment data saat component mount
   useEffect(() => {
-    console.log("=== COMPONENT MOUNT: Calling fetchAssignmentData ===");
+
     fetchAssignmentData();
     
     // PERBAIKAN: Pastikan pblData dan matkulList ter-fetch
-    console.log("=== COMPONENT MOUNT: Calling fetchSemesterAndMatkul ===");
+
     fetchSemesterAndMatkul();
   }, []);
 
@@ -1588,10 +1574,10 @@ export default function Dosen() {
       try {
         setLoading(true);
         const res = await api.get("/users?role=dosen");
-        console.log("=== FETCH DOSEN DATA ===");
-        console.log("Response:", res.data);
-        console.log("Dosen count:", res.data.length);
-        console.log("Sample dosen:", res.data[0]);
+
+
+
+
         setData(res.data);
       } catch (error) {
         console.error("Failed to fetch dosen data:", error);
@@ -1607,7 +1593,7 @@ export default function Dosen() {
   // Event listener untuk update real-time saat assignment berubah
   useEffect(() => {
     const handleAssignmentUpdate = () => {
-      console.log("=== EVENT: Assignment Updated ===");
+
       fetchAssignmentData();
     };
 
@@ -1668,7 +1654,7 @@ export default function Dosen() {
           </button>
           <button
             onClick={() => {
-              console.log("=== MANUAL REFRESH ASSIGNMENT ===");
+
               fetchAssignmentData();
             }}
             className="px-4 py-2 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-200 text-sm font-medium shadow-theme-xs hover:bg-purple-200 dark:hover:bg-purple-800 transition flex items-center gap-2"

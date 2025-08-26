@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "../api/axios";
+import api, { handleApiError } from "../utils/api";
 import { DownloadIcon, DocsIcon } from "../icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faClock } from "@fortawesome/free-solid-svg-icons";
@@ -113,7 +113,7 @@ const ReportingDosen: React.FC = () => {
       });
       let response;
       if (activeTab === "csr") {
-        response = await axios.get(`/reporting/dosen-csr?${params}`);
+        response = await api.get(`/reporting/dosen-csr?${params}`);
         let data = Array.isArray(response.data.data) ? response.data.data : [];
         data = data.map((d: DosenCSRReport) => {
           let allTanggalMulai: string[] = [];
@@ -137,16 +137,16 @@ const ReportingDosen: React.FC = () => {
         setAllDosenCsrReport(data);
         setDosenCsrReport(data);
       } else {
-        response = await axios.get(`/reporting/dosen-pbl?${params}`);
+        response = await api.get(`/reporting/dosen-pbl?${params}`);
         let data = Array.isArray(response.data.data) ? response.data.data : [];
         
         // Debug: log response dan data
-        console.log('Debug - PBL Response:', response.data);
-        console.log('Debug - PBL Data:', data);
+
+
         
         data = data.map((d: DosenPBLReport) => {
           // Debug: log setiap dosen
-          console.log('Debug - Processing dosen:', d.dosen_name, 'dosen_peran:', d.dosen_peran);
+
           
           // HAPUS: proses JSON.parse/overwrite keahlian di sini
           let allTanggalMulai: string[] = [];
@@ -198,14 +198,14 @@ const ReportingDosen: React.FC = () => {
   useEffect(() => {
     const handlePblAssignmentUpdate = () => {
       if (activeTab === "pbl") {
-        console.log('Debug - Reporting: PBL assignment updated, refreshing data...');
+
         fetchDosenReport();
       }
     };
     
     const handlePblGenerateCompleted = () => {
       if (activeTab === "pbl") {
-        console.log('Debug - Reporting: PBL generate completed, refreshing data...');
+
         fetchDosenReport();
       }
     };
@@ -308,7 +308,7 @@ const ReportingDosen: React.FC = () => {
     try {
       const params = new URLSearchParams(filters);
       const endpoint = activeTab === "csr" ? "dosen-csr" : "dosen-pbl";
-      const response = await axios.get(
+      const response = await api.get(
         `/reporting/${endpoint}/export?${params}`
       );
       const blob = new Blob([JSON.stringify(response.data.data, null, 2)], {
@@ -322,7 +322,10 @@ const ReportingDosen: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (error) {}
+    } catch (error) {
+      const errorMessage = handleApiError(error, 'Export Reporting Dosen');
+      // Bisa ditambahkan toast notification di sini
+    }
   };
 
   const getCurrentReportData = () => {
@@ -610,27 +613,27 @@ const ReportingDosen: React.FC = () => {
                             const peranArr = (dosen as any).dosen_peran;
                             
                             // Debug: log untuk melihat struktur data
-                            console.log('=== DEBUG PERAN ===');
-                            console.log('Dosen:', dosen.dosen_name);
-                            console.log('dosen_peran:', peranArr);
-                            console.log('peran_utama:', (dosen as any).peran_utama);
-                            console.log('total_pbl:', (dosen as any).total_pbl);
-                            console.log('total_sesi:', (dosen as any).total_sesi);
-                            console.log('per_semester:', (dosen as any).per_semester);
-                            console.log('==================');
+
+
+
+
+
+
+
+
                             
                             if (
                               Array.isArray(peranArr) &&
                               peranArr.length > 0
                             ) {
                               // Debug: log isi dari dosen_peran
-                              console.log('Debug - Found dosen_peran array, length:', peranArr.length);
+
                               peranArr.forEach((peran: any, idx: number) => {
-                                console.log(`Debug - Peran ${idx}:`, peran);
-                                console.log(`  - tipe_peran: "${peran.tipe_peran}"`);
-                                console.log(`  - mata_kuliah_nama: "${peran.mata_kuliah_nama}"`);
-                                console.log(`  - semester: ${peran.semester}`);
-                                console.log(`  - blok: ${peran.blok}`);
+
+
+
+
+
                               });
                               
                               const tipeList = [
@@ -758,8 +761,8 @@ const ReportingDosen: React.FC = () => {
                                       activeTab === "pbl" && 
                                       ((dosen as any).total_pbl > 0 || (dosen as any).total_sesi > 0);
                                     
-                                    console.log('Debug - hasDosenMengajar:', hasDosenMengajar);
-                                    console.log('Debug - shouldAddDosenMengajar:', shouldAddDosenMengajar);
+
+
                                     
                                     if (shouldAddDosenMengajar) {
                                       const badgeKey = `${dosen.dosen_id}-dosen_mengajar_fallback`;
@@ -897,16 +900,16 @@ const ReportingDosen: React.FC = () => {
                                 sem.modul_pbl && sem.modul_pbl.length > 0
                               );
                               
-                              console.log('Debug - Final fallback check for Dosen Mengajar:');
-                              console.log('  - total_pbl:', pblDosen.total_pbl);
-                              console.log('  - total_sesi:', pblDosen.total_sesi);
-                              console.log('  - hasModulPbl:', hasModulPbl);
-                              console.log('  - per_semester:', pblDosen.per_semester);
+
+
+
+
+
                               
                               if (pblDosen.total_pbl > 0 || pblDosen.total_sesi > 0 || hasModulPbl) {
                                 label = "Dosen Mengajar";
                                 badgeClass = "bg-yellow-100 text-yellow-700";
-                                console.log('Debug - Final fallback: Set label to Dosen Mengajar');
+
                               }
                             }
                             
@@ -917,7 +920,7 @@ const ReportingDosen: React.FC = () => {
                             
                             // Jika ada dosen_peran yang valid, tampilkan multiple peran
                             if (Array.isArray(peranArr) && peranArr.length > 0) {
-                              console.log('Debug - Found valid dosen_peran, will show multiple peran');
+
                               return null; // Biarkan logic multi-peran yang di atas yang handle
                             }
                             

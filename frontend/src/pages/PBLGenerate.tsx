@@ -9,7 +9,7 @@ import {
   faEye,
 } from "@fortawesome/free-solid-svg-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import api from "../api/axios";
+import api from "../utils/api";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeftIcon } from "../icons";
 
@@ -883,7 +883,7 @@ export default function PBLGenerate() {
     // Reset global tracking untuk memulai proses generate yang bersih
     if ((window as any).globalDosenMengajarConstraint) {
       (window as any).globalDosenMengajarConstraint.clear();
-      console.log(`🔄 Global tracking constraint Dosen Mengajar di-reset untuk proses generate baru`);
+
     }
 
     // Validasi: Pastikan semua semester memiliki kelompok kecil
@@ -969,8 +969,8 @@ export default function PBLGenerate() {
         // Dosen mengajar = Total kompleksitas - 5 (1 Koordinator + 4 Tim Blok)
         const dosenMengajar = Math.max(0, totalKompleksitas - totalRequired);
         
-        console.log(`Kompleksitas: ${totalModul} modul × ${totalKelompok} kelompok = ${totalKompleksitas}`);
-        console.log(`Dibutuhkan: ${requiredKoordinator} Koordinator + ${requiredTimBlok} Tim Blok + ${dosenMengajar} Dosen Mengajar`);
+
+
         
 
 
@@ -1153,12 +1153,12 @@ export default function PBLGenerate() {
         const totalKekurangan = totalKoordinatorKurang + totalTimBlokKurang;
         const dosenMengajarDenganKompensasi = dosenMengajar + totalKekurangan;
         
-        console.log(`Koordinator yang kurang: ${totalKoordinatorKurang} (per mata kuliah)`);
-        console.log(`Tim Blok yang kurang: ${totalTimBlokKurang} (per mata kuliah, bukan per modul)`);
-        console.log(`Total kekurangan: ${totalKekurangan} (Koordinator + Tim Blok)`);
-        console.log(`Dosen Mengajar asli: ${dosenMengajar} (sesuai formula: (modul × kelompok) - 5)`);
-        console.log(`Dosen Mengajar dengan kompensasi: ${dosenMengajarDenganKompensasi} (asli + kekurangan)`);
-        console.log(`Total dosen yang dibutuhkan: 1 Koordinator + 4 Tim Blok + ${dosenMengajarDenganKompensasi} Dosen Mengajar`);
+
+
+
+
+
+
         
         for (const { mk, pbl } of allPBLs) {
           // Setiap modul mendapatkan dosen mengajar yang sama (termasuk kompensasi Tim Blok)
@@ -1239,12 +1239,12 @@ export default function PBLGenerate() {
         const checkDosenMengajarConstraint = (dosen: Dosen, currentBlok: number | null, currentSemester: number): boolean => {
           if (!currentBlok) return true; // Skip jika tidak ada blok
           
-          console.log(`🔍 Validasi constraint Dosen Mengajar untuk ${dosen.name} di Blok ${currentBlok} Semester ${currentSemester}`);
+
           
           // === VALIDASI 1: Database Check ===
           // Cek apakah dosen sudah di-assign sebagai Dosen Mengajar di blok yang sama
           // tapi semester berbeda dalam data yang sudah ada di database
-          console.log(`🔍 Database Check: Mencari assignment dosen ${dosen.name} di Blok ${currentBlok} semester lain...`);
+
           
           for (const [pblId, assignedDosenList] of Object.entries(assignedDosen)) {
             let foundPbl: any = null;
@@ -1261,7 +1261,7 @@ export default function PBLGenerate() {
             
             // Jika dosen sudah di-assign ke blok yang sama tapi semester berbeda
             if (foundPbl && foundPbl.mk.blok === currentBlok && foundPbl.mk.semester !== currentSemester) {
-              console.log(`🔍 Found PBL di Blok ${foundPbl.mk.blok} Semester ${foundPbl.mk.semester}, cek assignment dosen...`);
+
               
               // PENTING: Cek apakah dosen ini di-assign sebagai Dosen Mengajar (bukan Koordinator/Tim Blok)
               const isDosenMengajarAssigned = assignedDosenList.some(
@@ -1269,8 +1269,8 @@ export default function PBLGenerate() {
                   // Cek apakah dosen ini adalah dosen yang sedang divalidasi
                   if (assignedDosen.id !== dosen.id) return false;
                   
-                  console.log(`🔍 Found dosen ${assignedDosen.name} (ID: ${assignedDosen.id}) di assignment list`);
-                  console.log(`🔍 Dosen peran:`, assignedDosen.dosen_peran);
+
+
                   
                   // Cek apakah dosen ini di-assign sebagai Dosen Mengajar (bukan Koordinator/Tim Blok)
                   if (assignedDosen.dosen_peran && Array.isArray(assignedDosen.dosen_peran)) {
@@ -1278,19 +1278,19 @@ export default function PBLGenerate() {
                     const hasDosenMengajarRole = assignedDosen.dosen_peran.some(
                       (peran: any) => peran.tipe_peran === "dosen_mengajar"
                     );
-                    console.log(`🔍 Has dosen_mengajar role: ${hasDosenMengajarRole}`);
+
                     return hasDosenMengajarRole;
                   } else {
                     // Jika tidak ada dosen_peran, berarti ini adalah assignment baru dari generate
                     // yang berarti Dosen Mengajar (bukan dari UserSeeder)
-                    console.log(`🔍 No dosen_peran found, assuming Dosen Mengajar from generate`);
+
                     return true;
                   }
                 }
               );
               
               if (isDosenMengajarAssigned) {
-                console.log(`🚫 Constraint Database: Dosen ${dosen.name} sudah di-assign sebagai Dosen Mengajar di Blok ${currentBlok} Semester ${foundPbl.mk.semester}, tidak bisa di-assign lagi di Semester ${currentSemester}`);
+
                 return false; // Constraint violated
               }
             }
@@ -1301,13 +1301,13 @@ export default function PBLGenerate() {
           // dalam proses generate yang sama (cross-semester)
           if (globalDosenMengajarConstraint.has(currentBlok)) {
             const dosenInBlok = globalDosenMengajarConstraint.get(currentBlok);
-            console.log(`🔍 Global Check: Blok ${currentBlok} sudah memiliki dosen:`, Array.from(dosenInBlok));
+
             if (dosenInBlok.has(dosen.id)) {
-              console.log(`🚫 Constraint Global: Dosen ${dosen.name} sudah di-assign sebagai Dosen Mengajar di Blok ${currentBlok} dalam proses ini, tidak bisa di-assign lagi`);
+
               return false; // Constraint violated
             }
           } else {
-            console.log(`🔍 Global Check: Blok ${currentBlok} belum memiliki dosen yang di-assign`);
+
           }
           
           // === VALIDASI 3: Current Semester Process Check ===
@@ -1317,15 +1317,15 @@ export default function PBLGenerate() {
             dosenAssignedInThisProcess[currentBlok] = new Set();
           }
           
-          console.log(`🔍 Current Semester Check: Blok ${currentBlok} sudah memiliki dosen:`, Array.from(dosenAssignedInThisProcess[currentBlok]));
+
           
           if (dosenAssignedInThisProcess[currentBlok].has(dosen.id)) {
-            console.log(`🚫 Constraint Current: Dosen ${dosen.name} sudah di-assign sebagai Dosen Mengajar di Blok ${currentBlok} dalam semester ${currentSemester}`);
+
             return false; // Constraint violated
           }
           
-          console.log(`✅ Constraint Dosen Mengajar terpenuhi untuk ${dosen.name} di Blok ${currentBlok} Semester ${currentSemester}`);
-          console.log(`✅ Dosen ${dosen.name} dapat di-assign sebagai Dosen Mengajar`);
+
+
           return true; // Constraint satisfied
         };
         
@@ -1335,8 +1335,8 @@ export default function PBLGenerate() {
             globalDosenMengajarConstraint.set(blok, new Set());
           }
           globalDosenMengajarConstraint.get(blok).add(dosen.id);
-          console.log(`📝 Update Global Constraint: Dosen ${dosen.name} ditambahkan ke Blok ${blok}`);
-          console.log(`📝 Global Constraint sekarang untuk Blok ${blok}:`, Array.from(globalDosenMengajarConstraint.get(blok)));
+
+
         };
         
         for (const dosen of selectedDosenMengajar) {
@@ -1469,21 +1469,21 @@ export default function PBLGenerate() {
               dosenAssignedInThisProcess[currentBlok].add(dosen.id);
             }
             
-            console.log(`✅ Dosen ${dosen.name} berhasil ditambahkan sebagai Dosen Mengajar di Blok ${currentBlok} Semester ${semester}`);
+
           } else {
             // Log alasan dosen tidak bisa di-assign
             if (!isDosenMengajarConstraintSatisfied) {
-              console.log(`🚫 Dosen ${dosen.name} tidak bisa di-assign karena constraint Dosen Mengajar`);
+
             } else if (isDosenAlreadyAssignedToSameBlok) {
-              console.log(`🚫 Dosen ${dosen.name} sudah di-assign ke blok yang sama`);
+
             }
           }
         }
         
         // PENTING: Jika dosen yang dipilih tidak cukup, tambahkan dosen standby atau dosen dengan assignment count tinggi
         if (finalSelectedDosenMengajar.length < dosenMengajarDenganKompensasi) {
-          console.log(`⚠️ Dosen mengajar yang memenuhi constraint: ${finalSelectedDosenMengajar.length} dari ${dosenMengajarDenganKompensasi} yang dibutuhkan`);
-          console.log(`🔍 Mencari dosen fallback untuk memenuhi kekurangan...`);
+
+
 
           // Cari dosen standby terlebih dahulu
           const standbyDosen = prioritizedDosenList.filter(dosen => {
@@ -1499,7 +1499,7 @@ export default function PBLGenerate() {
           // Gabungkan dosen standby dan high assignment
           const fallbackDosen = [...standbyDosen, ...highAssignmentDosen];
           
-          console.log(`📊 Dosen fallback yang tersedia: ${fallbackDosen.length} (${standbyDosen.length} standby, ${highAssignmentDosen.length} high assignment)`);
+
           
           // Tambahkan dosen fallback sampai cukup
           for (const dosen of fallbackDosen) {
@@ -1514,7 +1514,7 @@ export default function PBLGenerate() {
             
             if (isDosenMengajarConstraintSatisfied) {
               finalSelectedDosenMengajar.push(dosen);
-              console.log(`✅ Fallback: Dosen ${dosen.name} berhasil ditambahkan sebagai Dosen Mengajar`);
+
               
               // === UPDATE GLOBAL TRACKING UNTUK CONSTRAINT ===
               if (currentBlok) {
@@ -1527,7 +1527,7 @@ export default function PBLGenerate() {
                 dosenAssignedInThisProcess[currentBlok].add(dosen.id);
               }
             } else {
-              console.log(`🚫 Fallback: Dosen ${dosen.name} tidak bisa ditambahkan karena constraint Dosen Mengajar`);
+
             }
           }
         }
@@ -1537,7 +1537,7 @@ export default function PBLGenerate() {
           console.warn(`⚠️ Dosen mengajar tidak cukup: ${finalSelectedDosenMengajar.length} dari ${dosenMengajarDenganKompensasi} yang dibutuhkan`);
           console.warn(`⚠️ Constraint Dosen Mengajar mungkin terlalu ketat, pertimbangkan untuk mengurangi constraint`);
         } else {
-          console.log(`✅ Constraint Dosen Mengajar berhasil diterapkan: ${finalSelectedDosenMengajar.length} dosen memenuhi constraint`);
+
         }
 
         // Assign dosen mengajar yang SAMA ke SEMUA modul
@@ -1620,20 +1620,20 @@ export default function PBLGenerate() {
           .size;
         
         // === SUMMARY CONSTRAINT DOSEN MENGAJAR ===
-        console.log(`\n📊 === SUMMARY ASSIGNMENT DENGAN CONSTRAINT DOSEN MENGAJAR ===`);
-        console.log(`✅ Total PBL yang berhasil di-assign: ${totalAssigned}`);
-        console.log(`👥 Total dosen yang terlibat: ${totalDosen}`);
+
+
+
         
         // Hitung distribusi peran
         const koordinatorCount = assignedPBLs.filter(item => item.kelompok === "Koordinator").length;
         const timBlokCount = assignedPBLs.filter(item => item.kelompok === "Tim Blok").length;
         const dosenMengajarCount = assignedPBLs.filter(item => item.kelompok === "Kelompok 1" || item.kelompok === "Kelompok 2" || item.kelompok === "Kelompok 3" || item.kelompok === "Kelompok 4").length;
         
-        console.log(`🎯 Koordinator: ${koordinatorCount} assignment`);
-        console.log(`👥 Tim Blok: ${timBlokCount} assignment`);
-        console.log(`📚 Dosen Mengajar: ${dosenMengajarCount} assignment`);
-        console.log(`🔒 Constraint Dosen Mengajar: Berhasil diterapkan - mencegah dosen mengajar di blok yang sama dengan semester berbeda`);
-        console.log(`📊 === END SUMMARY ===\n`);
+
+
+
+
+
 
         setSuccess(
           `Berhasil generate ${totalAssigned} assignment untuk ${totalDosen} dosen dengan constraint Dosen Mengajar yang ketat.`

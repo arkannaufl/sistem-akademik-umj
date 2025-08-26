@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import api from "../../api/axios";
+import api, { BASE_URL } from "../../utils/api";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -24,7 +24,6 @@ export default function UserDropdown() {
   };
 
   const initials = getInitials(user.name || "");
-  const BASE_URL = "http://localhost:8000";
   const avatarUrl = user.avatar
     ? user.avatar.startsWith("http")
       ? user.avatar
