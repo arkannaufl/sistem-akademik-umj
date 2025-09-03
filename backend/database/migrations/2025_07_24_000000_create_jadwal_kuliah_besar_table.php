@@ -14,11 +14,13 @@ return new class extends Migration
         Schema::create('jadwal_kuliah_besar', function (Blueprint $table) {
             $table->id();
             $table->string('mata_kuliah_kode');
-            $table->string('materi'); // keahlian/materi
+            $table->string('materi')->nullable(); // keahlian/materi
             $table->string('topik')->nullable();
-            $table->unsignedBigInteger('dosen_id');
+            $table->unsignedBigInteger('dosen_id')->nullable();
+            $table->json('dosen_ids')->nullable(); // Array of dosen IDs for multiple dosen
             $table->unsignedBigInteger('ruangan_id');
             $table->unsignedBigInteger('kelompok_besar_id')->nullable(); // Menyimpan semester (1, 2, 3, dst.), bukan ID dari tabel kelompok_besar
+            $table->unsignedBigInteger('kelompok_besar_antara_id')->nullable(); // For manual kelompok besar
             $table->date('tanggal');
             $table->string('jam_mulai');
             $table->string('jam_selesai');
@@ -28,6 +30,7 @@ return new class extends Migration
             $table->foreign('mata_kuliah_kode')->references('kode')->on('mata_kuliah')->onDelete('cascade');
             $table->foreign('dosen_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('ruangan_id')->references('id')->on('ruangan')->onDelete('cascade');
+            $table->foreign('kelompok_besar_antara_id')->references('id')->on('kelompok_besar_antara')->onDelete('cascade');
         });
     }
 

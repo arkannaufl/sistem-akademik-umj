@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EyeCloseIcon, EyeIcon } from "../../icons";
 import { ThemeToggleButton } from "../../components/common/ThemeToggleButton";
+import ForceLogoutModal from "../../components/common/ForceLogoutModal";
 import api from "../../utils/api";
 
 export default function SignIn() {
@@ -11,6 +12,7 @@ export default function SignIn() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showForceLogoutModal, setShowForceLogoutModal] = useState(false);
 
   const navigate = useNavigate();
 
@@ -18,6 +20,10 @@ export default function SignIn() {
     e.preventDefault();
     setError("");
     setIsLoading(true);
+
+    // Simpan data login untuk force logout jika diperlukan
+    localStorage.setItem("loginData", JSON.stringify({ login, password }));
+    sessionStorage.setItem("loginData", JSON.stringify({ login, password }));
 
     try {
       const response = await api.post("/login", { login, password });
@@ -28,19 +34,17 @@ export default function SignIn() {
 
       switch (user.role) {
         case "super_admin":
-          navigate("/");
+        case "dosen":
+          navigate("/dashboard");
           break;
         case "tim_akademik":
           navigate("/tim-akademik");
-          break;
-        case "dosen":
-          navigate("/dashboard-dosen");
           break;
         case "mahasiswa":
           navigate("/mahasiswa");
           break;
         default:
-          navigate("/");
+          navigate("/dashboard");
       }
     } catch (err: any) {
       const status = err.response?.status;
@@ -49,7 +53,8 @@ export default function SignIn() {
       if (status === 401 && message === "Username/NIP/NID/NIM atau password salah.") {
         setError("Username/NIP/NID/NIM atau password salah. Silakan coba lagi.");
       } else if (status === 403) {
-        setError("Akun ini sedang digunakan di perangkat lain. Silakan logout terlebih dahulu.");
+        setShowForceLogoutModal(true);
+        setError("Akun ini sedang digunakan di perangkat lain.");
       } else if (status === 422) {
         setError("Format data tidak valid. Pastikan semua field telah diisi dengan benar.");
       } else if (status === 500) {
@@ -60,6 +65,13 @@ export default function SignIn() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleForceLogoutSuccess = () => {
+    setShowForceLogoutModal(false);
+    setError("");
+    // Retry login after force logout
+    handleLogin({ preventDefault: () => {} } as React.FormEvent);
   };
 
   return (
@@ -208,6 +220,13 @@ export default function SignIn() {
       <div className="absolute z-20 bottom-4 right-4 lg:right-10 lg:bottom-10">
         <ThemeToggleButton />
       </div>
+      
+             <ForceLogoutModal
+         isOpen={showForceLogoutModal}
+         onClose={() => setShowForceLogoutModal(false)}
+         onSuccess={handleForceLogoutSuccess}
+         username={login}
+       />
     </div>
   );
 }

@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Ruangan;
 use App\Models\KelompokKecil;
 use App\Models\CSR;
+use App\Models\AbsensiCSR;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -749,5 +750,54 @@ class JadwalCSRController extends Controller
             ->exists();
 
         return $kuliahBesarBentrok || $agendaKhususBentrok;
+    }
+
+    /**
+     * Get absensi untuk jadwal CSR tertentu
+     */
+    public function getAbsensi($kode, $jadwalId)
+    {
+        try {
+            // Ambil data absensi yang sudah ada
+            $absensi = AbsensiCSR::where('jadwal_csr_id', $jadwalId)
+                ->get()
+                ->keyBy('mahasiswa_npm');
+
+            return response()->json([
+                'absensi' => $absensi
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal memuat data absensi: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Store absensi untuk jadwal CSR tertentu
+     */
+    public function storeAbsensi(Request $request, $kode, $jadwalId)
+    {
+        try {
+            $request->validate([
+                'absensi' => 'required|array',
+                'absensi.*.mahasiswa_npm' => 'required|string',
+                'absensi.*.hadir' => 'required|boolean',
+            ]);
+
+            // Hapus data absensi yang lama
+            AbsensiCSR::where('jadwal_csr_id', $jadwalId)->delete();
+
+            // Simpan data absensi baru
+            foreach ($request->absensi as $absen) {
+                AbsensiCSR::create([
+                    'jadwal_csr_id' => $jadwalId,
+                    'mahasiswa_npm' => $absen['mahasiswa_npm'],
+                    'hadir' => $absen['hadir'],
+                ]);
+            }
+
+            return response()->json(['message' => 'Absensi berhasil disimpan']);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal menyimpan absensi: ' . $e->getMessage()], 500);
+        }
     }
 }

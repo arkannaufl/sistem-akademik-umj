@@ -17,7 +17,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
             'sanitize' => \App\Http\Middleware\SanitizeInput::class,
             'throttle' => \App\Http\Middleware\RateLimitMiddleware::class,
+            'security.headers' => \App\Http\Middleware\SecurityHeaders::class,
+            'validate.token' => \App\Http\Middleware\ValidateActiveToken::class,
         ]);
+        
+        // Apply security headers globally
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

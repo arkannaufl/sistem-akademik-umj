@@ -33,7 +33,7 @@ class MataKuliah extends Model
     ];
 
     protected $casts = [
-        'semester' => 'integer',
+        'semester' => 'string',
         'kurikulum' => 'integer',
         'tanggal_mulai' => 'date',
         'tanggal_akhir' => 'date',

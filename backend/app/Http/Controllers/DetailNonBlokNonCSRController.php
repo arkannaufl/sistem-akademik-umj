@@ -25,7 +25,12 @@ class DetailNonBlokNonCSRController extends Controller
                 ->where('mata_kuliah_kode', $kode)
                 ->orderBy('tanggal', 'asc')
                 ->orderBy('jam_mulai', 'asc')
-                ->get();
+                ->get()
+                ->map(function ($item) {
+                    // Add dosen_names attribute for frontend
+                    $item->dosen_names = $item->dosen_names;
+                    return $item;
+                });
 
             // Get reference data
             $dosenList = User::where('role', 'dosen')

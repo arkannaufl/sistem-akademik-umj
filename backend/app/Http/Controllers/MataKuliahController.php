@@ -27,7 +27,7 @@ class MataKuliahController extends Controller
         $filename = $kode . '_' . time() . '_' . $file->getClientOriginalName();
 
         // Store file in storage/app/public/rps
-        $path = $file->storeAs('public/rps', $filename);
+        $path = Storage::disk('public')->putFileAs('rps', $file, $filename);
 
         // Update database
         $mataKuliah = MataKuliah::findOrFail($kode);
@@ -104,7 +104,7 @@ class MataKuliahController extends Controller
         $filename = $kode . '_' . time() . '_' . $file->getClientOriginalName();
 
         // Store file in storage/app/public/materi/{kode}
-        $path = $file->storeAs('public/materi/' . $kode, $filename);
+        $path = Storage::disk('public')->putFileAs('materi/' . $kode, $file, $filename);
 
         // Get file info
         $fileType = $file->getClientOriginalExtension();
@@ -155,11 +155,12 @@ class MataKuliahController extends Controller
 
         $filePath = $materi->file_path;
 
-        if (!Storage::exists($filePath)) {
+        // Gunakan disk public untuk mencari file
+        if (!Storage::disk('public')->exists($filePath)) {
             return response()->json(['error' => 'File materi tidak ditemukan di storage'], 404);
         }
 
-        return Storage::download($filePath, $materi->judul . '.' . $materi->file_type);
+        return Storage::disk('public')->download($filePath, $materi->judul . '.' . $materi->file_type);
     }
 
     /**
@@ -181,9 +182,8 @@ class MataKuliahController extends Controller
             }
 
             // Delete file from storage
-            $filePath = storage_path('app/public/' . $materi->file_path);
-            if (file_exists($filePath)) {
-                unlink($filePath);
+            if (Storage::disk('public')->exists($materi->file_path)) {
+                Storage::disk('public')->delete($materi->file_path);
             }
 
             // Delete record from database

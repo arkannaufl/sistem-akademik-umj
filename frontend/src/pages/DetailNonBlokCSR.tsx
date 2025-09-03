@@ -89,6 +89,20 @@ interface RuanganOption {
   gedung?: string;
 }
 
+interface AbsensiCSR {
+  [npm: string]: {
+    hadir: boolean;
+  };
+}
+
+interface Mahasiswa {
+  npm: string;
+  nama: string;
+  nim: string;
+  gender: 'L' | 'P';
+  ipk: number;
+}
+
 export default function DetailNonBlokCSR() {
   const { kode } = useParams();
   const navigate = useNavigate();
@@ -137,6 +151,13 @@ export default function DetailNonBlokCSR() {
   const [selectedDeleteIndex, setSelectedDeleteIndex] = useState<number | null>(null);
   const [selectedKategoriValue, setSelectedKategoriValue] = useState<string | null>(null); // State untuk value dropdown
   const [selectedKeahlian, setSelectedKeahlian] = useState<string | null>(null); // State untuk keahlian yang dipilih
+  
+  // State untuk absensi
+  const [showAbsensiModal, setShowAbsensiModal] = useState(false);
+  const [selectedJadwalForAbsensi, setSelectedJadwalForAbsensi] = useState<JadwalCSR | null>(null);
+  const [mahasiswaList, setMahasiswaList] = useState<Mahasiswa[]>([]);
+  const [absensi, setAbsensi] = useState<AbsensiCSR>({});
+  const [savingAbsensi, setSavingAbsensi] = useState(false);
 
   function hitungJamSelesai(jamMulai: string, jumlahSesi: number) {
     if (!jamMulai) return '';
@@ -357,6 +378,92 @@ export default function DetailNonBlokCSR() {
       }
     }
   }, [showModal, editIndex, form.dosen_id, dosenList, selectedKeahlian]);
+
+  // Fungsi untuk membuka modal absensi
+  const handleOpenAbsensi = async (jadwal: JadwalCSR) => {
+    setSelectedJadwalForAbsensi(jadwal);
+    setShowAbsensiModal(true);
+    setAbsensi({});
+    
+    try {
+      // Fetch mahasiswa berdasarkan kelompok kecil
+      if (jadwal.kelompok_kecil_id) {
+        const response = await api.get(`/kelompok-kecil/${jadwal.kelompok_kecil_id}/mahasiswa`);
+        const mahasiswa = response.data.map((m: any) => ({
+          npm: m.nim,
+          nama: m.name || m.nama || '',
+          nim: m.nim || '',
+          gender: m.gender || 'L',
+          ipk: m.ipk || 0.0
+        }));
+        setMahasiswaList(mahasiswa);
+        
+        // Fetch data absensi yang sudah ada
+        const absensiResponse = await api.get(`/csr/${kode}/jadwal/${jadwal.id}/absensi`);
+        const existingAbsensi: AbsensiCSR = {};
+        
+        // Handle response yang berbentuk object (keyBy) atau array
+        if (absensiResponse.data.absensi) {
+          if (Array.isArray(absensiResponse.data.absensi)) {
+            // Jika response berupa array
+            absensiResponse.data.absensi.forEach((absen: any) => {
+              existingAbsensi[absen.mahasiswa_npm] = {
+                hadir: absen.hadir || false
+              };
+            });
+          } else {
+            // Jika response berupa object (keyBy)
+            Object.keys(absensiResponse.data.absensi).forEach((npm) => {
+              const absen = absensiResponse.data.absensi[npm];
+              existingAbsensi[npm] = {
+                hadir: absen.hadir || false
+              };
+            });
+          }
+        }
+        setAbsensi(existingAbsensi);
+      }
+    } catch (error: any) {
+      console.error('Error fetching mahasiswa/absensi:', error);
+      setError(error.response?.data?.message || 'Gagal memuat data mahasiswa/absensi');
+    }
+  };
+
+  // Fungsi untuk handle perubahan absensi
+  const handleAbsensiChange = (npm: string, hadir: boolean) => {
+    setAbsensi((prev) => ({
+      ...prev,
+      [npm]: {
+        hadir: hadir,
+      },
+    }));
+  };
+
+  // Fungsi untuk menyimpan absensi
+  const handleSaveAbsensi = async () => {
+    if (!selectedJadwalForAbsensi) return;
+    
+    setSavingAbsensi(true);
+    try {
+      const payload = {
+        absensi: mahasiswaList.map(m => ({
+          mahasiswa_npm: m.npm,
+          hadir: absensi[m.npm]?.hadir || false,
+        })),
+      };
+      
+      await api.post(`/csr/${kode}/jadwal/${selectedJadwalForAbsensi.id}/absensi`, payload);
+      setShowAbsensiModal(false);
+      setSelectedJadwalForAbsensi(null);
+      setMahasiswaList([]);
+      setAbsensi({});
+    } catch (error: any) {
+      console.error('Error saving absensi:', error);
+      setError(error.response?.data?.message || 'Gagal menyimpan absensi');
+    } finally {
+      setSavingAbsensi(false);
+    }
+  };
 
 
 
@@ -599,14 +706,22 @@ export default function DetailNonBlokCSR() {
                       <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">{row.kelompok_kecil?.nama_kelompok ? `Kelompok ${row.kelompok_kecil.nama_kelompok}` : '-'}</td>
                       <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">{row.kategori?.nama || '-'}</td>
                       <td className="px-4 py-4 text-center whitespace-nowrap">
-                        <button onClick={() => handleEditJadwal(i)} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 transition mr-2" title="Edit Jadwal">
-                          <FontAwesomeIcon icon={faPenToSquare} className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
-                          <span className="hidden sm:inline">Edit</span>
-                        </button>
-                        <button onClick={() => { setSelectedDeleteIndex(i); setShowDeleteModal(true); }} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 transition" title="Hapus Jadwal">
-                          <FontAwesomeIcon icon={faTrash} className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
-                          <span className="hidden sm:inline">Hapus</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => handleOpenAbsensi(row)} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-500 hover:text-green-700 dark:hover:text-green-300 transition" title="Absensi">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="hidden sm:inline">Absensi</span>
+                          </button>
+                          <button onClick={() => handleEditJadwal(i)} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 transition" title="Edit Jadwal">
+                            <FontAwesomeIcon icon={faPenToSquare} className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+                            <span className="hidden sm:inline">Edit</span>
+                          </button>
+                          <button onClick={() => { setSelectedDeleteIndex(i); setShowDeleteModal(true); }} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 transition" title="Hapus Jadwal">
+                            <FontAwesomeIcon icon={faTrash} className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
+                            <span className="hidden sm:inline">Hapus</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1233,6 +1348,207 @@ export default function DetailNonBlokCSR() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal Absensi */}
+      {showAbsensiModal && selectedJadwalForAbsensi && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
+            onClick={() => setShowAbsensiModal(false)}
+          />
+                      <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="relative w-full max-w-3xl mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-50 max-h-[85vh] overflow-hidden"
+            >
+            {/* Enhanced Header */}
+            <div className="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-brand-100 dark:bg-brand-900/20 rounded-xl flex items-center justify-center">
+                  <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">Absensi CSR - {selectedJadwalForAbsensi.jenis_csr === 'reguler' ? 'CSR Reguler' : 'CSR Responsi'}</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    {new Date(selectedJadwalForAbsensi.tanggal).toLocaleDateString('id-ID', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })} • {selectedJadwalForAbsensi.jam_mulai?.replace('.', ':')}–{selectedJadwalForAbsensi.jam_selesai?.replace('.', ':')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAbsensiModal(false)}
+                className="p-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all duration-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 hover:scale-105"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+                          {/* Content */}
+              <div className="flex h-[calc(85vh-280px)]">
+                {/* Left Panel - Session Info */}
+                <div className="w-1/3 pr-4 overflow-y-auto hide-scroll">
+                                      <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 shadow-sm mt-8">
+                    <div className="flex items-center space-x-2 mb-6">
+                      <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Informasi Sesi</h3>
+                    </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Pengampu</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {selectedJadwalForAbsensi.dosen?.name || '-'}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Ruangan</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {selectedJadwalForAbsensi.ruangan?.nama || '-'}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Kelompok</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {selectedJadwalForAbsensi.kelompok_kecil?.nama_kelompok ? `Kelompok ${selectedJadwalForAbsensi.kelompok_kecil.nama_kelompok}` : '-'}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Topik</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {selectedJadwalForAbsensi.topik || '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+                              {/* Right Panel - Student List */}
+                <div className="w-2/3 pl-4 overflow-y-auto hide-scroll">
+                  <div className="flex items-center space-x-2 mb-6 mt-8">
+                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+                      Daftar Mahasiswa ({mahasiswaList.length} orang)
+                    </h3>
+                  </div>
+                
+                <div className="space-y-3">
+                  {mahasiswaList.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-500 dark:text-gray-400 font-medium">
+                        Tidak ada mahasiswa dalam kelompok ini
+                      </p>
+                      <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                        Silakan tambahkan mahasiswa ke kelompok terlebih dahulu
+                      </p>
+                    </div>
+                  ) : (
+                                         mahasiswaList.map((mahasiswa, index) => (
+                       <div
+                         key={mahasiswa.npm}
+                         className={`bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer ${
+                           absensi[mahasiswa.npm]?.hadir ? 'bg-brand-50 dark:bg-brand-900/20' : ''
+                         }`}
+                         onClick={() => handleAbsensiChange(mahasiswa.npm, !absensi[mahasiswa.npm]?.hadir)}
+                       >
+                         <div className="flex items-center justify-between">
+                           <div className="flex items-center space-x-3">
+                             <div className="w-6 h-6 bg-brand-100 dark:bg-brand-900/20 rounded-md flex items-center justify-center">
+                               <span className="text-xs font-semibold text-brand-600 dark:text-brand-400">
+                                 {index + 1}
+                               </span>
+                             </div>
+                             <div>
+                               <div className="flex items-center space-x-2 mb-0.5">
+                                 <h4 className="font-semibold text-gray-800 dark:text-white text-sm">{mahasiswa.nama}</h4>
+                                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                                   mahasiswa.gender === 'L' 
+                                     ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' 
+                                     : 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300'
+                                 }`}>
+                                   {mahasiswa.gender === 'L' ? '👨 Laki-laki' : '👩 Perempuan'}
+                                 </span>
+                               </div>
+                               <div className="flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400">
+                                 <span className="font-mono">{mahasiswa.nim}</span>
+                                 <span className="font-medium">IPK: {mahasiswa.ipk.toFixed(2)}</span>
+                               </div>
+                             </div>
+                           </div>
+                           
+                           {/* Checkbox */}
+                           <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                             absensi[mahasiswa.npm]?.hadir 
+                               ? 'bg-brand-500 border-brand-500' 
+                               : 'border-gray-300 dark:border-gray-600'
+                           }`}>
+                             {absensi[mahasiswa.npm]?.hadir && (
+                               <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                               </svg>
+                             )}
+                           </div>
+                         </div>
+                       </div>
+                     ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 mt-4">
+                <button 
+                  onClick={() => setShowAbsensiModal(false)} 
+                  className="px-6 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleSaveAbsensi} 
+                  disabled={savingAbsensi || mahasiswaList.length === 0}
+                  className="px-6 py-3 rounded-xl bg-brand-500 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" 
+                >
+                  {savingAbsensi && (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  )}
+                  {savingAbsensi ? 'Menyimpan...' : 'Simpan Absensi'}
+                </button>
+              </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 } 

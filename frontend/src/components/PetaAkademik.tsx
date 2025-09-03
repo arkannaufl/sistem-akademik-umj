@@ -1,4 +1,4 @@
-import { useMemo, useState, Fragment, memo, useEffect } from 'react';
+import { useMemo, useState, memo, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import api from '../utils/api';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';

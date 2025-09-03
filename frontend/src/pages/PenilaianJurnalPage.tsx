@@ -14,6 +14,12 @@ interface PenilaianJurnal {
   };
 }
 
+interface AbsensiJurnal {
+  [nim: string]: {
+    hadir: boolean;
+  };
+}
+
 export default function PenilaianJurnalPage() {
   const { kode_blok, kelompok, jurnal_id } = useParams();
   const navigate = useNavigate();
@@ -21,6 +27,7 @@ export default function PenilaianJurnalPage() {
   const [judulJurnal, setJudulJurnal] = useState("");
   const [mahasiswa, setMahasiswa] = useState<{ nim: string; nama: string }[]>([]);
   const [penilaian, setPenilaian] = useState<PenilaianJurnal>({});
+  const [absensi, setAbsensi] = useState<AbsensiJurnal>({});
   const [dosen, setDosen] = useState("");
   const [tanggal, setTanggal] = useState("");
   const [tanggalParaf, setTanggalParaf] = useState("");
@@ -68,6 +75,18 @@ export default function PenilaianJurnalPage() {
             };
           });
           setPenilaian(pen);
+        }
+        
+        // Set data absensi yang sudah ada
+        if (data.absensi) {
+          const abs: AbsensiJurnal = {};
+          Object.keys(data.absensi).forEach(nim => {
+            const absen = data.absensi[nim];
+            abs[nim] = {
+              hadir: absen.hadir || false,
+            };
+          });
+          setAbsensi(abs);
         }
         
         // Set data tutor
@@ -134,6 +153,34 @@ export default function PenilaianJurnalPage() {
     return (nilai.keaktifan || 0) + (nilai.laporan || 0);
   };
 
+  const handleAbsensiChange = (nim: string, hadir: boolean) => {
+    setAbsensi((prev) => ({
+      ...prev,
+      [nim]: {
+        hadir: hadir,
+      },
+    }));
+  };
+
+  const handleSaveAbsensi = async () => {
+    if (!kode_blok || !kelompok || !jurnal_id) return;
+    
+    try {
+      const payload = {
+        absensi: mahasiswa.map(m => ({
+          mahasiswa_nim: m.nim,
+          hadir: absensi[m.nim]?.hadir || false,
+        })),
+      };
+      
+      await api.post(`/penilaian-jurnal/${kode_blok}/${kelompok}/${jurnal_id}/absensi`, payload);
+      return true;
+    } catch (error: any) {
+      setError(error.response?.data?.message || 'Gagal menyimpan absensi');
+      return false;
+    }
+  };
+
   // Fungsi simpan ke backend
   const handleSaveAll = async () => {
     if (!kode_blok || !kelompok || !jurnal_id) return;
@@ -142,6 +189,14 @@ export default function PenilaianJurnalPage() {
     setError(null);
     
     try {
+      // Simpan absensi terlebih dahulu
+      const absensiSuccess = await handleSaveAbsensi();
+      if (!absensiSuccess) {
+        setSaving(false);
+        return;
+      }
+      
+      // Kemudian simpan penilaian
       const payload = {
         penilaian: mahasiswa.map(m => ({
           mahasiswa_nim: m.nim,
@@ -154,7 +209,7 @@ export default function PenilaianJurnalPage() {
       };
       
       await api.post(`/penilaian-jurnal/${kode_blok}/${kelompok}/${jurnal_id}`, payload);
-      setSuccess('Penilaian jurnal berhasil disimpan!');
+      setSuccess('Absensi dan penilaian berhasil disimpan!');
     } catch (error: any) {
       setError(error.response?.data?.message || 'Gagal menyimpan penilaian');
     } finally {
@@ -534,6 +589,9 @@ export default function PenilaianJurnalPage() {
                   NIM
                 </th>
                 <th className="px-2 py-3 text-center font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  ABSENSI
+                </th>
+                <th className="px-2 py-3 text-center font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     NILAI KEAKTIFAN
                 </th>
                 <th className="px-2 py-3 text-center font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -552,6 +610,32 @@ export default function PenilaianJurnalPage() {
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap dark:text-gray-200">{m.nama}</td>
                     <td className="px-4 py-2 whitespace-nowrap dark:text-gray-200">{m.nim}</td>
+                  <td className="px-2 py-2 text-center whitespace-nowrap dark:text-gray-200">
+                    <div className="relative flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={absensi[m.nim]?.hadir || false}
+                        onChange={(e) => handleAbsensiChange(m.nim, e.target.checked)}
+                        className={`w-5 h-5 appearance-none rounded-md border-2 ${
+                          absensi[m.nim]?.hadir 
+                            ? 'border-brand-500 bg-brand-500' 
+                            : 'border-brand-500 bg-transparent'
+                        } transition-colors duration-150 focus:ring-2 focus:ring-brand-300 dark:focus:ring-brand-600 relative`}
+                        style={{ outline: 'none' }}
+                      />
+                      {absensi[m.nim]?.hadir && (
+                        <svg
+                          className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none"
+                          viewBox="0 0 20 20"
+                          fill="none"
+                          stroke="white"
+                          strokeWidth="2.5"
+                        >
+                          <polyline points="5 11 9 15 15 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-2 py-2 text-center whitespace-nowrap dark:text-gray-200">
                     <input
                       type="number"
@@ -704,13 +788,15 @@ export default function PenilaianJurnalPage() {
         </div>
 
         {/* Tombol simpan */}
-        <button 
-          onClick={handleSaveAll} 
-          disabled={saving || loading} 
-          className="mt-6 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium shadow-theme-xs hover:bg-blue-600 transition dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {saving ? 'Menyimpan...' : 'Simpan Penilaian'}
-        </button>
+        <div className="mt-6 flex gap-4">
+          <button 
+            onClick={handleSaveAll} 
+            disabled={saving || loading} 
+            className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium shadow-theme-xs hover:bg-blue-600 transition dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Menyimpan...' : 'Simpan Absensi & Penilaian'}
+          </button>
+        </div>
       </div>
     </div>
   );

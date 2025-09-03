@@ -8,10 +8,18 @@ use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\MataKuliah;
 use App\Models\DosenPeran;
+use App\Services\SemesterService;
 use Illuminate\Support\Facades\DB; // Added DB facade
 
 class UserSeeder extends Seeder
 {
+    protected $semesterService;
+
+    public function __construct(SemesterService $semesterService)
+    {
+        $this->semesterService = $semesterService;
+    }
+
     /**
      * Run the database seeds.
      */
@@ -140,6 +148,8 @@ class UserSeeder extends Seeder
             $mhs['ipk'] = number_format(rand(200, 400) / 100, 2);
             $mhs['status'] = $statusList[array_rand($statusList)];
             $mhs['angkatan'] = rand(2019, 2024);
+            // Untuk seeder, tahun ajaran masuk dan semester masuk akan di-set manual
+            // karena SemesterService hanya untuk mahasiswa baru yang diinput manual
         }
         unset($mhs);
 
@@ -414,9 +424,43 @@ class UserSeeder extends Seeder
             ]
         );
 
+        // Ambil tahun ajaran aktif untuk tracking
+        $activeTahunAjaran = \App\Models\TahunAjaran::where('aktif', true)->first();
+        $activeSemester = \App\Models\Semester::where('aktif', true)->first();
+
+        // Debug: Cek data tahun ajaran dan semester
+        if (!$activeTahunAjaran) {
+            echo "WARNING: Tidak ada tahun ajaran aktif!\n";
+        } else {
+            echo "Tahun ajaran aktif: " . $activeTahunAjaran->tahun . " (ID: " . $activeTahunAjaran->id . ")\n";
+        }
+        
+        if (!$activeSemester) {
+            echo "WARNING: Tidak ada semester aktif!\n";
+        } else {
+            echo "Semester aktif: " . $activeSemester->jenis . "\n";
+        }
+
         // Tambah mahasiswa
         foreach ($mahasiswaData as $mahasiswa) {
-            User::updateOrCreate(
+            // Tentukan tahun ajaran masuk berdasarkan angkatan
+            $tahunAjaranMasuk = null;
+            $semesterMasuk = null;
+            
+            if ($activeTahunAjaran && $activeSemester) {
+                // Untuk seeder, set tracking data berdasarkan angkatan
+                $angkatan = $mahasiswa['angkatan'] ?? 2022;
+                $tahunAjaranMasuk = $activeTahunAjaran->id; // Default ke tahun ajaran aktif
+                $semesterMasuk = $activeSemester->jenis; // Default ke semester aktif
+                
+                // Jika angkatan berbeda, sesuaikan tahun ajaran masuk
+                if ($angkatan < 2022) {
+                    // Mahasiswa angkatan lama, set tahun ajaran sesuai angkatan
+                    $tahunAjaranMasuk = \App\Models\TahunAjaran::where('tahun', 'like', $angkatan . '/%')->first()?->id ?? $activeTahunAjaran->id;
+                }
+            }
+
+            $user = User::updateOrCreate(
                 ['username' => $mahasiswa['username']],
                 [
                     'name' => $mahasiswa['name'],
@@ -435,6 +479,8 @@ class UserSeeder extends Seeder
                     'ipk' => $mahasiswa['ipk'] ?? null,
                     'status' => $mahasiswa['status'] ?? null,
                     'angkatan' => $mahasiswa['angkatan'] ?? null,
+                    'tahun_ajaran_masuk_id' => $tahunAjaranMasuk,
+                    'semester_masuk' => $semesterMasuk,
                 ]
             );
         }

@@ -29,6 +29,7 @@ class User extends Authenticatable
         'is_logged_in',
         'current_token',
         'semester',
+        'tahun_ajaran_masuk_id', 'semester_masuk',
         'matkul_ketua_id', 'matkul_anggota_id', 'peran_kurikulum_mengajar',
     ];
 
@@ -79,5 +80,28 @@ class User extends Authenticatable
     public function dosenPeran()
     {
         return $this->hasMany(DosenPeran::class, 'user_id');
+    }
+
+    public function tahunAjaranMasuk()
+    {
+        return $this->belongsTo(TahunAjaran::class, 'tahun_ajaran_masuk_id');
+    }
+
+    // Relationship untuk absensi PBL
+    public function absensiPBL()
+    {
+        return $this->hasMany(AbsensiPBL::class, 'mahasiswa_npm', 'nim');
+    }
+
+    // Relationship untuk absensi jurnal
+    public function absensiJurnal()
+    {
+        return $this->hasMany(AbsensiJurnal::class, 'mahasiswa_nim', 'nim');
+    }
+
+    // Relationship untuk penilaian jurnal
+    public function penilaianJurnal()
+    {
+        return $this->hasMany(PenilaianJurnal::class, 'mahasiswa_nim', 'nim');
     }
 }

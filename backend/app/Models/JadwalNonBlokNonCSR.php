@@ -21,8 +21,10 @@ class JadwalNonBlokNonCSR extends Model
         'agenda',
         'materi',
         'dosen_id',
+        'dosen_ids',
         'ruangan_id',
         'kelompok_besar_id',
+        'kelompok_besar_antara_id',
         'use_ruangan',
     ];
 
@@ -31,6 +33,7 @@ class JadwalNonBlokNonCSR extends Model
         'jam_mulai' => 'string',
         'jam_selesai' => 'string',
         'use_ruangan' => 'boolean',
+        'dosen_ids' => 'array',
     ];
 
     public function mataKuliah()
@@ -46,5 +49,22 @@ class JadwalNonBlokNonCSR extends Model
     public function ruangan()
     {
         return $this->belongsTo(Ruangan::class, 'ruangan_id');
+    }
+
+    public function kelompokBesarAntara()
+    {
+        return $this->belongsTo(KelompokBesarAntara::class, 'kelompok_besar_antara_id');
+    }
+
+    /**
+     * Get multiple dosen names
+     */
+    public function getDosenNamesAttribute()
+    {
+        if ($this->dosen_ids && is_array($this->dosen_ids)) {
+            $dosenNames = User::whereIn('id', $this->dosen_ids)->pluck('name')->toArray();
+            return implode(', ', $dosenNames);
+        }
+        return $this->dosen ? $this->dosen->name : '';
     }
 } 

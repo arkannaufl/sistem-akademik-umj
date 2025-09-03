@@ -32,6 +32,54 @@ class UserFactory extends Factory
     }
 
     /**
+     * Configure the model factory.
+     *
+     * @return $this
+     */
+    public function mahasiswa()
+    {
+        return $this->state(function (array $attributes) {
+            return [
+                'role' => 'mahasiswa',
+                'nim' => fake()->unique()->numerify('2021####'),
+                'gender' => fake()->randomElement(['Laki-laki', 'Perempuan']),
+                'ipk' => fake()->randomFloat(2, 2.0, 4.0),
+                'status' => fake()->randomElement(['aktif', 'cuti', 'lulus']),
+                'angkatan' => fake()->numberBetween(2019, 2024),
+                'email' => fake()->unique()->safeEmail(),
+                'telp' => fake()->numerify('08##########'),
+                'semester' => fake()->numberBetween(1, 8),
+                // Tahun ajaran masuk dan semester masuk akan diatur otomatis oleh SemesterService
+            ];
+        });
+    }
+
+    /**
+     * Configure the model factory for dosen.
+     *
+     * @return $this
+     */
+    public function dosen()
+    {
+        return $this->state(function (array $attributes) {
+            return [
+                'role' => 'dosen',
+                'nip' => fake()->unique()->numerify('100###'),
+                'nidn' => fake()->unique()->numerify('00####'),
+                'gender' => fake()->randomElement(['Laki-laki', 'Perempuan']),
+                'email' => fake()->unique()->safeEmail(),
+                'telp' => fake()->numerify('08##########'),
+                'kompetensi' => fake()->randomElements([
+                    'Klinik', 'Penelitian', 'Pengajaran', 'Riset', 'Laboratorium'
+                ], fake()->numberBetween(1, 3)),
+                'keahlian' => fake()->randomElements([
+                    'Kardiologi', 'Anatomi', 'Biostatistik', 'Patologi', 'Farmakologi'
+                ], fake()->numberBetween(1, 3)),
+            ];
+        });
+    }
+
+    /**
      * Indicate that the model's email address should be unverified.
      */
     public function unverified(): static

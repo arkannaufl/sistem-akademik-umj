@@ -4,12 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\Semester;
 use App\Models\TahunAjaran;
+use App\Services\SemesterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 
 class TahunAjaranController extends Controller
 {
+    protected $semesterService;
+
+    public function __construct(SemesterService $semesterService)
+    {
+        $this->semesterService = $semesterService;
+    }
+
     public function index()
     {
         $tahunAjaran = TahunAjaran::with('semesters')->orderBy('tahun', 'asc')->get();
@@ -53,6 +61,9 @@ class TahunAjaranController extends Controller
 
     public function activate(TahunAjaran $tahunAjaran)
     {
+        // Simpan semester lama untuk perbandingan
+        $oldSemester = $this->semesterService->getActiveSemester();
+        
         DB::transaction(function () use ($tahunAjaran) {
             // Deactivate all other academic years
             TahunAjaran::where('id', '!=', $tahunAjaran->id)->update(['aktif' => false]);
@@ -73,6 +84,10 @@ class TahunAjaranController extends Controller
             }
         });
 
+        // Update semester semua mahasiswa
+        $newSemester = $this->semesterService->getActiveSemester();
+        $this->semesterService->updateAllStudentSemesters($oldSemester, $newSemester);
+
         activity()
             ->causedBy(Auth::user())
             ->performedOn($tahunAjaran)
@@ -88,6 +103,9 @@ class TahunAjaranController extends Controller
             return response()->json(['message' => 'Tahun ajaran induk harus diaktifkan terlebih dahulu.'], 400);
         }
 
+        // Simpan semester lama untuk perbandingan
+        $oldSemester = $this->semesterService->getActiveSemester();
+
         DB::transaction(function () use ($semester) {
             // Deactivate all other semesters
             Semester::where('id', '!=', $semester->id)->update(['aktif' => false]);
@@ -95,6 +113,9 @@ class TahunAjaranController extends Controller
             // Activate the selected semester
             $semester->update(['aktif' => true]);
         });
+
+        // Update semester semua mahasiswa
+        $this->semesterService->updateAllStudentSemesters($oldSemester, $semester);
 
         activity()
             ->causedBy(Auth::user())

@@ -1309,13 +1309,13 @@ export default function DetailBlok() {
       tanggal: form.hariTanggal,
       jam_mulai: form.jamMulai,
       jam_selesai: form.jamSelesai,
-      materi: form.materi,
-      topik: form.topik,
-      dosen_id: Number(form.pengampu),
+        materi: form.materi,
+        topik: form.topik,
+        dosen_id: Number(form.pengampu),
       ruangan_id: Number(form.lokasi),
-      kelompok_besar_id: form.kelompokBesar,
+        kelompok_besar_id: form.kelompokBesar,
       jumlah_sesi: form.jumlahKali,
-    };
+      };
 
     try {
       if (editIndex !== null && jadwalKuliahBesar[editIndex]?.id) {
@@ -1339,25 +1339,25 @@ export default function DetailBlok() {
   // Handler edit jadwal kuliah besar
   function handleEditJadwalKuliahBesar(idx: number) {
     const row = jadwalKuliahBesar[idx];
-          setForm({
-        hariTanggal: row.tanggal,
-        jamMulai: row.jam_mulai,
-        jumlahKali: row.jumlah_sesi || 2,
-        jamSelesai: row.jam_selesai,
+    setForm({
+      hariTanggal: row.tanggal,
+      jamMulai: row.jam_mulai,
+      jumlahKali: row.jumlah_sesi || 2,
+      jamSelesai: row.jam_selesai,
         pengampu: row.dosen_id,
-        materi: row.materi,
-        topik: row.topik || '',
-        lokasi: row.ruangan_id,
-        jenisBaris: 'materi',
-        agenda: '',
-        kelasPraktikum: '',
-        pblTipe: '',
-        modul: null,
-        kelompok: '',
+      materi: row.materi,
+      topik: row.topik || '',
+      lokasi: row.ruangan_id,
+      jenisBaris: 'materi',
+      agenda: '',
+      kelasPraktikum: '',
+      pblTipe: '',
+      modul: null,
+      kelompok: '',
         kelompokBesar: row.kelompok_besar_id || null,
-        useRuangan: true,
-        fileJurnal: null,
-      });
+      useRuangan: true,
+      fileJurnal: null,
+    });
     setEditIndex(idx);
     setShowModal(true);
     resetErrorForm();
@@ -1900,7 +1900,7 @@ export default function DetailBlok() {
         </div>
       </div>
       {/* Section Praktikum */}
-      <div className="mb-8">
+        <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-bold text-gray-800 dark:text-white">Praktikum</h2>
           <button
@@ -2228,188 +2228,188 @@ export default function DetailBlok() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jam Selesai</label>
                         <input type="text" name="jamSelesai" value={form.jamSelesai} readOnly className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm cursor-not-allowed" />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Materi</label>
-                        {materiOptions.length === 0 ? (
-                          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
-                            <div className="flex items-center gap-2">
-                              <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
-                                Belum ada dosen yang bisa diambil keahliannya untuk menampilkan materi
-                              </span>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Materi</label>
+                          {materiOptions.length === 0 ? (
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
+                                  Belum ada dosen yang bisa diambil keahliannya untuk menampilkan materi
+                                </span>
+                              </div>
+                              <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
+                                Silakan tambahkan dosen terlebih dahulu di halaman Dosen Detail
+                              </p>
                             </div>
-                            <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
-                              Silakan tambahkan dosen terlebih dahulu di halaman Dosen Detail
-                            </p>
-                          </div>
-                        ) : (
-                          <Select
-                            options={materiOptions.map((m: string) => ({ value: m, label: m }))}
-                            value={materiOptions.map((m: string) => ({ value: m, label: m })).find((opt: any) => opt.value === form.materi) || null}
-                            onChange={opt => {
-                              setForm(f => ({ 
-                                ...f, 
-                                materi: opt?.value || '',
-                                pengampu: null // Reset pengampu ketika materi berubah
-                              }));
-                              // Reset pengampu options jika materi di-clear
-                              if (!opt?.value) {
-                                setPengampuOptions([]);
-                              }
-                            }}
-                            placeholder="Pilih Materi"
-                            isClearable
-                            classNamePrefix="react-select"
-                            className="react-select-container"
-                            styles={{
-                              control: (base, state) => ({
-                                ...base,
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
-                                borderColor: state.isFocused
-                                  ? '#3b82f6'
-                                  : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                                boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
-                                borderRadius: '0.75rem',
-                                minHeight: '2.5rem',
-                                fontSize: '1rem',
-                                paddingLeft: '0.75rem',
-                                paddingRight: '0.75rem',
-                                '&:hover': { borderColor: '#3b82f6' },
-                              }),
-                              menu: base => ({
-                                ...base,
-                                zIndex: 9999,
-                                fontSize: '1rem',
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              option: (base, state) => ({
-                                ...base,
-                                backgroundColor: state.isSelected
-                                  ? '#3b82f6'
-                                  : state.isFocused
-                                  ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
-                                  : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
-                                color: state.isSelected
-                                  ? '#fff'
-                                  : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
-                                fontSize: '1rem',
-                              }),
-                              singleValue: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              placeholder: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                              }),
-                              input: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              dropdownIndicator: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                                '&:hover': { color: '#3b82f6' },
-                              }),
-                              indicatorSeparator: base => ({
-                                ...base,
-                                backgroundColor: 'transparent',
-                              }),
-                            }}
-                          />
-                        )}
-                      </div>
+                          ) : (
+                            <Select
+                              options={materiOptions.map((m: string) => ({ value: m, label: m }))}
+                              value={materiOptions.map((m: string) => ({ value: m, label: m })).find((opt: any) => opt.value === form.materi) || null}
+                              onChange={opt => {
+                                setForm(f => ({ 
+                                  ...f, 
+                                  materi: opt?.value || '',
+                                  pengampu: null // Reset pengampu ketika materi berubah
+                                }));
+                                // Reset pengampu options jika materi di-clear
+                                if (!opt?.value) {
+                                  setPengampuOptions([]);
+                                }
+                              }}
+                              placeholder="Pilih Materi"
+                              isClearable
+                              classNamePrefix="react-select"
+                              className="react-select-container"
+                              styles={{
+                                control: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
+                                  borderColor: state.isFocused
+                                    ? '#3b82f6'
+                                    : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                  boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
+                                  borderRadius: '0.75rem',
+                                  minHeight: '2.5rem',
+                                  fontSize: '1rem',
+                                  paddingLeft: '0.75rem',
+                                  paddingRight: '0.75rem',
+                                  '&:hover': { borderColor: '#3b82f6' },
+                                }),
+                                menu: base => ({
+                                  ...base,
+                                  zIndex: 9999,
+                                  fontSize: '1rem',
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                option: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: state.isSelected
+                                    ? '#3b82f6'
+                                    : state.isFocused
+                                    ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
+                                    : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
+                                  color: state.isSelected
+                                    ? '#fff'
+                                    : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
+                                  fontSize: '1rem',
+                                }),
+                                singleValue: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                placeholder: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                }),
+                                input: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                dropdownIndicator: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                  '&:hover': { color: '#3b82f6' },
+                                }),
+                                indicatorSeparator: base => ({
+                                  ...base,
+                                  backgroundColor: 'transparent',
+                                }),
+                              }}
+                            />
+                          )}
+                        </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pengampu</label>
                         {form.materi && pengampuOptions.length === 0 ? (
-                          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
-                            <div className="flex items-center gap-2">
-                              <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
-                                Belum ada dosen yang memiliki keahlian "{form.materi}" untuk mata kuliah ini
-                              </span>
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
+                                  Belum ada dosen yang memiliki keahlian "{form.materi}" untuk mata kuliah ini
+                                </span>
+                              </div>
+                              <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
+                                Silakan tambahkan dosen dengan keahlian "{form.materi}" terlebih dahulu di halaman Dosen Detail
+                              </p>
                             </div>
-                            <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
-                              Silakan tambahkan dosen dengan keahlian "{form.materi}" terlebih dahulu di halaman Dosen Detail
-                            </p>
-                          </div>
-                        ) : (
-                          <Select
-                            options={pengampuOptions.map(d => ({ value: d.id, label: d.name }))}
-                            value={pengampuOptions.map(d => ({ value: d.id, label: d.name })).find(opt => opt.value === form.pengampu) || null}
-                            onChange={opt => {
-                              setForm(f => ({ ...f, pengampu: opt ? Number(opt.value) : null }));
-                              resetErrorForm();
-                            }}
-                            placeholder={form.materi ? "Pilih Dosen" : "Pilih materi terlebih dahulu"}
-                            isDisabled={!form.materi}
-                            isClearable
-                            classNamePrefix="react-select"
-                            className="react-select-container"
-                            styles={{
-                              control: (base, state) => ({
-                                ...base,
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
-                                borderColor: state.isFocused
-                                  ? '#3b82f6'
-                                  : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                                boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
-                                borderRadius: '0.75rem',
-                                minHeight: '2.5rem',
-                                fontSize: '1rem',
-                                paddingLeft: '0.75rem',
-                                paddingRight: '0.75rem',
-                                '&:hover': { borderColor: '#3b82f6' },
-                              }),
-                              menu: base => ({
-                                ...base,
-                                zIndex: 9999,
-                                fontSize: '1rem',
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              option: (base, state) => ({
-                                ...base,
-                                backgroundColor: state.isSelected
-                                  ? '#3b82f6'
-                                  : state.isFocused
-                                  ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
-                                  : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
-                                color: state.isSelected
-                                  ? '#fff'
-                                  : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
-                                fontSize: '1rem',
-                              }),
-                              singleValue: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              placeholder: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                              }),
-                              input: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              dropdownIndicator: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                                '&:hover': { color: '#3b82f6' },
-                              }),
-                              indicatorSeparator: base => ({
-                                ...base,
-                                backgroundColor: 'transparent',
-                              }),
-                            }}
-                          />
+                          ) : (
+                            <Select
+                              options={pengampuOptions.map(d => ({ value: d.id, label: d.name }))}
+                              value={pengampuOptions.map(d => ({ value: d.id, label: d.name })).find(opt => opt.value === form.pengampu) || null}
+                              onChange={opt => {
+                                setForm(f => ({ ...f, pengampu: opt ? Number(opt.value) : null }));
+                                resetErrorForm();
+                              }}
+                              placeholder={form.materi ? "Pilih Dosen" : "Pilih materi terlebih dahulu"}
+                              isDisabled={!form.materi}
+                              isClearable
+                              classNamePrefix="react-select"
+                              className="react-select-container"
+                              styles={{
+                                control: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
+                                  borderColor: state.isFocused
+                                    ? '#3b82f6'
+                                    : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                  boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
+                                  borderRadius: '0.75rem',
+                                  minHeight: '2.5rem',
+                                  fontSize: '1rem',
+                                  paddingLeft: '0.75rem',
+                                  paddingRight: '0.75rem',
+                                  '&:hover': { borderColor: '#3b82f6' },
+                                }),
+                                menu: base => ({
+                                  ...base,
+                                  zIndex: 9999,
+                                  fontSize: '1rem',
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                option: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: state.isSelected
+                                    ? '#3b82f6'
+                                    : state.isFocused
+                                    ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
+                                    : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
+                                  color: state.isSelected
+                                    ? '#fff'
+                                    : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
+                                  fontSize: '1rem',
+                                }),
+                                singleValue: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                placeholder: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                }),
+                                input: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                dropdownIndicator: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                  '&:hover': { color: '#3b82f6' },
+                                }),
+                                indicatorSeparator: base => ({
+                                  ...base,
+                                  backgroundColor: 'transparent',
+                                }),
+                              }}
+                            />
                         )}
                       </div>
                       <div>
@@ -2419,91 +2419,91 @@ export default function DetailBlok() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kelompok Besar</label>
                         {kelompokBesarOptions.length === 0 ? (
-                          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
-                            <div className="flex items-center gap-2">
-                              <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
-                                Belum ada kelompok besar yang ditambahkan untuk mata kuliah ini
-                              </span>
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
+                                  Belum ada kelompok besar yang ditambahkan untuk mata kuliah ini
+                                </span>
+                              </div>
+                              <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
+                                Silakan tambahkan kelompok besar terlebih dahulu di halaman Kelompok Detail
+                              </p>
                             </div>
-                            <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
-                              Silakan tambahkan kelompok besar terlebih dahulu di halaman Kelompok Detail
-                            </p>
-                          </div>
-                        ) : (
-                          <Select
-                            options={kelompokBesarOptions.map(k => ({ value: Number(k.id), label: k.label }))}
-                            value={kelompokBesarOptions.find(k => Number(k.id) === form.kelompokBesar) ? { value: form.kelompokBesar, label: kelompokBesarOptions.find(k => Number(k.id) === form.kelompokBesar)?.label } : null}
-                            onChange={opt => {
+                          ) : (
+                            <Select
+                              options={kelompokBesarOptions.map(k => ({ value: Number(k.id), label: k.label }))}
+                              value={kelompokBesarOptions.find(k => Number(k.id) === form.kelompokBesar) ? { value: form.kelompokBesar, label: kelompokBesarOptions.find(k => Number(k.id) === form.kelompokBesar)?.label } : null}
+                              onChange={opt => {
                       
-                              setForm(f => ({ ...f, kelompokBesar: opt ? Number(opt.value) : null }));
-                              resetErrorForm();
-                            }}
-                            isSearchable={false}
-                            placeholder="Pilih Kelompok Besar"
-                            isClearable
-                            classNamePrefix="react-select"
-                            className="react-select-container"
-                            styles={{
-                              control: (base, state) => ({
-                                ...base,
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
-                                borderColor: state.isFocused
-                                  ? '#3b82f6'
-                                  : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                                boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
-                                borderRadius: '0.75rem',
-                                minHeight: '2.5rem',
-                                fontSize: '1rem',
-                                paddingLeft: '0.75rem',
-                                paddingRight: '0.75rem',
-                                '&:hover': { borderColor: '#3b82f6' },
-                              }),
-                              menu: base => ({
-                                ...base,
-                                zIndex: 9999,
-                                fontSize: '1rem',
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              option: (base, state) => ({
-                                ...base,
-                                backgroundColor: state.isSelected
-                                  ? '#3b82f6'
-                                  : state.isFocused
-                                  ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
-                                  : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
-                                color: state.isSelected
-                                  ? '#fff'
-                                  : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
-                                fontSize: '1rem',
-                              }),
-                              singleValue: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              placeholder: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                              }),
-                              input: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              dropdownIndicator: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                                '&:hover': { color: '#3b82f6' },
-                              }),
-                              indicatorSeparator: base => ({
-                                ...base,
-                                backgroundColor: 'transparent',
-                              }),
-                            }}
-                          />
+                                setForm(f => ({ ...f, kelompokBesar: opt ? Number(opt.value) : null }));
+                                resetErrorForm();
+                              }}
+                              isSearchable={false}
+                              placeholder="Pilih Kelompok Besar"
+                              isClearable
+                              classNamePrefix="react-select"
+                              className="react-select-container"
+                              styles={{
+                                control: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
+                                  borderColor: state.isFocused
+                                    ? '#3b82f6'
+                                    : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                  boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
+                                  borderRadius: '0.75rem',
+                                  minHeight: '2.5rem',
+                                  fontSize: '1rem',
+                                  paddingLeft: '0.75rem',
+                                  paddingRight: '0.75rem',
+                                  '&:hover': { borderColor: '#3b82f6' },
+                                }),
+                                menu: base => ({
+                                  ...base,
+                                  zIndex: 9999,
+                                  fontSize: '1rem',
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                option: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: state.isSelected
+                                    ? '#3b82f6'
+                                    : state.isFocused
+                                    ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
+                                    : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
+                                  color: state.isSelected
+                                    ? '#fff'
+                                    : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
+                                  fontSize: '1rem',
+                                }),
+                                singleValue: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                placeholder: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                }),
+                                input: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                dropdownIndicator: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                  '&:hover': { color: '#3b82f6' },
+                                }),
+                                indicatorSeparator: base => ({
+                                  ...base,
+                                  backgroundColor: 'transparent',
+                                }),
+                              }}
+                            />
                         )}
                       </div>
                       <div>
@@ -3350,87 +3350,87 @@ export default function DetailBlok() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kelompok Besar</label>
                         {kelompokBesarAgendaOptions.length === 0 ? (
-                          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
-                            <div className="flex items-center gap-2">
-                              <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
-                                Belum ada kelompok besar yang ditambahkan untuk mata kuliah ini
-                              </span>
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">
+                                  Belum ada kelompok besar yang ditambahkan untuk mata kuliah ini
+                                </span>
+                              </div>
+                              <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
+                                Silakan tambahkan kelompok besar terlebih dahulu di halaman Kelompok Detail
+                              </p>
                             </div>
-                            <p className="text-orange-600 dark:text-orange-400 text-xs mt-2">
-                              Silakan tambahkan kelompok besar terlebih dahulu di halaman Kelompok Detail
-                            </p>
-                          </div>
-                        ) : (
-                          <Select
-                            options={kelompokBesarAgendaOptions.map(k => ({ value: Number(k.id), label: k.label }))}
-                            value={kelompokBesarAgendaOptions.map(k => ({ value: Number(k.id), label: k.label })).find(opt => opt.value === form.kelompokBesar) || null}
-                            onChange={opt => setForm(f => ({ ...f, kelompokBesar: opt ? Number(opt.value) : null }))}
-                            placeholder="Pilih Kelompok Besar"
-                            isClearable
-                            isSearchable={false}
-                            classNamePrefix="react-select"
-                            className="react-select-container"
-                            styles={{
-                              control: (base, state) => ({
-                                ...base,
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
-                                borderColor: state.isFocused
-                                  ? '#3b82f6'
-                                  : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                                boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
-                                borderRadius: '0.75rem',
-                                minHeight: '2.5rem',
-                                fontSize: '1rem',
-                                paddingLeft: '0.75rem',
-                                paddingRight: '0.75rem',
-                                '&:hover': { borderColor: '#3b82f6' },
-                              }),
-                              menu: base => ({
-                                ...base,
-                                zIndex: 9999,
-                                fontSize: '1rem',
-                                backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              option: (base, state) => ({
-                                ...base,
-                                backgroundColor: state.isSelected
-                                  ? '#3b82f6'
-                                  : state.isFocused
-                                  ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
-                                  : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
-                                color: state.isSelected
-                                  ? '#fff'
-                                  : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
-                                fontSize: '1rem',
-                              }),
-                              singleValue: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              placeholder: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                              }),
-                              input: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
-                              }),
-                              dropdownIndicator: base => ({
-                                ...base,
-                                color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
-                                '&:hover': { color: '#3b82f6' },
-                              }),
-                              indicatorSeparator: base => ({
-                                ...base,
-                                backgroundColor: 'transparent',
-                              }),
-                            }}
-                          />
+                          ) : (
+                            <Select
+                              options={kelompokBesarAgendaOptions.map(k => ({ value: Number(k.id), label: k.label }))}
+                              value={kelompokBesarAgendaOptions.map(k => ({ value: Number(k.id), label: k.label })).find(opt => opt.value === form.kelompokBesar) || null}
+                              onChange={opt => setForm(f => ({ ...f, kelompokBesar: opt ? Number(opt.value) : null }))}
+                              placeholder="Pilih Kelompok Besar"
+                              isClearable
+                              isSearchable={false}
+                              classNamePrefix="react-select"
+                              className="react-select-container"
+                              styles={{
+                                control: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f9fafb',
+                                  borderColor: state.isFocused
+                                    ? '#3b82f6'
+                                    : (document.documentElement.classList.contains('dark') ? '#334155' : '#d1d5db'),
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                  boxShadow: state.isFocused ? '0 0 0 2px #3b82f633' : undefined,
+                                  borderRadius: '0.75rem',
+                                  minHeight: '2.5rem',
+                                  fontSize: '1rem',
+                                  paddingLeft: '0.75rem',
+                                  paddingRight: '0.75rem',
+                                  '&:hover': { borderColor: '#3b82f6' },
+                                }),
+                                menu: base => ({
+                                  ...base,
+                                  zIndex: 9999,
+                                  fontSize: '1rem',
+                                  backgroundColor: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                option: (base, state) => ({
+                                  ...base,
+                                  backgroundColor: state.isSelected
+                                    ? '#3b82f6'
+                                    : state.isFocused
+                                    ? (document.documentElement.classList.contains('dark') ? '#334155' : '#e0e7ff')
+                                    : (document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff'),
+                                  color: state.isSelected
+                                    ? '#fff'
+                                    : (document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937'),
+                                  fontSize: '1rem',
+                                }),
+                                singleValue: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                placeholder: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                }),
+                                input: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#fff' : '#1f2937',
+                                }),
+                                dropdownIndicator: base => ({
+                                  ...base,
+                                  color: document.documentElement.classList.contains('dark') ? '#64748b' : '#6b7280',
+                                  '&:hover': { color: '#3b82f6' },
+                                }),
+                                indicatorSeparator: base => ({
+                                  ...base,
+                                  backgroundColor: 'transparent',
+                                }),
+                              }}
+                            />
                         )}
                       </div>
                       <div>
@@ -4797,7 +4797,7 @@ export default function DetailBlok() {
                         {row.kelompok_kecil?.nama_kelompok || 'Memuat...'}
                       </td>
                       <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">
-                        {allDosenList.find(d => d.id === Number(row.dosen_id))?.name || (loadingDosenRuangan ? 'Memuat...' : `Dosen ${row.dosen_id}`)}
+                        {row.dosen_names || allDosenList.find(d => d.id === Number(row.dosen_id))?.name || (loadingDosenRuangan ? 'Memuat...' : `Dosen ${row.dosen_id}`)}
                       </td>
                         <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">
                           {allRuanganList.find(r => r.id === Number(row.ruangan_id))?.nama || (loadingDosenRuangan ? 'Memuat...' : `Ruangan ${row.ruangan_id}`)}
@@ -4941,7 +4941,7 @@ export default function DetailBlok() {
                       <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">{row.kelompok_kecil?.nama_kelompok || 'Memuat...'}</td>
                       <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">{row.topik}</td>
                       <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">
-                        {allDosenList.find(d => d.id === Number(row.dosen_id))?.name || (loadingDosenRuangan ? 'Memuat...' : `Dosen ${row.dosen_id}`)}
+                        {row.dosen_names || allDosenList.find(d => d.id === Number(row.dosen_id))?.name || (loadingDosenRuangan ? 'Memuat...' : `Dosen ${row.dosen_id}`)}
                       </td>
                       <td className="px-6 py-4 text-gray-800 dark:text-white/90 whitespace-nowrap">
                         {row.file_jurnal ? (
@@ -4994,7 +4994,7 @@ export default function DetailBlok() {
                             
                             // Simpan data jurnal ke localStorage untuk halaman penilaian
                             const jurnalData = {
-                              dosen: allDosenList.find(d => d.id === Number((row as any).dosen_id))?.name || '',
+                              dosen: (row as any).dosen_names || allDosenList.find(d => d.id === Number((row as any).dosen_id))?.name || '',
                               tanggal: (row as any).tanggal,
                               judulJurnal: (row as any).topik
                             };

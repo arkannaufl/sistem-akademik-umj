@@ -14,6 +14,7 @@ import SignIn from "./pages/AuthPages/SignIn";
 import RequireAuth from "./components/common/RequireAuth";
 import RequireDosenRole from "./components/common/RequireDosenRole";
 import RoleBasedRedirect from "./components/common/RoleBasedRedirect";
+import UniversalDashboard from "./components/common/UniversalDashboard";
 import RedirectIfAuth from "./components/common/RedirectIfAuth";
 import { SessionProvider, useSession } from "./context/SessionContext";
 import SessionExpiredModal from "./components/common/SessionExpiredModal";
@@ -31,16 +32,20 @@ import PBLGenerate from "./pages/PBLGenerate";
 import MataKuliahKeahlian from "./pages/MataKuliahKeahlian";
 import CSRDetail from "./pages/CSRDetail";
 import DetailBlok from "./pages/DetailBlok";
+import DetailBlokAntara from "./pages/DetailBlokAntara";
 import DetailNonBlokCSR from "./pages/DetailNonBlokCSR";
 import DetailNonBlokNonCSR from "./pages/DetailNonBlokNonCSR";
+import DetailNonBlokNonCSRAntara from "./pages/DetailNonBlokNonCSRAntara";
 import PilihPetaBlok from "./pages/PilihPetaBlok";
 import PetaBlok from "./pages/PetaBlok";
 import PenilaianPBLPage from "./pages/PenilaianPBLPage";
+import PenilaianPBLAntaraPage from "./pages/PenilaianPBLAntaraPage";
 import PenilaianJurnalPage from "./pages/PenilaianJurnalPage";
+import PenilaianJurnalAntaraPage from "./pages/PenilaianJurnalAntaraPage";
 import DosenRiwayat from "./pages/DosenRiwayat";
-import DashboardDosen from "./pages/DashboardDosen";
 import MataKuliahDosen from "./pages/MataKuliahDosen";
 import AdminNotifications from "./pages/AdminNotifications";
+import DashboardTimAkademik from "./pages/DashboardTimAkademik";
 
 function AppContent() {
   const { isSessionExpired, setSessionExpired } = useSession();
@@ -67,14 +72,25 @@ function AppContent() {
               {/* Default route - redirect based on role */}
               <Route index path="/" element={<RoleBasedRedirect />} />
               
-              {/* Super Admin Routes */}
+              {/* Universal Dashboard Route */}
+              <Route path="/dashboard" element={<UniversalDashboard />} />
+              
+              {/* Super Admin Routes - Blocked direct access */}
+              <Route path="/dashboard-super-admin" element={<Navigate to="/dashboard" replace />} />
+              
+              {/* Tim Akademik Routes */}
+              <Route path="/dashboard-tim-akademik" element={
+                <RequireDosenRole allowedRoles={["tim_akademik"]}>
+                  <DashboardTimAkademik />
+                </RequireDosenRole>
+              } />
               <Route path="/tahun-ajaran" element={
                 <RequireDosenRole allowedRoles={["super_admin"]}>
                   <TahunAjaran />
                 </RequireDosenRole>
               } />
               <Route path="/mata-kuliah" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <MataKuliah />
                 </RequireDosenRole>
               } />
@@ -86,11 +102,8 @@ function AppContent() {
                 </RequireDosenRole>
               } />
               
-              <Route path="/dashboard-dosen" element={
-                <RequireDosenRole allowedRoles={["dosen"]}>
-                  <DashboardDosen />
-                </RequireDosenRole>
-              } />
+              {/* Dosen Routes - Blocked direct access */}
+              <Route path="/dashboard-dosen" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dosen-riwayat" element={
                 <RequireDosenRole allowedRoles={["dosen"]}>
                   <DosenRiwayat />
@@ -98,47 +111,47 @@ function AppContent() {
               } />
               {/* Super Admin Only Routes */}
               <Route path="/pbl" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <PBLList />
                 </RequireDosenRole>
               } />
               <Route path="/pbl/blok/:blokId" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <PBLDetail />
                 </RequireDosenRole>
               } />
               <Route path="/pbl/generate/:blokId" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <PBLGenerate />
                 </RequireDosenRole>
               } />
               <Route path="/pbl/keahlian" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <MataKuliahKeahlian />
                 </RequireDosenRole>
               } />
               <Route path="/csr" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <CSR />
                 </RequireDosenRole>
               } />
               <Route path="/csr/:csrId" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <CSRDetail />
                 </RequireDosenRole>
               } />
               <Route path="/dosen" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <Dosen />
                 </RequireDosenRole>
               } />
               <Route path="/dosen/:id/riwayat" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <DosenRiwayat />
                 </RequireDosenRole>
               } />
               <Route path="/mahasiswa" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <Mahasiswa />
                 </RequireDosenRole>
               } />
@@ -153,7 +166,7 @@ function AppContent() {
                 </RequireDosenRole>
               } />
               <Route path="/ruangan" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <Ruangan />
                 </RequireDosenRole>
               } />
@@ -161,17 +174,17 @@ function AppContent() {
               
               {/* Peta Routes - Available for both super_admin and dosen */}
               <Route path="/peta-akademik" element={
-                <RequireDosenRole allowedRoles={["super_admin", "dosen"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "dosen", "tim_akademik"]}>
                   <PetaAkademikPage />
                 </RequireDosenRole>
               } />
               <Route path="/peta-blok" element={
-                <RequireDosenRole allowedRoles={["super_admin", "dosen"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "dosen", "tim_akademik"]}>
                   <PilihPetaBlok />
                 </RequireDosenRole>
               } />
               <Route path="/peta-blok/:semester/:blok" element={
-                <RequireDosenRole allowedRoles={["super_admin", "dosen"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "dosen", "tim_akademik"]}>
                   <PetaBlok />
                 </RequireDosenRole>
               } />
@@ -180,23 +193,23 @@ function AppContent() {
               <Route
                 path="/generate/kelompok-besar/:semester"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                     <KelompokBesar />
                   </RequireDosenRole>
                 }
               />
               <Route path="/generate/kelompok" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <Kelompok />
                 </RequireDosenRole>
               } />
               <Route path="/generate/kelas" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <Kelas />
                 </RequireDosenRole>
               } />
               <Route path="/reporting/dosen" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <ReportingDosen />
                 </RequireDosenRole>
               } />
@@ -213,7 +226,7 @@ function AppContent() {
               <Route
                 path="/generate/kelompok/:semester"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                     <KelompokKecil />
                   </RequireDosenRole>
                 }
@@ -221,20 +234,25 @@ function AppContent() {
               <Route
                 path="/generate/kelas/:semester"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                     <KelasDetail />
                   </RequireDosenRole>
                 }
               />
               <Route path="/mata-kuliah/blok/:kode" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <DetailBlok />
+                </RequireDosenRole>
+              } />
+              <Route path="/mata-kuliah/blok-antara/:kode" element={
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                  <DetailBlokAntara />
                 </RequireDosenRole>
               } />
               <Route
                 path="/mata-kuliah/non-blok-csr/:kode"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                     <DetailNonBlokCSR />
                   </RequireDosenRole>
                 }
@@ -242,24 +260,48 @@ function AppContent() {
               <Route
                 path="/mata-kuliah/non-blok-non-csr/:kode"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                     <DetailNonBlokNonCSR />
                   </RequireDosenRole>
                 }
               />
               <Route
-                path="/penilaian-pbl/:kode_blok/:kelompok/:pertemuan"
+                path="/mata-kuliah/non-blok-non-csr-antara/:kode"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin"]}>
-                    <PenilaianPBLPage />
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                    <DetailNonBlokNonCSRAntara />
+                  </RequireDosenRole>
+                }
+              />
+                             <Route
+                 path="/penilaian-pbl/:kode_blok/:kelompok/:pertemuan"
+                 element={
+                   <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                     <PenilaianPBLPage />
+                   </RequireDosenRole>
+                 }
+               />
+               <Route
+                 path="/penilaian-pbl-antara/:kode_blok/:kelompok/:pertemuan"
+                 element={
+                   <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                     <PenilaianPBLAntaraPage />
+                   </RequireDosenRole>
+                 }
+               />
+              <Route
+                path="/penilaian-jurnal/:kode_blok/:kelompok/:jurnal_id"
+                element={
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                    <PenilaianJurnalPage />
                   </RequireDosenRole>
                 }
               />
               <Route
-                path="/penilaian-jurnal/:kode_blok/:kelompok/:jurnal_id"
+                path="/penilaian-jurnal-antara/:kode_blok/:kelompok/:jurnal_id"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin"]}>
-                    <PenilaianJurnalPage />
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                    <PenilaianJurnalAntaraPage />
                   </RequireDosenRole>
                 }
               />

@@ -16,12 +16,18 @@ class JadwalKuliahBesar extends Model
         'materi',
         'topik',
         'dosen_id',
+        'dosen_ids', // Array of dosen IDs for multiple dosen
         'ruangan_id',
         'kelompok_besar_id',
+        'kelompok_besar_antara_id', // For manual kelompok besar
         'tanggal',
         'jam_mulai',
         'jam_selesai',
         'jumlah_sesi',
+    ];
+
+    protected $casts = [
+        'dosen_ids' => 'array',
     ];
 
     // Relasi
@@ -35,5 +41,25 @@ class JadwalKuliahBesar extends Model
     public function kelompokBesar()
     {
         return $this->hasMany(KelompokBesar::class, 'semester', 'kelompok_besar_id');
+    }
+
+    /**
+     * Relasi ke kelompok besar antara (manual)
+     */
+    public function kelompokBesarAntara()
+    {
+        return $this->belongsTo(KelompokBesarAntara::class, 'kelompok_besar_antara_id');
+    }
+
+    /**
+     * Get multiple dosen names
+     */
+    public function getDosenNamesAttribute()
+    {
+        if ($this->dosen_ids && is_array($this->dosen_ids)) {
+            $dosenNames = User::whereIn('id', $this->dosen_ids)->pluck('name')->toArray();
+            return implode(', ', $dosenNames);
+        }
+        return $this->dosen ? $this->dosen->name : '';
     }
 }

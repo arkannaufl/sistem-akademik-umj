@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 
 export default function RoleBasedRedirect() {
@@ -28,20 +28,15 @@ export default function RoleBasedRedirect() {
       return;
     }
 
-    // Only redirect if we're on the root path
+    // Handle root path redirects - redirect to universal dashboard first
     if (location.pathname === "/") {
-      // Redirect based on role
-      if (user.role === "dosen") {
-        setHasRedirected(true);
-        navigate("/dashboard-dosen");
-      } else if (user.role === "super_admin") {
-        setHasRedirected(true);
-        navigate("/tahun-ajaran");
-      } else {
-        setHasRedirected(true);
-        navigate("/signin");
-      }
+      setHasRedirected(true);
+      navigate("/dashboard");
+      return;
     }
+    
+    // Handle dashboard path redirects - now handled by UniversalDashboard component
+    // No need to redirect from /dashboard anymore
   }, [navigate, location.pathname, hasRedirected]);
 
   return (

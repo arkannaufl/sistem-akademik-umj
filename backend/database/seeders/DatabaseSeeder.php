@@ -19,9 +19,9 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             MataKuliahSeeder::class,
+            TahunAjaranSeeder::class, // Pindah ke atas agar tahun ajaran aktif sebelum UserSeeder
             UserSeeder::class,
             RuanganSeeder::class,
-            TahunAjaranSeeder::class,
             CSRSeeder::class,
             MataKuliahKeahlianSeeder::class,
         ]);

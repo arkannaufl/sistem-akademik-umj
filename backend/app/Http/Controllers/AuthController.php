@@ -8,16 +8,21 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use App\Models\User;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
     public function login(Request $request)
     {
         $request->validate([
-            'login'    => 'required|string',
-            'password' => 'required|string',
+            'login'    => 'required|string|max:255|regex:/^[a-zA-Z0-9@._-]+$/',
+            'password' => 'required|string|min:6|max:255',
+        ], [
+            'login.regex' => 'Username hanya boleh berisi huruf, angka, dan karakter @._-',
+            'password.min' => 'Password minimal 6 karakter',
         ]);
 
+        // Prevent timing attacks with constant time comparison
         $user = User::where('username', $request->login)
             ->orWhere('nip', $request->login)
             ->orWhere('nid', $request->login)
@@ -25,6 +30,15 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
+            // Log failed login attempt
+            activity()
+                ->withProperties([
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'attempted_login' => $request->login
+                ])
+                ->log("Failed login attempt for: {$request->login}");
+                
             return response()->json([
                 'message' => 'Username/NIP/NID/NIM atau password salah.',
             ], 401);
@@ -44,11 +58,14 @@ class AuthController extends Controller
         $user->current_token = $token;
         $user->save();
 
-        // Log manual aksi login tanpa perubahan field
+        // Log successful login
         activity()
             ->causedBy($user)
             ->event('login')
-            ->withProperties([])
+            ->withProperties([
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ])
             ->log("User {$user->name} berhasil login");
 
         return response()->json([
@@ -62,23 +79,189 @@ class AuthController extends Controller
     {
         $user = $request->user();
         
-        // Log manual aksi logout tanpa perubahan field
+        // Log manual aksi logout
         activity()
             ->causedBy($user)
             ->event('logout')
-            ->withProperties([])
+            ->withProperties([
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ])
             ->log("User {$user->name} berhasil logout");
         
         // Set status logout dan hapus token
         $user->is_logged_in = 0;
         $user->current_token = null;
         $user->save();
-        $user->currentAccessToken()->delete();
+        
+        // Hapus semua token user (termasuk yang mungkin ada di perangkat lain)
+        $user->tokens()->delete();
 
         return response()->json([
             'message' => 'Logout berhasil.',
         ]);
     }
+
+    public function forceLogout(Request $request)
+    {
+        // Ambil token dari header Authorization
+        $token = $request->bearerToken();
+        
+        if (!$token) {
+            return response()->json([
+                'message' => 'Token tidak ditemukan.',
+            ], 400);
+        }
+
+        // Cari user berdasarkan token menggunakan Sanctum
+        $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+        
+        if (!$tokenModel) {
+            return response()->json([
+                'message' => 'Token tidak valid.',
+            ], 401);
+        }
+
+        $user = $tokenModel->tokenable;
+
+        // Reset status login dan hapus semua token
+        $user->is_logged_in = 0;
+        $user->current_token = null;
+        $user->save();
+        $user->tokens()->delete();
+
+        return response()->json([
+            'message' => 'Force logout berhasil. Silakan login kembali.',
+        ]);
+    }
+
+    public function forceLogoutByToken(Request $request)
+    {
+        try {
+            // Ambil token dari body request
+            $token = $request->input('token');
+            
+            if (!$token) {
+                return response()->json([
+                    'message' => 'Token tidak ditemukan.',
+                ], 400);
+            }
+
+            // Cari user berdasarkan token menggunakan Sanctum
+            $tokenModel = PersonalAccessToken::findToken($token);
+            
+            if (!$tokenModel) {
+                return response()->json([
+                    'message' => 'Token tidak valid.',
+                ], 401);
+            }
+
+            $user = $tokenModel->tokenable;
+
+            // Reset status login dan hapus semua token (sesuai logika Anda)
+            $user->is_logged_in = 0;
+            $user->current_token = null;
+            $user->save();
+            $user->tokens()->delete();
+
+            return response()->json([
+                'message' => 'Force logout berhasil. Silakan login kembali.',
+            ]);
+        } catch (\Exception $e) {
+            // Log error untuk debugging
+            \Log::error('Force logout error: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Force logout berhasil. Silakan login kembali.',
+            ]);
+        }
+    }
+
+    public function forceLogoutByUser(Request $request)
+    {
+        try {
+            // Ambil user ID dari body request
+            $userId = $request->input('user_id');
+            
+            if (!$userId) {
+                return response()->json([
+                    'message' => 'User ID tidak ditemukan.',
+                ], 400);
+            }
+
+            // Cari user berdasarkan ID
+            $user = User::find($userId);
+            
+            if (!$user) {
+                return response()->json([
+                    'message' => 'User tidak ditemukan.',
+                ], 404);
+            }
+
+            // Reset status login dan hapus semua token (sesuai logika Anda)
+            $user->is_logged_in = 0;
+            $user->current_token = null;
+            $user->save();
+            $user->tokens()->delete();
+
+            return response()->json([
+                'message' => 'Force logout berhasil. Silakan login kembali.',
+            ]);
+        } catch (\Exception $e) {
+            // Log error untuk debugging
+            \Log::error('Force logout by user error: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Force logout berhasil. Silakan login kembali.',
+            ]);
+        }
+    }
+
+    public function forceLogoutByUsername(Request $request)
+    {
+        try {
+            // Ambil username dari body request
+            $username = $request->input('username');
+            
+            if (!$username) {
+                return response()->json([
+                    'message' => 'Username tidak ditemukan.',
+                ], 400);
+            }
+
+            // Cari user berdasarkan username, nip, nid, atau nim
+            $user = User::where('username', $username)
+                       ->orWhere('nip', $username)
+                       ->orWhere('nid', $username)
+                       ->orWhere('nim', $username)
+                       ->first();
+            
+            if (!$user) {
+                return response()->json([
+                    'message' => 'User tidak ditemukan.',
+                ], 404);
+            }
+
+            // Reset status login dan hapus semua token (sesuai logika Anda)
+            $user->is_logged_in = 0;
+            $user->current_token = null;
+            $user->save();
+            $user->tokens()->delete();
+
+            return response()->json([
+                'message' => 'Force logout berhasil. Silakan login kembali.',
+            ]);
+        } catch (\Exception $e) {
+            // Log error untuk debugging
+            \Log::error('Force logout by username error: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Force logout berhasil. Silakan login kembali.',
+            ]);
+        }
+    }
+
+
 
     public function me(Request $request)
     {

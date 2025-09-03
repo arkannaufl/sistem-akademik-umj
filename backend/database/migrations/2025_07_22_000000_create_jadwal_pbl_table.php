@@ -15,8 +15,10 @@ return new class extends Migration
             $table->id();
             $table->string('mata_kuliah_kode');
             $table->unsignedBigInteger('modul_pbl_id');
-            $table->unsignedBigInteger('kelompok_kecil_id');
-            $table->unsignedBigInteger('dosen_id');
+            $table->unsignedBigInteger('kelompok_kecil_id')->nullable();
+            $table->unsignedBigInteger('kelompok_kecil_antara_id')->nullable();
+            $table->unsignedBigInteger('dosen_id')->nullable();
+            $table->json('dosen_ids')->nullable();
             $table->unsignedBigInteger('ruangan_id');
             $table->date('tanggal');
             $table->string('jam_mulai');

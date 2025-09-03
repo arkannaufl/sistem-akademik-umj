@@ -21,6 +21,12 @@ interface Penilaian {
   };
 }
 
+interface AbsensiPBL {
+  [npm: string]: {
+    hadir: boolean;
+  };
+}
+
 const KRITERIA = {
   A: "Salam dan berdoa",
   B: "Partisipasi aktif dan tanggung jawab dalam proses PBL",
@@ -39,6 +45,7 @@ export default function PenilaianPBLPage() {
     []
   );
   const [penilaian, setPenilaian] = useState<Penilaian>({});
+  const [absensi, setAbsensi] = useState<AbsensiPBL>({});
   const [namaBlok, setNamaBlok] = useState("");
   const [kodeBlok, setKodeBlok] = useState("");
   const [tanggalParaf, setTanggalParaf] = useState("");
@@ -124,6 +131,20 @@ export default function PenilaianPBLPage() {
       })
       .catch(() => setError('Gagal memuat data penilaian'))
       .finally(() => setLoading(false));
+
+    // Fetch data absensi
+    api.get(`/mata-kuliah/${kode_blok}/kelompok/${kelompok}/pertemuan/${pertemuan}/absensi-pbl`)
+      .then(res => {
+        const data = res.data.absensi || [];
+        const abs: AbsensiPBL = {};
+        data.forEach((row: any) => {
+          abs[row.mahasiswa_npm] = {
+            hadir: row.hadir || false,
+          };
+        });
+        setAbsensi(abs);
+      })
+      .catch(() => setError('Gagal memuat data absensi'));
   }, [kode_blok, kelompok, pertemuan]);
 
   // Fetch modul PBL list
@@ -152,6 +173,14 @@ export default function PenilaianPBLPage() {
     setSaving(true);
     setError(null);
     try {
+      // Simpan absensi terlebih dahulu
+      const absensiSuccess = await handleSaveAbsensi();
+      if (!absensiSuccess) {
+        setSaving(false);
+        return;
+      }
+      
+      // Kemudian simpan penilaian
       const payload = {
         penilaian: mahasiswa.map(m => ({
           mahasiswa_npm: m.npm,
@@ -169,7 +198,7 @@ export default function PenilaianPBLPage() {
         nama_tutor: namaTutor,
       };
       await api.post(`/mata-kuliah/${kode_blok}/kelompok/${kelompok}/pertemuan/${pertemuan}/penilaian-pbl`, payload);
-      setSuccess(`Penilaian ${isPBL2 ? 'PBL 2' : 'PBL 1'} berhasil disimpan!`);
+      setSuccess(`Absensi dan penilaian ${isPBL2 ? 'PBL 2' : 'PBL 1'} berhasil disimpan!`);
     } catch (error: any) {
       setError(error.response?.data?.message || 'Gagal menyimpan penilaian');
     } finally {
@@ -214,6 +243,33 @@ export default function PenilaianPBLPage() {
       return jumlahKriteria + (nilai.petaKonsep || 0);
     }
     return jumlahKriteria;
+  };
+
+  const handleAbsensiChange = (npm: string, hadir: boolean) => {
+    setAbsensi((prev) => ({
+      ...prev,
+      [npm]: {
+        hadir: hadir,
+      },
+    }));
+  };
+
+  const handleSaveAbsensi = async () => {
+    if (!kode_blok || !kelompok || !pertemuan) return;
+    
+    try {
+      const payload = {
+        absensi: mahasiswa.map(m => ({
+          mahasiswa_npm: m.npm,
+          hadir: absensi[m.npm]?.hadir || false,
+        })),
+      };
+      await api.post(`/mata-kuliah/${kode_blok}/kelompok/${kelompok}/pertemuan/${pertemuan}/absensi-pbl`, payload);
+      return true;
+    } catch (error: any) {
+      setError(error.response?.data?.message || 'Gagal menyimpan absensi');
+      return false;
+    }
   };
 
   const handleClearTutor = () => {
@@ -738,6 +794,9 @@ export default function PenilaianPBLPage() {
                 <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   NAMA
                 </th>
+                <th className="px-2 py-3 text-center font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  ABSENSI
+                </th>
                 {Object.keys(KRITERIA).map((key) => (
                   <th
                     key={key}
@@ -766,6 +825,32 @@ export default function PenilaianPBLPage() {
                   <td className="px-2 py-2 whitespace-nowrap dark:text-gray-200">{index + 1}</td>
                   <td className="px-4 py-2 whitespace-nowrap dark:text-gray-200">{m.npm}</td>
                   <td className="px-4 py-2 whitespace-nowrap dark:text-gray-200">{m.nama}</td>
+                  <td className="px-2 py-2 text-center whitespace-nowrap dark:text-gray-200">
+                    <div className="relative flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={absensi[m.npm]?.hadir || false}
+                        onChange={(e) => handleAbsensiChange(m.npm, e.target.checked)}
+                        className={`w-5 h-5 appearance-none rounded-md border-2 ${
+                          absensi[m.npm]?.hadir 
+                            ? 'border-brand-500 bg-brand-500' 
+                            : 'border-brand-500 bg-transparent'
+                        } transition-colors duration-150 focus:ring-2 focus:ring-brand-300 dark:focus:ring-brand-600 relative`}
+                        style={{ outline: 'none' }}
+                      />
+                      {absensi[m.npm]?.hadir && (
+                        <svg
+                          className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none"
+                          viewBox="0 0 20 20"
+                          fill="none"
+                          stroke="white"
+                          strokeWidth="2.5"
+                        >
+                          <polyline points="5 11 9 15 15 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </td>
                   {Object.keys(KRITERIA).map((key) => (
                     <td
                       key={key}
@@ -959,9 +1044,15 @@ export default function PenilaianPBLPage() {
           </div>
         </div>
         {/* Tambahkan tombol simpan di bawah tabel */}
-        <button onClick={handleSaveAll} disabled={saving} className="mt-6 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium shadow-theme-xs hover:bg-blue-600 transition dark:bg-blue-600 dark:hover:bg-blue-500">
-          {saving ? 'Menyimpan...' : 'Simpan Penilaian'}
+        <div className="mt-6 flex gap-4">
+          <button 
+            onClick={handleSaveAll} 
+            disabled={saving || loading} 
+            className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium shadow-theme-xs hover:bg-blue-600 transition dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Menyimpan...' : 'Simpan Absensi & Penilaian'}
         </button>
+        </div>
         
       </div>
     </div>

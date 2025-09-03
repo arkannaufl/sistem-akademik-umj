@@ -12,11 +12,14 @@ export default function RequireAuth() {
     const verifyToken = async () => {
       try {
         await api.get("/me");
-      } catch (error) {
-        // If token is invalid (e.g., user deleted), clear storage and dispatch event to show modal
+      } catch (error: any) {
+        // If token is invalid, clear storage
         localStorage.removeItem("token");
         localStorage.removeItem("user");
-        window.dispatchEvent(new Event('sessionExpired'));
+        
+        // Don't dispatch sessionExpired here as it's handled by API interceptor
+        // Just redirect to login
+        window.location.href = '/login';
       }
     };
 
@@ -24,8 +27,7 @@ export default function RequireAuth() {
       verifyToken();
     }
     // If there's no token, the return statement below will handle the redirect
-    // No need to dispatch sessionExpired here, as it's a direct redirect for unauthenticated users
-  }, [token, setSessionExpired]); // Add setSessionExpired to dependency array
+  }, [token, setSessionExpired]);
 
   // If no token exists, immediately redirect to login page
   if (!token) {

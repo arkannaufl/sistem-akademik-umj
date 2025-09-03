@@ -3,6 +3,7 @@
 namespace App\Imports;
 
 use App\Models\User;
+use App\Services\SemesterService;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -18,6 +19,12 @@ class MahasiswaImport implements ToCollection, WithHeadingRow
     private $seenNimsInFile = [];
     private $seenUsernamesInFile = [];
     private $seenEmailsInFile = [];
+    private $semesterService;
+
+    public function __construct(SemesterService $semesterService)
+    {
+        $this->semesterService = $semesterService;
+    }
 
     public function collection(Collection $rows)
     {
@@ -159,7 +166,7 @@ class MahasiswaImport implements ToCollection, WithHeadingRow
             }
 
             // Save if valid
-            User::create([
+            $user = User::create([
                 'nim' => $rowArray['nim'],
                 'name' => $rowArray['name'],
                 'username' => $rowArray['username'],
@@ -173,6 +180,9 @@ class MahasiswaImport implements ToCollection, WithHeadingRow
                 'role' => 'mahasiswa',
                 'semester' => $rowArray['semester'] ?? null,
             ]);
+
+            // Update semester berdasarkan semester aktif
+            $this->semesterService->updateNewStudentSemester($user);
         }
     }
 

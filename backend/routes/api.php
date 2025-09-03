@@ -21,30 +21,36 @@ use App\Http\Controllers\MataKuliahPBLKelompokKecilController;
 use App\Http\Controllers\JadwalKuliahBesarController;
 use App\Http\Controllers\JadwalCSRController;
 use App\Http\Controllers\JadwalNonBlokNonCSRController;
+use App\Http\Controllers\KelompokBesarAntaraController;
+use App\Http\Controllers\KelompokKecilAntaraController;
+use App\Http\Controllers\DashboardTimAkademikController;
 
 
-Route::post('/login', [AuthController::class, 'login']);
+Route::middleware('throttle:5,1')->post('/login', [AuthController::class, 'login']); // 5 attempts per minute
 Route::get('/login', function () {
     return response()->json(['message' => 'Unauthorized'], 401);
 });
 
-Route::middleware('auth:sanctum')->post('/logout', [AuthController::class, 'logout']);
+Route::middleware(['auth:sanctum', 'validate.token'])->post('/logout', [AuthController::class, 'logout']);
+Route::post('/force-logout-by-token', [AuthController::class, 'forceLogoutByToken']);
+Route::post('/force-logout-by-user', [AuthController::class, 'forceLogoutByUser']);
+Route::post('/force-logout-by-username', [AuthController::class, 'forceLogoutByUsername']);
 
-Route::middleware('auth:sanctum')->get('/me', function (Request $request) {
+Route::middleware(['auth:sanctum', 'validate.token'])->get('/me', function (Request $request) {
     return $request->user();
 });
 
-Route::middleware('auth:sanctum')->put('/profile', [AuthController::class, 'updateProfile']);
+Route::middleware(['auth:sanctum', 'validate.token'])->put('/profile', [AuthController::class, 'updateProfile']);
 
-Route::middleware('auth:sanctum')->post('/profile/avatar', [AuthController::class, 'updateAvatar']);
+Route::middleware(['auth:sanctum', 'validate.token'])->post('/profile/avatar', [AuthController::class, 'updateAvatar']);
 
-Route::middleware('auth:sanctum')->apiResource('users', \App\Http\Controllers\UserController::class);
+Route::middleware(['auth:sanctum', 'validate.token', 'role:super_admin,tim_akademik'])->apiResource('users', \App\Http\Controllers\UserController::class);
 
-Route::middleware('auth:sanctum')->post('/users/import-dosen', [UserController::class, 'importDosen']);
+Route::middleware(['auth:sanctum', 'validate.token', 'role:super_admin'])->post('/users/import-dosen', [UserController::class, 'importDosen']);
 
-Route::middleware('auth:sanctum')->post('/users/import-mahasiswa', [UserController::class, 'importMahasiswa']);
+Route::middleware(['auth:sanctum', 'validate.token', 'role:super_admin'])->post('/users/import-mahasiswa', [UserController::class, 'importMahasiswa']);
 
-Route::middleware('auth:sanctum')->post('/users/import-tim-akademik', [UserController::class, 'importTimAkademik']);
+Route::middleware(['auth:sanctum', 'role:super_admin'])->post('/users/import-tim-akademik', [UserController::class, 'importTimAkademik']);
 
 // Route untuk laporan jadwal mengajar dosen
 Route::middleware('auth:sanctum')->get('/users/{id}/jadwal-mengajar', [UserController::class, 'getJadwalMengajar']);
@@ -213,6 +219,15 @@ Route::middleware('auth:sanctum')->post('/jadwal-pbl/{jadwalId}/konfirmasi', [Ap
 Route::middleware('auth:sanctum')->prefix('mata-kuliah/{kode}/kelompok/{kelompok}/pertemuan/{pertemuan}')->group(function () {
     Route::get('penilaian-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'index']);
     Route::post('penilaian-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'store']);
+    Route::get('absensi-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'getAbsensi']);
+    Route::post('absensi-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'storeAbsensi']);
+});
+
+Route::middleware('auth:sanctum')->prefix('mata-kuliah/{kode}/kelompok-antara/{kelompok}/pertemuan/{pertemuan}')->group(function () {
+    Route::get('penilaian-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'indexAntara']);
+    Route::post('penilaian-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'storeAntara']);
+    Route::get('absensi-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'getAbsensi']);
+    Route::post('absensi-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'storeAbsensi']);
 });
 
 Route::middleware('auth:sanctum')->prefix('kuliah-besar')->group(function () {
@@ -222,8 +237,30 @@ Route::middleware('auth:sanctum')->prefix('kuliah-besar')->group(function () {
     Route::delete('/jadwal/{kode}/{id}', [JadwalKuliahBesarController::class, 'destroy']);
     Route::get('/materi', [JadwalKuliahBesarController::class, 'materi']);
     Route::get('/pengampu', [JadwalKuliahBesarController::class, 'pengampu']);
+    Route::get('/all-dosen', [JadwalKuliahBesarController::class, 'allDosen']);
     Route::get('/kelompok-besar', [JadwalKuliahBesarController::class, 'kelompokBesar']);
+    Route::get('/kelompok-besar-antara', [JadwalKuliahBesarController::class, 'kelompokBesarAntara']);
 });
+
+// Routes untuk Kelompok Besar Antara (Global untuk semester Antara)
+Route::middleware('auth:sanctum')->prefix('kelompok-besar-antara')->group(function () {
+    Route::get('/mahasiswa', [KelompokBesarAntaraController::class, 'getMahasiswa']);
+    Route::get('/', [KelompokBesarAntaraController::class, 'index']);
+    Route::post('/', [KelompokBesarAntaraController::class, 'store']);
+    Route::put('/{id}', [KelompokBesarAntaraController::class, 'update']);
+    Route::delete('/{id}', [KelompokBesarAntaraController::class, 'destroy']);
+});
+
+// Routes untuk Kelompok Kecil Antara (Global untuk semester Antara)
+Route::middleware('auth:sanctum')->prefix('kelompok-kecil-antara')->group(function () {
+    Route::get('/', [KelompokKecilAntaraController::class, 'index']);
+    Route::post('/', [KelompokKecilAntaraController::class, 'store']);
+    Route::put('/{id}', [KelompokKecilAntaraController::class, 'update']);
+    Route::delete('/{id}', [KelompokKecilAntaraController::class, 'destroy']);
+    Route::get('/by-nama', [KelompokKecilAntaraController::class, 'getByNama']);
+});
+
+
 
 Route::middleware('auth:sanctum')->prefix('agenda-khusus')->group(function () {
     Route::get('/jadwal/{kode}', [App\Http\Controllers\JadwalAgendaKhususController::class, 'index']);
@@ -280,6 +317,10 @@ Route::middleware('auth:sanctum')->prefix('csr')->group(function () {
     Route::post('/jadwal/{kode}', [JadwalCSRController::class, 'store']);
     Route::put('/jadwal/{kode}/{id}', [JadwalCSRController::class, 'update']);
     Route::delete('/jadwal/{kode}/{id}', [JadwalCSRController::class, 'destroy']);
+    
+    // Routes untuk absensi CSR
+    Route::get('/{kode}/jadwal/{jadwalId}/absensi', [JadwalCSRController::class, 'getAbsensi']);
+    Route::post('/{kode}/jadwal/{jadwalId}/absensi', [JadwalCSRController::class, 'storeAbsensi']);
 });
 
 // Batch endpoint untuk DetailNonBlokCSR page optimization
@@ -307,4 +348,61 @@ Route::middleware('auth:sanctum')->prefix('penilaian-jurnal')->group(function ()
     Route::get('/{kode_blok}/{kelompok}/{jurnal_id}', [App\Http\Controllers\PenilaianJurnalController::class, 'index']);
     Route::post('/{kode_blok}/{kelompok}/{jurnal_id}', [App\Http\Controllers\PenilaianJurnalController::class, 'store']);
     Route::get('/{kode_blok}/{kelompok}/{jurnal_id}/export', [App\Http\Controllers\PenilaianJurnalController::class, 'export']);
+    Route::get('/{kode_blok}/{kelompok}/{jurnal_id}/absensi', [App\Http\Controllers\PenilaianJurnalController::class, 'getAbsensiReguler']);
+    Route::post('/{kode_blok}/{kelompok}/{jurnal_id}/absensi', [App\Http\Controllers\PenilaianJurnalController::class, 'storeAbsensiReguler']);
 });
+
+// Routes untuk penilaian jurnal antara
+Route::middleware('auth:sanctum')->prefix('penilaian-jurnal-antara')->group(function () {
+    Route::get('/{kode_blok}/{kelompok}/{jurnal_id}', [App\Http\Controllers\PenilaianJurnalController::class, 'indexAntara']);
+    Route::post('/{kode_blok}/{kelompok}/{jurnal_id}', [App\Http\Controllers\PenilaianJurnalController::class, 'storeAntara']);
+    Route::get('/{kode_blok}/{kelompok}/{jurnal_id}/export', [App\Http\Controllers\PenilaianJurnalController::class, 'exportAntara']);
+    Route::get('/{kode_blok}/{kelompok}/{jurnal_id}/absensi', [App\Http\Controllers\PenilaianJurnalController::class, 'getAbsensi']);
+    Route::post('/{kode_blok}/{kelompok}/{jurnal_id}/absensi', [App\Http\Controllers\PenilaianJurnalController::class, 'storeAbsensi']);
+});
+
+// Routes untuk dashboard super admin
+Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('dashboard/super-admin')->group(function () {
+    Route::get('/', [App\Http\Controllers\DashboardSuperAdminController::class, 'index']);
+    Route::get('/user-stats', [App\Http\Controllers\DashboardSuperAdminController::class, 'getUserStats']);
+    Route::get('/schedule-stats', [App\Http\Controllers\DashboardSuperAdminController::class, 'getScheduleStats']);
+    Route::get('/monthly-user-stats', [App\Http\Controllers\DashboardSuperAdminController::class, 'getMonthlyUserStats']);
+    Route::get('/system-metrics', [App\Http\Controllers\DashboardSuperAdminController::class, 'getSystemMetrics']);
+});
+
+// Routes untuk dashboard tim akademik
+Route::middleware(['auth:sanctum', 'role:tim_akademik'])->prefix('dashboard-tim-akademik')->group(function () {
+    Route::get('/', [App\Http\Controllers\DashboardTimAkademikController::class, 'index']);
+    Route::get('/attendance-by-mata-kuliah', [App\Http\Controllers\DashboardTimAkademikController::class, 'getAttendanceByMataKuliah']);
+    Route::get('/assessment-progress', [App\Http\Controllers\DashboardTimAkademikController::class, 'getAssessmentProgress']);
+});
+
+// Routes untuk system backup dan import
+Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('system')->group(function () {
+    Route::post('/backup', [App\Http\Controllers\SystemBackupController::class, 'createBackup']);
+    Route::get('/backups', [App\Http\Controllers\SystemBackupController::class, 'getBackups']);
+    Route::post('/import', [App\Http\Controllers\SystemBackupController::class, 'importBackup']);
+    Route::get('/backup/{filename}/download', [App\Http\Controllers\SystemBackupController::class, 'downloadBackup']);
+    Route::delete('/backup/{filename}', [App\Http\Controllers\SystemBackupController::class, 'deleteBackup']);
+    Route::post('/reset', [App\Http\Controllers\SystemBackupController::class, 'resetSystem']);
+});
+
+// Routes untuk export reports
+Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('reports')->group(function () {
+    Route::post('/export/attendance', [App\Http\Controllers\ReportController::class, 'exportAttendance']);
+    Route::post('/export/assessment', [App\Http\Controllers\ReportController::class, 'exportAssessment']);
+    Route::post('/export/academic', [App\Http\Controllers\ReportController::class, 'exportAcademic']);
+});
+
+// Test route untuk debugging dashboard (tanpa middleware auth)
+Route::get('/test/dashboard-health', function () {
+    return response()->json([
+        'status' => 'success',
+        'message' => 'Dashboard controller accessible',
+        'timestamp' => now(),
+        'laravel_version' => app()->version(),
+    ]);
+});
+
+// Test dashboard controller tanpa auth untuk debugging
+Route::get('/test/dashboard-data', [App\Http\Controllers\DashboardSuperAdminController::class, 'index']);

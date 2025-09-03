@@ -20,7 +20,7 @@ type UserMahasiswa = {
   ipk: number;
   status: string;
   angkatan: string;
-  semester?: number; // <-- Tambahan kolom semester
+  semester?: number; 
   password?: string;
   role?: string;
 };
@@ -40,10 +40,40 @@ function handleNumberInput(e: React.KeyboardEvent<HTMLInputElement>) {
   }
 }
 
+// Function to convert gender display
+const formatGenderDisplay = (gender: string): string => {
+  if (!gender) return '-';
+  
+  const genderMap: { [key: string]: string } = {
+    'L': 'Laki-laki',
+    'P': 'Perempuan',
+    'Laki-laki': 'Laki-laki',
+    'Perempuan': 'Perempuan'
+  };
+  
+  return genderMap[gender] || gender;
+};
+
+// Function to get unique gender options for filter
+const getGenderOptions = (data: UserMahasiswa[]): string[] => {
+  const uniqueGenders = Array.from(new Set(data.map(d => d.gender).filter(Boolean)));
+  return uniqueGenders.map(gender => formatGenderDisplay(gender)).sort();
+};
+
+// Function to convert display gender back to backend format for filtering
+const convertDisplayToBackendGender = (displayGender: string): string => {
+  const reverseMap: { [key: string]: string } = {
+    'Laki-laki': 'L',
+    'Perempuan': 'P'
+  };
+  return reverseMap[displayGender] || displayGender;
+};
+
 export default function Mahasiswa() {
   const [data, setData] = useState<UserMahasiswa[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<UserMahasiswa>({ nim: "", name: "", username: "", telp: "", email: "", gender: "Laki-laki", ipk: 0, status: "aktif", angkatan: "", password: "" });
+  const [activeSemester, setActiveSemester] = useState<{jenis: string, tahun: string} | null>(null);
   const [importedFile, setImportedFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -69,6 +99,12 @@ export default function Mahasiswa() {
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [showDeleteModalBulk, setShowDeleteModalBulk] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  // Filter states - similar to MataKuliah
+  const [filterSemester, setFilterSemester] = useState<string>("all");
+  const [filterPeriode, setFilterPeriode] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterGender, setFilterGender] = useState<string>("all");
+  const [filterAngkatan, setFilterAngkatan] = useState<string>("all");
 
   useEffect(() => {
     if (success) {
@@ -81,8 +117,18 @@ export default function Mahasiswa() {
 
   useEffect(() => {
     setLoading(true);
-    api.get("/users?role=mahasiswa").then(res => {
-      setData(res.data);
+    Promise.all([
+      api.get("/users?role=mahasiswa"),
+      api.get("/tahun-ajaran/active")
+    ]).then(([mahasiswaRes, semesterRes]) => {
+      setData(mahasiswaRes.data);
+      if (semesterRes.data && semesterRes.data.semesters && semesterRes.data.semesters.length > 0) {
+        const activeSem = semesterRes.data.semesters[0];
+        setActiveSemester({
+          jenis: activeSem.jenis,
+          tahun: semesterRes.data.tahun
+        });
+      }
       setLoading(false);
     }).catch(() => {
       setError("Gagal memuat data");
@@ -107,12 +153,30 @@ export default function Mahasiswa() {
     }
   }, [importedCount]);
 
-  // Filter & Search
+  // Filter options - similar to MataKuliah
+  const semesterOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.semester).filter(s => s !== undefined) : [])).sort((a, b) => a - b);
+  const periodeOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.semester ? (Number(d.semester) % 2 === 1 ? "Ganjil" : "Genap") : null).filter(p => p !== null) : []));
+  const statusOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.status) : []));
+  const genderOptions = getGenderOptions(data);
+  const angkatanOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.angkatan) : [])).sort((a, b) => Number(b) - Number(a));
+
+  // Filter & Search - similar to MataKuliah
   const filteredData = data.filter((m) => {
     const q = search.toLowerCase();
     // Gabungkan semua value dari objek menjadi satu string
     const allValues = Object.values(m).join(' ').toLowerCase();
-    return allValues.includes(q);
+    const searchMatch = allValues.includes(q);
+    
+    // Filter otomatis berdasarkan semester aktif dihapus
+    // Sekarang semua mahasiswa akan ditampilkan tanpa filter otomatis
+    
+    const matchSemester = filterSemester === "all" ? true : m.semester === Number(filterSemester);
+    const matchPeriode = filterPeriode === "all" ? true : (m.semester ? (Number(m.semester) % 2 === 1 ? "Ganjil" : "Genap") : null) === filterPeriode;
+    const matchStatus = filterStatus === "all" ? true : m.status === filterStatus;
+    const matchGender = filterGender === "all" ? true : m.gender === convertDisplayToBackendGender(filterGender);
+    const matchAngkatan = filterAngkatan === "all" ? true : m.angkatan === filterAngkatan;
+    
+    return searchMatch && matchSemester && matchPeriode && matchStatus && matchGender && matchAngkatan;
   });
 
   // Pagination
@@ -201,6 +265,20 @@ export default function Mahasiswa() {
   const userToDelete = data.find((u) => String(u.id) === String(selectedDeleteNim));
 
   const isFormValid = form.nim && form.name && form.username && form.telp && form.email && form.gender && form.ipk !== undefined && form.status && form.angkatan && (editMode || form.password);
+
+  // Check if any filters are active
+  const hasActiveFilters = search || filterSemester !== "all" || filterPeriode !== "all" || filterStatus !== "all" || filterGender !== "all" || filterAngkatan !== "all";
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSearch("");
+    setFilterSemester("all");
+    setFilterPeriode("all");
+    setFilterStatus("all");
+    setFilterGender("all");
+    setFilterAngkatan("all");
+    setPage(1);
+  };
 
   // Fungsi untuk download template Excel
   const downloadTemplate = async () => {
@@ -572,6 +650,21 @@ export default function Mahasiswa() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Daftar Mahasiswa</h1>
+      {activeSemester && (
+        <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              Semester Aktif: {activeSemester.jenis} ({activeSemester.tahun})
+            </span>
+          </div>
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+            Mahasiswa baru akan otomatis masuk semester {activeSemester.jenis === 'Ganjil' ? '1' : '2'}. Semua mahasiswa ditampilkan tanpa filter otomatis.
+          </p>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div className="flex gap-2">
           <button
@@ -600,23 +693,78 @@ export default function Mahasiswa() {
             Download Template Excel
           </button>
         </div>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-0">
-          <div className="relative w-full md:w-72">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-              <svg className="fill-gray-500 dark:fill-gray-400" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path fillRule="evenodd" clipRule="evenodd" d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z" fill="" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              placeholder="Cari apa saja di semua kolom data..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-            />
-          </div>
-        </div>
       </div>
+      {/* Search dan Filter */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+        <div className="w-full lg:w-72">
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg className="fill-gray-500 dark:fill-gray-400" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z" fill="" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Cari apa saja di semua kolom data..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              />
+            </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 w-full lg:w-auto">
+          <select
+            value={filterSemester}
+            onChange={(e) => { setFilterSemester(e.target.value); setPage(1); }}
+            className="w-full h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="all">Semua Semester</option>
+            {semesterOptions.map((semester) => (
+              <option key={semester} value={semester}>Semester {semester}</option>
+            ))}
+          </select>
+          <select
+            value={filterPeriode}
+            onChange={(e) => { setFilterPeriode(e.target.value); setPage(1); }}
+            className="w-full h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="all">Semua Periode</option>
+            {periodeOptions.map((periode) => (
+              <option key={periode} value={periode}>{periode}</option>
+            ))}
+          </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+            className="w-full h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="all">Semua Status</option>
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+          <select
+            value={filterGender}
+            onChange={(e) => { setFilterGender(e.target.value); setPage(1); }}
+            className="w-full h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="all">Semua Gender</option>
+            {genderOptions.map((gender) => (
+              <option key={gender} value={gender}>{gender}</option>
+            ))}
+          </select>
+          <select
+            value={filterAngkatan}
+            onChange={(e) => { setFilterAngkatan(e.target.value); setPage(1); }}
+            className="w-full h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="all">Semua Angkatan</option>
+            {angkatanOptions.map((angkatan) => (
+              <option key={angkatan} value={angkatan}>{angkatan}</option>
+            ))}
+          </select>
+                 </div>
+        </div>
       {/* Success Messages */}
       <AnimatePresence>
         {success && (
@@ -908,7 +1056,7 @@ export default function Mahasiswa() {
                     <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{m.username}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{m.telp}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{m.email}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{m.gender}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{formatGenderDisplay(m.gender)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{m.ipk}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle capitalize">{m.status}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">{m.angkatan}</td>
@@ -1034,12 +1182,34 @@ export default function Mahasiswa() {
                     setLoading(true);
                     setIsDeleting(true);
                     try {
-                      await Promise.all(selectedRows.map(id => api.delete(`/users/${id}`)));
+                      // Delete each user individually and handle errors gracefully
+                      const deletePromises = selectedRows.map(async (id) => {
+                        try {
+                          await api.delete(`/users/${id}`);
+                          return { id, success: true };
+                        } catch (error) {
+                          console.error(`Failed to delete user ${id}:`, error);
+                          return { id, success: false, error };
+                        }
+                      });
+                      
+                      const results = await Promise.all(deletePromises);
+                      const successfulDeletes = results.filter(r => r.success);
+                      const failedDeletes = results.filter(r => !r.success);
+                      
+                      // Refresh data
                       const res = await api.get("/users?role=mahasiswa");
                       setData(res.data);
-                      setSuccess(`${selectedRows.length} data mahasiswa berhasil dihapus.`);
+                      
+                      if (failedDeletes.length > 0) {
+                        setError(`${failedDeletes.length} data gagal dihapus (mungkin sudah tidak ada). ${successfulDeletes.length} data berhasil dihapus.`);
+                      } else {
+                        setSuccess(`${successfulDeletes.length} data mahasiswa berhasil dihapus.`);
+                      }
+                      
                       setSelectedRows([]);
-                    } catch {
+                    } catch (error) {
+                      console.error('Bulk delete error:', error);
                       setError("Gagal menghapus data terpilih");
                     } finally {
                       setIsDeleting(false);
@@ -1238,7 +1408,14 @@ export default function Mahasiswa() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Semester</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Semester
+                        {activeSemester && (
+                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                            (Otomatis: {activeSemester.jenis === 'Ganjil' ? '1' : '2'} - {activeSemester.jenis} {activeSemester.tahun})
+                          </span>
+                        )}
+                      </label>
                       <input
                         type="number"
                         name="semester"
@@ -1247,7 +1424,12 @@ export default function Mahasiswa() {
                         max={8}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        placeholder={activeSemester ? `Otomatis: ${activeSemester.jenis === 'Ganjil' ? '1' : '2'}` : 'Masukkan semester'}
+                        disabled={true}
                       />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Semester akan otomatis disesuaikan dengan semester aktif ({activeSemester ? `${activeSemester.jenis} ${activeSemester.tahun}` : 'Tidak ada semester aktif'})
+                      </p>
                     </div>
                   </div>
                   {error && (
@@ -1364,4 +1546,4 @@ export default function Mahasiswa() {
       </AnimatePresence>
     </div>
   );
-} 
+}

@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 type MataKuliah = {
   kode: string;
   nama: string;
-  semester: number;
+  semester: number | string;
   periode: string;
   jenis: "Blok" | "Non Blok";
   kurikulum: number;
@@ -43,13 +43,13 @@ const calculateWeeks = (startDate: string, endDate: string): number | null => {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 const JENIS_OPTIONS = ["Blok", "Non Blok"];
-const SEMESTER_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
+const SEMESTER_OPTIONS = ["Antara", 1, 2, 3, 4, 5, 6, 7];
 const BLOK_OPTIONS = [1, 2, 3, 4];
 
 
 
 // Tambahkan fungsi untuk mendapatkan blok yang tersedia
-const getAvailableBlokOptions = (semester: number, currentBlok: number | null = null, data: MataKuliah[]) => {
+const getAvailableBlokOptions = (semester: number | string, currentBlok: number | null = null, data: MataKuliah[]) => {
   // Dapatkan semua mata kuliah dengan semester yang sama
   const mataKuliahInSemester = data.filter((mk: MataKuliah) => mk.semester === semester);
   
@@ -85,9 +85,10 @@ const sortDataByBlok = (data: MataKuliah[]) => {
 };
 
 // Helper untuk menentukan periode dari semester
-const getPeriodeBySemester = (semester: number) => {
+const getPeriodeBySemester = (semester: number | string) => {
   if (!semester) return "";
-  return semester % 2 === 1 ? "Ganjil" : "Genap";
+  if (semester === "Antara") return "Antara";
+  return Number(semester) % 2 === 1 ? "Ganjil" : "Genap";
 };
 
 // Helper untuk cek overlap tanggal
@@ -166,7 +167,7 @@ export default function MataKuliah() {
   const [form, setForm] = useState<MataKuliah>({ 
     kode: "", 
     nama: "", 
-    semester: 1,
+    semester: 1 as number | string,
     periode: "Ganjil",
     jenis: "Non Blok",
     kurikulum: new Date().getFullYear(),
@@ -448,9 +449,9 @@ export default function MataKuliah() {
         keahlian_required: form.keahlian_required,
       };
 
-      // Handle RPS file upload
+      // Handle RPS file upload (hanya untuk edit mode)
       let rpsFileName = form.rps_file;
-      if (rpsFile) {
+      if (rpsFile && editMode) {
         const rpsFormData = new FormData();
         rpsFormData.append('rps_file', rpsFile);
         rpsFormData.append('kode', form.kode);
@@ -470,8 +471,8 @@ export default function MataKuliah() {
         }
       }
 
-      // Handle materi files upload
-      if (materiFiles.length > 0) {
+      // Handle materi files upload (hanya untuk edit mode)
+      if (materiFiles.length > 0 && editMode) {
         try {
           const uploadPromises = materiItems.map(async (item) => {
             const file = materiFiles.find(f => f.name === item.filename);
@@ -549,40 +550,84 @@ export default function MataKuliah() {
             )
           );
         }
-        // Sinkronisasi CSR
-        // 1. Update/POST
-        await Promise.all(csrList.map(async (csr) => {
-          if (csr.id) {
-            // PUT
-            await api.put(`/csrs/${csr.id}`, {
-              nomor_csr: csr.nomor_csr,
-              tanggal_mulai: toDateYMD(csr.tanggal_mulai),
-              tanggal_akhir: toDateYMD(csr.tanggal_akhir)
-            });
-          } else {
-            // POST
-            await api.post(`/mata-kuliah/${form.kode}/csrs`, {
-              nomor_csr: csr.nomor_csr,
-              tanggal_mulai: toDateYMD(csr.tanggal_mulai),
-              tanggal_akhir: toDateYMD(csr.tanggal_akhir),
-              keahlian_required: csr.keahlian_required || [], // pastikan selalu dikirim
-            });
-          }
-        }));
-        // 2. DELETE
-        await Promise.all(deletedCsrIds.map(async (id) => {
-          try {
-            await api.delete(`/csrs/${id}`);
-          } catch (e) {
-           
-          }
-        }));
+
+        // Sinkronisasi CSR (hanya jika bukan semester Antara)
+        if (form.semester !== "Antara") {
+          // 1. Update/POST
+          await Promise.all(csrList.map(async (csr) => {
+            if (csr.id) {
+              // PUT
+              await api.put(`/csrs/${csr.id}`, {
+                nomor_csr: csr.nomor_csr,
+                tanggal_mulai: toDateYMD(csr.tanggal_mulai),
+                tanggal_akhir: toDateYMD(csr.tanggal_akhir)
+              });
+            } else {
+              // POST
+              await api.post(`/mata-kuliah/${form.kode}/csrs`, {
+                nomor_csr: csr.nomor_csr,
+                tanggal_mulai: toDateYMD(csr.tanggal_mulai),
+                tanggal_akhir: toDateYMD(csr.tanggal_akhir),
+                keahlian_required: csr.keahlian_required || [], // pastikan selalu dikirim
+              });
+            }
+          }));
+          // 2. DELETE
+          await Promise.all(deletedCsrIds.map(async (id) => {
+            try {
+              await api.delete(`/csrs/${id}`);
+            } catch (e) {
+             
+            }
+          }));
+        }
       } else {
         await api.post('/mata-kuliah', {
           ...formData,
           rps_file: rpsFileName,
         });
         setSuccess('Data mata kuliah berhasil ditambahkan');
+        
+        // Upload RPS dan materi setelah mata kuliah berhasil disimpan (untuk mode tambah baru)
+        if (rpsFile) {
+          try {
+            const rpsFormData = new FormData();
+            rpsFormData.append('rps_file', rpsFile);
+            rpsFormData.append('kode', form.kode);
+            
+            await api.post('/mata-kuliah/upload-rps', rpsFormData, {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              },
+            });
+          } catch (error) {
+            console.error('Gagal mengupload file RPS setelah simpan:', error);
+          }
+        }
+
+        if (materiFiles.length > 0) {
+          try {
+            const uploadPromises = materiItems.map(async (item) => {
+              const file = materiFiles.find(f => f.name === item.filename);
+              if (!file) return;
+              
+              const materiFormData = new FormData();
+              materiFormData.append('materi_file', file);
+              materiFormData.append('kode', form.kode);
+              materiFormData.append('judul', item.judul);
+              
+              await api.post('/mata-kuliah/upload-materi', materiFormData, {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                },
+              });
+            });
+            
+            await Promise.all(uploadPromises);
+          } catch (error) {
+            console.error('Gagal mengupload file materi setelah simpan:', error);
+          }
+        }
       }
       
       handleCloseModal();
@@ -590,7 +635,7 @@ export default function MataKuliah() {
 
       // Setelah berhasil tambah mata kuliah, submit CSR/PBL jika perlu
       if (!editMode) {
-        if (form.jenis === 'Non Blok' && form.tipe_non_block === 'CSR' && csrList.length > 0) {
+        if (form.jenis === 'Non Blok' && form.tipe_non_block === 'CSR' && form.semester !== "Antara" && csrList.length > 0) {
           await Promise.all(csrList.map(csr => api.post(`/mata-kuliah/${form.kode}/csrs`, {
             nomor_csr: csr.nomor_csr,
             tanggal_mulai: toDateYMD(csr.tanggal_mulai),
@@ -652,19 +697,27 @@ export default function MataKuliah() {
       tanggalMulai: mk.tanggal_mulai ? mk.tanggal_mulai.slice(0, 10) : '',
       tanggalAkhir: mk.tanggal_akhir ? mk.tanggal_akhir.slice(0, 10) : '',
       durasiMinggu: mk.durasi_minggu || null,
-      tipe_non_block: mk.tipe_non_block || 'Non-CSR',
-      peran_dalam_kurikulum: Array.isArray(mk.peran_dalam_kurikulum) ? mk.peran_dalam_kurikulum : [],
-      keahlian_required: Array.isArray(mk.keahlian_required) ? mk.keahlian_required : [],
+      tipe_non_block: mk.semester === "Antara" ? 'Non-CSR' : (mk.tipe_non_block || 'Non-CSR'),
+      // Reset peran dan keahlian jika semester Antara
+      peran_dalam_kurikulum: mk.semester === "Antara" ? [] : (Array.isArray(mk.peran_dalam_kurikulum) ? mk.peran_dalam_kurikulum : []),
+      keahlian_required: mk.semester === "Antara" ? [] : (Array.isArray(mk.keahlian_required) ? mk.keahlian_required : []),
     });
     setShowModal(true);
     setEditMode(true);
-    // Fetch CSR dari backend
-    try {
-      const res = await api.get(`/mata-kuliah/${mk.kode}/csrs`);
-      setCsrList(Array.isArray(res.data) ? res.data : []);
-      setOldCsrList(Array.isArray(res.data) ? res.data : []);
-      setDeletedCsrIds([]);
-    } catch (e) {
+    // Fetch CSR dari backend (hanya jika bukan semester Antara)
+    if (mk.semester !== "Antara") {
+      try {
+        const res = await api.get(`/mata-kuliah/${mk.kode}/csrs`);
+        setCsrList(Array.isArray(res.data) ? res.data : []);
+        setOldCsrList(Array.isArray(res.data) ? res.data : []);
+        setDeletedCsrIds([]);
+      } catch (e) {
+        setCsrList([]);
+        setOldCsrList([]);
+        setDeletedCsrIds([]);
+      }
+    } else {
+      // Semester Antara tidak memiliki CSR
       setCsrList([]);
       setOldCsrList([]);
       setDeletedCsrIds([]);
@@ -789,7 +842,7 @@ export default function MataKuliah() {
     setForm({
       kode: "",
       nama: "",
-      semester: 1,
+      semester: 1 as number | string,
       periode: "Ganjil",
       jenis: "Non Blok",
       kurikulum: new Date().getFullYear(),
@@ -820,7 +873,11 @@ export default function MataKuliah() {
   };  
 
   // Unique SKS for filter
-  const semesterOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.semester) : [])).sort((a, b) => a - b);
+  const semesterOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.semester) : [])).sort((a, b) => {
+    if (a === "Antara") return -1;
+    if (b === "Antara") return 1;
+    return Number(a) - Number(b);
+  });
   const kurikulumOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.kurikulum) : [])).sort((a, b) => b - a);
   const periodeOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.periode) : []));
   const jenisOptions = Array.from(new Set(Array.isArray(data) ? data.map((d) => d.jenis) : []));
@@ -830,8 +887,8 @@ export default function MataKuliah() {
 
   // Filter & Search
   const filteredData = sortDataByBlok((Array.isArray(data) ? data : []).filter((mk) => {
-    // Filter berdasarkan semester aktif (periode)
-    if (activeSemesterJenis && mk.periode !== activeSemesterJenis) return false;
+    // Filter berdasarkan semester aktif (periode) - kecuali untuk Semester Antara
+    if (activeSemesterJenis && mk.periode !== activeSemesterJenis && mk.semester !== "Antara") return false;
     const q = search.toLowerCase();
     const matchSearch =
       mk.kode?.toLowerCase().includes(q) ||
@@ -845,7 +902,7 @@ export default function MataKuliah() {
       ((mk.tanggalAkhir || mk.tanggal_akhir) && new Date((mk.tanggalAkhir || mk.tanggal_akhir) || '').toLocaleDateString('id-ID').includes(q)) ||
       ((mk.durasiMinggu ?? mk.durasi_minggu) !== null && (mk.durasiMinggu ?? mk.durasi_minggu) !== undefined && `${mk.durasiMinggu ?? mk.durasi_minggu} minggu`.toLowerCase().includes(q));
 
-    const matchSemester = filterSemester === "all" ? true : mk.semester === Number(filterSemester);
+    const matchSemester = filterSemester === "all" ? true : mk.semester === (filterSemester === "Antara" ? "Antara" : Number(filterSemester));
     const matchPeriode = filterPeriode === "all" ? true : mk.periode === filterPeriode;
     const matchJenis = filterJenis === "all" ? true : mk.jenis === filterJenis;
     const matchKurikulum = filterKurikulum === "all" ? true : mk.kurikulum === Number(filterKurikulum);
@@ -945,6 +1002,18 @@ export default function MataKuliah() {
         blok: 4,
         durasi_minggu: 4
       },
+      {
+        kode: 'MK006',
+        nama: 'Contoh Semester Antara',
+        semester: 'Antara',
+        periode: 'Antara',
+        jenis: 'Non Blok',
+        kurikulum: 2024,
+        tanggal_mulai: '2024-06-01',
+        tanggal_akhir: '2024-07-31',
+        blok: null,
+        durasi_minggu: 8
+      },
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
@@ -998,26 +1067,28 @@ export default function MataKuliah() {
     }
 
     // Hitung total Blok per semester (dari file Excel)
-    const blokPerSemester: Record<number, number> = {};
-    const nonBlokPerSemester: Record<number, number> = {};
+    const blokPerSemester: Record<string, number> = {};
+    const nonBlokPerSemester: Record<string, number> = {};
     
     // Hitung dari data Excel
     excelData.forEach((row) => {
-      const semester = Number(row.semester);
+      const semester = row.semester === "Antara" ? "Antara" : Number(row.semester);
+      const semesterKey = String(semester);
       if (row.jenis === 'Blok') {
-        blokPerSemester[semester] = (blokPerSemester[semester] || 0) + 1;
+        blokPerSemester[semesterKey] = (blokPerSemester[semesterKey] || 0) + 1;
       } else if (row.jenis === 'Non Blok') {
-        nonBlokPerSemester[semester] = (nonBlokPerSemester[semester] || 0) + 1;
+        nonBlokPerSemester[semesterKey] = (nonBlokPerSemester[semesterKey] || 0) + 1;
       }
     });
 
     // Tambahkan dari data existing di database
     existingDbData.forEach((row) => {
       const semester = row.semester;
+      const semesterKey = String(semester);
       if (row.jenis === 'Blok') {
-        blokPerSemester[semester] = (blokPerSemester[semester] || 0) + 1;
+        blokPerSemester[semesterKey] = (blokPerSemester[semesterKey] || 0) + 1;
       } else if (row.jenis === 'Non Blok') {
-        nonBlokPerSemester[semester] = (nonBlokPerSemester[semester] || 0) + 1;
+        nonBlokPerSemester[semesterKey] = (nonBlokPerSemester[semesterKey] || 0) + 1;
       }
     });
 
@@ -1074,7 +1145,7 @@ export default function MataKuliah() {
     const rowKode = row.kode ? String(row.kode) : '';
     if (!row.kode) errors.push({ field: 'kode', message: 'Kode harus diisi' });
     if (!row.nama) errors.push({ field: 'nama', message: 'Nama harus diisi' });
-    if (!row.semester || isNaN(Number(row.semester))) errors.push({ field: 'semester', message: 'Semester harus diisi dengan angka' });
+    if (!row.semester || (row.semester !== 'Antara' && isNaN(Number(row.semester)))) errors.push({ field: 'semester', message: 'Semester harus diisi dengan angka atau "Antara"' });
     if (!row.periode) errors.push({ field: 'periode', message: 'Periode harus diisi' });
     if (!row.jenis || !['Blok', 'Non Blok'].includes(row.jenis)) errors.push({ field: 'jenis', message: `Jenis harus diisi dengan 'Blok' atau 'Non Blok'` });
     if (!row.kurikulum || isNaN(Number(row.kurikulum))) errors.push({ field: 'kurikulum', message: 'Kurikulum harus diisi dengan angka tahun' });
@@ -1082,6 +1153,12 @@ export default function MataKuliah() {
     if (!row.tanggal_akhir) errors.push({ field: 'tanggal_akhir', message: 'Tanggal Akhir harus diisi' });
     if (row.jenis === 'Blok' && (!row.blok || isNaN(Number(row.blok)))) errors.push({ field: 'blok', message: `Blok harus diisi dengan angka jika jenis 'Blok'` });
     if (!row.durasi_minggu || isNaN(Number(row.durasi_minggu))) errors.push({ field: 'durasi_minggu', message: 'Durasi Minggu harus diisi dengan angka' });
+    
+    // Validasi khusus untuk semester Antara
+    if (row.semester === 'Antara' && row.jenis === 'Non Blok' && row.tipe_non_block === 'CSR') {
+      errors.push({ field: 'jenis', message: 'Semester Antara tidak dapat memiliki tipe CSR, hanya Non-CSR yang diperbolehkan' });
+    }
+    
     // Duplikat kode di file
     if (rowKode) {
       if (allRows.some((r, i) => i !== rowIdx && String(r.kode) === rowKode)) {
@@ -1097,7 +1174,7 @@ export default function MataKuliah() {
 
   // Generate input CSR saat jumlah berubah
   useEffect(() => {
-    if (form.jenis === 'Non Blok' && form.tipe_non_block === 'CSR') {
+    if (form.jenis === 'Non Blok' && form.tipe_non_block === 'CSR' && form.semester !== "Antara") {
       const blokDiSemester = data.filter(mk => mk.jenis === 'Blok' && mk.semester === form.semester);
       const jumlahBlok = blokDiSemester.length || 4;
       // Jangan overwrite csrList jika jumlah baris sama dan tipe_non_block tidak berubah
@@ -1124,7 +1201,7 @@ export default function MataKuliah() {
         };
       }));
     }
-    if (form.jenis !== 'Non Blok' || form.tipe_non_block !== 'CSR') {
+    if (form.jenis !== 'Non Blok' || form.tipe_non_block !== 'CSR' || form.semester === "Antara") {
       setCsrList([]);
     }
     // eslint-disable-next-line
@@ -1198,10 +1275,6 @@ export default function MataKuliah() {
           filename: materi.filename,
           _t: timestamp,
           _r: randomId
-        },
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
         }
       });
       
@@ -1587,7 +1660,9 @@ export default function MataKuliah() {
             >
               <option value="all">Semua Semester</option>
               {semesterOptions.map((semester) => (
-                <option key={semester} value={semester}>Semester {semester}</option>
+                <option key={semester} value={semester}>
+                  {semester === "Antara" ? "Semester Antara" : `Semester ${semester}`}
+                </option>
               ))}
             </select>
               <select
@@ -1617,7 +1692,9 @@ export default function MataKuliah() {
             >
               <option value="all">Semua Periode</option>
               {periodeOptions.map((periode) => (
-                <option key={periode} value={periode}>{periode}</option>
+                <option key={periode} value={periode}>
+                  {periode === "Antara" ? "Semester Antara" : periode}
+                </option>
               ))}
             </select>
             <select
@@ -1997,14 +2074,18 @@ export default function MataKuliah() {
                     <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">
                       {mk.jenis === "Blok" ? `Blok ke-${mk.blok}` : '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">{`Semester ${mk.semester}`}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">{mk.periode}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">
+                      {mk.semester === "Antara" ? "Semester Antara" : `Semester ${mk.semester}`}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">
+                      {mk.periode === "Antara" ? "Semester Antara" : mk.periode}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">{mk.kurikulum}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">{(mk.tanggalMulai || mk.tanggal_mulai) ? new Date((mk.tanggalMulai || mk.tanggal_mulai) || '').toLocaleDateString('id-ID') : '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">{(mk.tanggalAkhir || mk.tanggal_akhir) ? new Date((mk.tanggalAkhir || mk.tanggal_akhir) || '').toLocaleDateString('id-ID') : '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">{(mk.durasiMinggu ?? mk.durasi_minggu) !== null && (mk.durasiMinggu ?? mk.durasi_minggu) !== undefined ? `${mk.durasiMinggu ?? mk.durasi_minggu} Minggu` : '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-800 dark:text-white/90 align-middle">
-                      {mk.jenis === 'Non Blok' ? (mk.tipe_non_block || '-') : '-'}
+                      {mk.jenis === 'Non Blok' ? (mk.semester === "Antara" ? "Non-CSR" : (mk.tipe_non_block || '-')) : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-pre-line text-gray-800 dark:text-white/90 align-middle min-w-[300px]">
                       {Array.isArray(mk.peran_dalam_kurikulum) && mk.peran_dalam_kurikulum.length > 0
@@ -2081,11 +2162,21 @@ export default function MataKuliah() {
     <button
       onClick={() => {
         if (mk.jenis === 'Blok') {
-          navigate(`/mata-kuliah/blok/${mk.kode}`);
+          // Cek apakah semester antara
+          if (mk.semester === 'Antara') {
+            navigate(`/mata-kuliah/blok-antara/${mk.kode}`);
+          } else {
+            navigate(`/mata-kuliah/blok/${mk.kode}`);
+          }
         } else if (mk.jenis === 'Non Blok' && mk.tipe_non_block === 'CSR') {
           navigate(`/mata-kuliah/non-blok-csr/${mk.kode}`);
         } else if (mk.jenis === 'Non Blok' && mk.tipe_non_block === 'Non-CSR') {
-          navigate(`/mata-kuliah/non-blok-non-csr/${mk.kode}`);
+          // Cek apakah semester antara
+          if (mk.semester === 'Antara') {
+            navigate(`/mata-kuliah/non-blok-non-csr-antara/${mk.kode}`);
+          } else {
+            navigate(`/mata-kuliah/non-blok-non-csr/${mk.kode}`);
+          }
         }
       }}
       className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-blue-600 hover:text-blue-800 dark:hover:text-blue-400 transition"
@@ -2274,18 +2365,25 @@ export default function MataKuliah() {
                     name="semester"
                     value={form.semester}
                     onChange={(e) => {
-                      const semester = Number(e.target.value);
+                      const semester = e.target.value === "Antara" ? "Antara" : Number(e.target.value);
                       setForm({
                         ...form,
                         semester,
                         periode: getPeriodeBySemester(semester),
+                        // Reset peran dan keahlian jika semester Antara
+                        peran_dalam_kurikulum: semester === "Antara" ? [] : form.peran_dalam_kurikulum,
+                        keahlian_required: semester === "Antara" ? [] : form.keahlian_required,
+                        // Otomatis set tipe_non_block menjadi Non-CSR jika semester Antara
+                        tipe_non_block: semester === "Antara" ? 'Non-CSR' : form.tipe_non_block,
                       });
                     }}
                     className={`w-full px-3 py-2 rounded-lg border ${'border-gray-300 dark:border-gray-700'} bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-brand-500`}
                   >
-                    {SEMESTER_OPTIONS.map((semester) => (
-                      <option key={semester} value={semester}>Semester {semester}</option>
-                    ))}
+                                          {SEMESTER_OPTIONS.map((semester) => (
+                        <option key={semester} value={semester}>
+                          {semester === "Antara" ? "Semester Antara" : `Semester ${semester}`}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div className="mb-3 sm:mb-4">
@@ -2316,7 +2414,7 @@ export default function MataKuliah() {
                       </div>
                   )}
                 </div>
-                {form.jenis === 'Non Blok' && (
+                {form.jenis === 'Non Blok' && form.semester !== "Antara" && (
                   <div className="mb-3 sm:mb-4">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipe Non-Block</label>
                     {!editMode ? (
@@ -2349,8 +2447,8 @@ export default function MataKuliah() {
                   </div>
                 )}
 
-                {/* Input CSR jika Non Blok & CSR */}
-                {form.jenis === 'Non Blok' && form.tipe_non_block === 'CSR' && (
+                {/* Input CSR jika Non Blok & CSR & bukan semester Antara */}
+                {form.jenis === 'Non Blok' && form.tipe_non_block === 'CSR' && form.semester !== "Antara" && (
                   <div className="mb-3 sm:mb-4">
                     <div className="flex items-center justify-between mb-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Daftar CSR</label>
@@ -2528,6 +2626,7 @@ export default function MataKuliah() {
                     placeholder="Masukkan tahun kurikulum (misal: 2024)"
                   />
                 </div>
+                {form.semester !== "Antara" && (
                 <div className="mb-3 sm:mb-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Peran dalam Kurikulum
@@ -2633,6 +2732,8 @@ export default function MataKuliah() {
                     </button>
                   </div>
                 </div>
+                )}
+                {form.semester !== "Antara" && (
                 <div className="mb-3 sm:mb-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Keahlian Dibutuhkan</label>
                   <Listbox
@@ -2736,6 +2837,7 @@ export default function MataKuliah() {
                     </button>
                   </div>
                 </div>
+                )}
                 <div className="mb-3 sm:mb-4">
                   <label htmlFor="tanggalMulai" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Tanggal Mulai
@@ -3388,7 +3490,7 @@ export default function MataKuliah() {
                                   {/* Input Judul untuk file ini */}
                                   <div className="mt-3 relative z-30">
                                     <label className="block text-xs font-medium text-green-700 dark:text-green-300 mb-1 text-left">
-                                      Edit Judul: <span className="text-red-500">*</span>
+                                      Edit Judul: <span className="text-red-500 dark:text-red-400">*</span>
                                     </label>
                                     <input
                                       type="text"
@@ -3562,7 +3664,7 @@ export default function MataKuliah() {
                                 ? 'text-red-700 dark:text-red-300'
                                 : 'text-blue-700 dark:text-blue-300'
                             }`}>
-                              {materiToDelete.includes(item.id) ? 'Judul (akan dihapus):' : 'Edit Judul:'} <span className="text-red-500">*</span>
+                              {materiToDelete.includes(item.id) ? 'Judul (akan dihapus):' : 'Edit Judul:'} <span className="text-red-500 dark:text-red-400">*</span>
                             </label>
                             <input
                               type="text"

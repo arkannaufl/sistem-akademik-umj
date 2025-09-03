@@ -31,9 +31,15 @@ return new class extends Migration
             $table->string('avatar')->nullable();
 
             $table->integer('semester')->nullable();
+            $table->unsignedBigInteger('tahun_ajaran_masuk_id')->nullable();
+            $table->enum('semester_masuk', ['Ganjil', 'Genap'])->nullable();
 
             $table->json('kompetensi')->nullable();
             $table->json('keahlian')->nullable();
+            $table->enum('peran_utama', ['koordinator', 'tim_blok', 'dosen_mengajar', 'standby'])->nullable();
+            $table->string('matkul_ketua_id')->nullable();
+            $table->string('matkul_anggota_id')->nullable();
+            $table->text('peran_kurikulum_mengajar')->nullable();
 
             $table->boolean('is_logged_in')->default(false);
             $table->string('current_token')->nullable();

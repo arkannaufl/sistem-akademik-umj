@@ -31,9 +31,25 @@ api.interceptors.response.use((response) => {
 }, (error) => {
   // Handle 401 Unauthorized - redirect ke login
   if (error.response?.status === 401) {
+    const errorCode = error.response?.data?.code;
+    const message = error.response?.data?.message || 'Sesi Anda telah berakhir';
+    
+
+    
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    window.location.href = '/login';
+    
+    // Dispatch custom event dengan pesan yang sesuai
+    if (errorCode === 'DEVICE_CONFLICT') {
+      window.dispatchEvent(new CustomEvent('sessionExpired', {
+        detail: { message: 'Akun ini sedang digunakan di perangkat lain. Silakan login kembali.' }
+      }));
+    } else {
+      window.dispatchEvent(new CustomEvent('sessionExpired', {
+        detail: { message: message }
+      }));
+    }
+    
     return Promise.reject(error);
   }
   

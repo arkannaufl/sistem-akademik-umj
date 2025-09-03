@@ -11,6 +11,7 @@ use App\Imports\MahasiswaImport;
 use App\Imports\TimAkademikImport;
 use Illuminate\Validation\Rule;
 use App\Models\DosenPeran;
+use App\Services\SemesterService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -18,6 +19,13 @@ use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
+    protected $semesterService;
+
+    public function __construct(SemesterService $semesterService)
+    {
+        $this->semesterService = $semesterService;
+    }
+
     // GET /users?role=tim_akademik|dosen|mahasiswa
     public function index(Request $request)
     {
@@ -147,6 +155,12 @@ class UserController extends Controller
             }
         }
         $user = User::create($validated);
+        
+        // Jika user adalah mahasiswa, update semester berdasarkan semester aktif
+        if ($user->role === 'mahasiswa') {
+            $this->semesterService->updateNewStudentSemester($user);
+        }
+        
         // Simpan peran ke tabel dosen_peran
         foreach ($dosenPeran as $peran) {
             DosenPeran::create([

@@ -55,7 +55,7 @@ class DetailBlokController extends Controller
     private function getJadwalPBL($kode)
     {
         return JadwalPBL::where('mata_kuliah_kode', $kode)
-            ->with(['modulPBL', 'kelompokKecil', 'dosen', 'ruangan'])
+            ->with(['modulPBL', 'kelompokKecil', 'kelompokKecilAntara', 'dosen', 'ruangan'])
             ->get()
             ->map(function ($jadwal) {
                 // Transform jam format for frontend compatibility
@@ -67,6 +67,20 @@ class DetailBlokController extends Controller
                 }
                 // Add modul_pbl_id for frontend compatibility
                 $jadwal->modul_pbl_id = $jadwal->pbl_id;
+                
+                // Add dosen_names for frontend compatibility
+                if ($jadwal->dosen_ids && is_array($jadwal->dosen_ids)) {
+                    $dosenNames = User::whereIn('id', $jadwal->dosen_ids)->pluck('name')->toArray();
+                    $jadwal->dosen_names = implode(', ', $dosenNames);
+                }
+                
+                // Add nama_kelompok for frontend compatibility
+                if ($jadwal->kelompok_kecil_antara) {
+                    $jadwal->nama_kelompok = $jadwal->kelompok_kecil_antara->nama_kelompok;
+                } elseif ($jadwal->kelompok_kecil) {
+                    $jadwal->nama_kelompok = $jadwal->kelompok_kecil->nama_kelompok;
+                }
+                
                 return $jadwal;
             });
     }
@@ -122,7 +136,7 @@ class DetailBlokController extends Controller
     private function getJadwalJurnalReading($kode)
     {
         return JadwalJurnalReading::where('mata_kuliah_kode', $kode)
-            ->with(['kelompokKecil', 'dosen', 'ruangan'])
+            ->with(['kelompokKecil', 'kelompokKecilAntara', 'dosen', 'ruangan'])
             ->get()
             ->map(function ($jadwal) {
                 if ($jadwal->jam_mulai) {
@@ -131,6 +145,20 @@ class DetailBlokController extends Controller
                 if ($jadwal->jam_selesai) {
                     $jadwal->jam_selesai = $this->formatJamForFrontend($jadwal->jam_selesai);
                 }
+                
+                // Add nama_kelompok for frontend compatibility
+                if ($jadwal->kelompok_kecil_antara) {
+                    $jadwal->nama_kelompok = $jadwal->kelompok_kecil_antara->nama_kelompok;
+                } elseif ($jadwal->kelompok_kecil) {
+                    $jadwal->nama_kelompok = $jadwal->kelompok_kecil->nama_kelompok;
+                }
+                
+                // Add dosen_names for frontend compatibility
+                if ($jadwal->dosen_ids && is_array($jadwal->dosen_ids)) {
+                    $dosenNames = User::whereIn('id', $jadwal->dosen_ids)->pluck('name')->toArray();
+                    $jadwal->dosen_names = implode(', ', $dosenNames);
+                }
+                
                 return $jadwal;
             });
     }
@@ -179,8 +207,6 @@ class DetailBlokController extends Controller
     {
         return Ruangan::all();
     }
-
-
 
     /**
      * Format jam dari HH:MM:SS ke HH.MM untuk frontend compatibility

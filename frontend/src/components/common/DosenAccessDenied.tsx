@@ -1,4 +1,4 @@
-import React from "react";
+// import React from "react";
 import { useNavigate } from "react-router";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
@@ -15,7 +15,7 @@ export default function DosenAccessDenied() {
   const navigate = useNavigate();
 
   const allowedPages = [
-    { name: "Dashboard Dosen", icon: faGraduationCap, path: "/dashboard-dosen" },
+    { name: "Dashboard", icon: faGraduationCap, path: "/dashboard" },
     { name: "Mata Kuliah Dosen", icon: faBookOpen, path: "/mata-kuliah-dosen" },
     { name: "Peta Akademik", icon: faMap, path: "/peta-akademik" },
     { name: "Peta Blok", icon: faChartBar, path: "/peta-blok" }
@@ -78,7 +78,7 @@ export default function DosenAccessDenied() {
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button
-            onClick={() => navigate("/dashboard-dosen")}
+            onClick={() => navigate("/dashboard")}
             className="flex-1 sm:flex-none bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-4 px-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-3"
           >
             <FontAwesomeIcon icon={faArrowLeft} className="w-4 h-4" />

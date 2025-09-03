@@ -16,6 +16,7 @@ class JadwalAgendaKhusus extends Model
         'agenda',
         'ruangan_id',
         'kelompok_besar_id',
+        'kelompok_besar_antara_id',
         'use_ruangan',
         'tanggal',
         'jam_mulai',
@@ -32,6 +33,14 @@ class JadwalAgendaKhusus extends Model
      */
     public function kelompokBesar()
     {
-        return $this->hasMany(KelompokBesar::class, 'semester', 'kelompok_besar_id');
+        return $this->belongsTo(KelompokBesar::class, 'kelompok_besar_id');
+    }
+
+    /**
+     * Relasi ke kelompok besar antara
+     */
+    public function kelompokBesarAntara()
+    {
+        return $this->belongsTo(KelompokBesarAntara::class, 'kelompok_besar_antara_id');
     }
 }

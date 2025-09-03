@@ -14,6 +14,13 @@ import {
   GroupIcon,
   PlusIcon,
 } from "../icons";
+
+// Dashboard icon component
+const DashboardIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+);
 import { useSidebar } from "../context/SidebarContext";
 
 type NavItem = {
@@ -43,18 +50,17 @@ const getNavItems = (userRole?: string): NavItem[] => {
   const allItems: NavItem[] = [
     // Menu khusus untuk dosen - dipindah ke atas
     {
-      icon: <PieChartIcon />,
-      name: "Dashboard Dosen",
-      path: "/dashboard-dosen",
-      roles: ["dosen"],
-      new: true,
-    },
-    {
       icon: <UserIcon />,
       name: "Detail Riwayat Penugasan",
       path: "/dosen-riwayat",
       roles: ["dosen"],
     },
+  {
+    icon: <DashboardIcon />,
+    name: "Dashboard",
+    path: "/dashboard",
+    roles: ["super_admin", "dosen", "tim_akademik"],
+  },
   {
     icon: <ListIcon />,
     name: "Tahun Ajaran",
@@ -65,23 +71,23 @@ const getNavItems = (userRole?: string): NavItem[] => {
     icon: <TableIcon />,
     name: "Akademik",
     subItems: [
-        { name: "Mata Kuliah", path: "/mata-kuliah", roles: ["super_admin"] },
+        { name: "Mata Kuliah", path: "/mata-kuliah", roles: ["super_admin", "tim_akademik"] },
         { name: "Mata Kuliah (Dosen)", path: "/mata-kuliah-dosen", roles: ["dosen"] },
-        { name: "PBL", path: "/pbl", roles: ["super_admin"] },
-        { name: "CSR", path: "/csr", roles: ["super_admin"] },
-        { name: "Peta Akademik", path: "/peta-akademik", roles: ["super_admin", "dosen"] },
-        { name: "Peta Blok", path: "/peta-blok", roles: ["super_admin", "dosen"] },
+        { name: "PBL", path: "/pbl", roles: ["super_admin", "tim_akademik"] },
+        { name: "CSR", path: "/csr", roles: ["super_admin", "tim_akademik"] },
+        { name: "Peta Akademik", path: "/peta-akademik", roles: ["super_admin", "dosen", "tim_akademik"] },
+        { name: "Peta Blok", path: "/peta-blok", roles: ["super_admin", "dosen", "tim_akademik"] },
     ],
-      roles: ["super_admin", "dosen"],
+      roles: ["super_admin", "dosen", "tim_akademik"],
   },
   {
     icon: <PlusIcon />,
     name: "Generate Mahasiswa",
     subItems: [
-        { name: "Kelompok", path: "/generate/kelompok", roles: ["super_admin"] },
-        { name: "Kelas", path: "/generate/kelas", roles: ["super_admin"] },
+        { name: "Kelompok", path: "/generate/kelompok", roles: ["super_admin", "tim_akademik"] },
+        { name: "Kelas", path: "/generate/kelas", roles: ["super_admin", "tim_akademik"] },
     ],
-      roles: ["super_admin"],
+      roles: ["super_admin", "tim_akademik"],
   },
   {
     icon: <GroupIcon />,
@@ -93,29 +99,29 @@ const getNavItems = (userRole?: string): NavItem[] => {
     icon: <UserIcon />,
     name: "Dosen",
     path: "/dosen",
-      roles: ["super_admin"],
+      roles: ["super_admin", "tim_akademik"],
   },
   {
     icon: <UserIcon />,
     name: "Mahasiswa",
     path: "/mahasiswa",
-      roles: ["super_admin"],
+      roles: ["super_admin", "tim_akademik"],
   },
   {
     icon: <BoxCubeIcon />,
     name: "Ruangan",
     path: "/ruangan",
-      roles: ["super_admin"],
+      roles: ["super_admin", "tim_akademik"],
   },
   {
     icon: <PieChartIcon />,
     name: "Reporting",
     subItems: [
-        { name: "Reporting Dosen", path: "/reporting/dosen", roles: ["super_admin"] },
+        { name: "Reporting Dosen", path: "/reporting/dosen", roles: ["super_admin", "tim_akademik"] },
         { name: "History Aplikasi", path: "/reporting/histori", roles: ["super_admin"] },
         { name: "Notifikasi Admin", path: "/admin-notifications", roles: ["super_admin"], new: true },
       ],
-      roles: ["super_admin"],
+      roles: ["super_admin", "tim_akademik"],
   },
 
 ];

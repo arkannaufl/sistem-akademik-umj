@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('dosen_peran', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id');
-            $table->enum('tipe_peran', ['koordinator', 'tim_blok', 'mengajar']);
+            $table->enum('tipe_peran', ['koordinator', 'tim_blok', 'dosen_mengajar']);
             $table->string('mata_kuliah_kode')->nullable();
             $table->string('peran_kurikulum');
             $table->integer('blok')->nullable();

@@ -18,8 +18,10 @@ return new class extends Migration
             $table->string('jam_mulai');
             $table->string('jam_selesai');
             $table->integer('jumlah_sesi')->default(1);
-            $table->unsignedBigInteger('kelompok_kecil_id');
-            $table->unsignedBigInteger('dosen_id');
+            $table->unsignedBigInteger('kelompok_kecil_id')->nullable();
+            $table->unsignedBigInteger('kelompok_kecil_antara_id')->nullable();
+            $table->unsignedBigInteger('dosen_id')->nullable();
+            $table->json('dosen_ids')->nullable();
             $table->unsignedBigInteger('ruangan_id');
             $table->string('topik');
             $table->string('file_jurnal')->nullable();

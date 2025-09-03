@@ -802,7 +802,7 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
             onClick={() => {
               // Jika dosen melihat riwayat mereka sendiri (tidak ada id di URL dan role adalah dosen)
               if (!id && dosenData?.role === "dosen") {
-                navigate("/dashboard-dosen");
+                navigate("/dashboard");
               } else {
                 navigate(-1);
               }

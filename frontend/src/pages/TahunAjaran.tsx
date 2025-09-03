@@ -83,7 +83,39 @@ export default function TahunAjaran() {
 
   // Memoize handler
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    
+    if (name === 'tahun') {
+      // Remove any non-numeric characters except "/"
+      let cleanedValue = value.replace(/[^0-9/]/g, '');
+      
+      // If there's a "/", split the value and process each part
+      if (cleanedValue.includes('/')) {
+        const parts = cleanedValue.split('/');
+        const firstPart = parts[0].slice(0, 4); // Limit first part to 4 digits
+        const secondPart = parts[1] ? parts[1].slice(0, 4) : ''; // Limit second part to 4 digits
+        
+        // Auto-add "/" after 4 digits if not already present
+        if (firstPart.length === 4 && !cleanedValue.includes('/')) {
+          cleanedValue = firstPart + '/';
+        } else if (firstPart.length === 4 && secondPart.length > 0) {
+          cleanedValue = firstPart + '/' + secondPart;
+        } else if (firstPart.length === 4) {
+          cleanedValue = firstPart + '/';
+        } else {
+          cleanedValue = firstPart;
+        }
+      } else {
+        // No "/" present, limit to 4 digits and auto-add "/" after 4 digits
+        if (cleanedValue.length >= 4) {
+          cleanedValue = cleanedValue.slice(0, 4) + '/';
+        }
+      }
+      
+      setForm((prev) => ({ ...prev, [name]: cleanedValue }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
   }, []);
 
   const handleAdd = useCallback(async () => {
@@ -160,7 +192,7 @@ export default function TahunAjaran() {
     setExpandedRows([id]);
     try {
       const response = await api.post(`/tahun-ajaran/${id}/activate`);
-      setSuccess("Status tahun ajaran berhasil diubah.");
+      setSuccess("Status tahun ajaran berhasil diubah. Semua mahasiswa telah naik semester secara otomatis.");
       setData(prev => prev.map(t => {
         if (t.id === id) {
           return { ...response.data, semesters: response.data.semesters };
@@ -187,7 +219,7 @@ export default function TahunAjaran() {
     })));
     try {
       const response = await api.post(`/semesters/${semesterId}/activate`);
-      setSuccess("Status semester berhasil diubah.");
+      setSuccess("Status semester berhasil diubah. Semua mahasiswa telah naik semester secara otomatis.");
       const updatedTahunAjaran = response.data.tahun_ajaran;
       setData(prev => prev.map(t => {
         if (t.id === updatedTahunAjaran.id) {
@@ -370,6 +402,20 @@ export default function TahunAjaran() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Daftar Tahun Ajaran</h1>
+      <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+        <div className="flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+            Sistem Semester Otomatis
+          </span>
+        </div>
+        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+          Saat pergantian semester/tahun ajaran, semua mahasiswa akan otomatis naik 1 semester. 
+          Mahasiswa semester 8 akan otomatis lulus dan menjadi alumni.
+        </p>
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div className="flex gap-2">
           <button
@@ -514,7 +560,8 @@ export default function TahunAjaran() {
                       name="tahun"
                       value={form.tahun}
                       onChange={handleInputChange}
-                      placeholder="Contoh: 2023/2024"
+                      placeholder="Ketik tahun, contoh: 2023"
+                      maxLength={9}
                       className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
