@@ -24,6 +24,8 @@ return new class extends Migration
             $table->unsignedBigInteger('kelompok_kecil_id');
             $table->unsignedBigInteger('kategori_id'); // dari CSRDetail.tsx
             $table->text('topik');
+            $table->enum('status_konfirmasi', ['belum_konfirmasi', 'bisa', 'tidak_bisa'])->default('belum_konfirmasi');
+            $table->text('alasan_konfirmasi')->nullable();
             $table->timestamps();
             
             // Foreign keys

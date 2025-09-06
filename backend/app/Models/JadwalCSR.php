@@ -21,6 +21,8 @@ class JadwalCSR extends Model
         'kelompok_kecil_id',
         'kategori_id',
         'topik',
+        'status_konfirmasi',
+        'alasan_konfirmasi',
     ];
 
     protected $casts = [

@@ -57,6 +57,11 @@ class JadwalPraktikumController extends Controller
         // Attach dosen
         $jadwal->dosen()->attach($data['dosen_ids']);
 
+        // Kirim notifikasi ke semua dosen yang di-assign
+        foreach ($data['dosen_ids'] as $dosenId) {
+            $this->sendAssignmentNotification($jadwal, $dosenId);
+        }
+
         // Load relasi untuk response
         $jadwal->load(['mataKuliah', 'ruangan', 'dosen']);
 
@@ -462,5 +467,208 @@ class JadwalPraktikumController extends Controller
             'total_yang_diperlukan' => $totalYangDiperlukan,
             'is_over_capacity' => $totalYangDiperlukan > ($ruangan ? $ruangan->kapasitas : 0)
         ];
+    }
+
+    /**
+     * Kirim notifikasi assignment ke dosen
+     */
+    private function sendAssignmentNotification($jadwal, $dosenId)
+    {
+        try {
+            $dosen = \App\Models\User::find($dosenId);
+            if (!$dosen) {
+                \Log::warning("Dosen dengan ID {$dosenId} tidak ditemukan untuk notifikasi jadwal praktikum");
+                return;
+            }
+
+            $mataKuliah = $jadwal->mataKuliah;
+            $ruangan = $jadwal->ruangan;
+            
+            \App\Models\Notification::create([
+                'user_id' => $dosenId,
+                'title' => 'Jadwal Praktikum Baru',
+                'message' => "Anda telah di-assign untuk mengajar Praktikum {$mataKuliah->nama} pada tanggal " . 
+                           date('d/m/Y', strtotime($jadwal->tanggal)) . " jam " . 
+                           str_replace(':', '.', $jadwal->jam_mulai) . "-" . str_replace(':', '.', $jadwal->jam_selesai) . 
+                           " di ruangan {$ruangan->nama} untuk kelas {$jadwal->kelas_praktikum}. Silakan konfirmasi ketersediaan Anda.",
+                'type' => 'info',
+                'is_read' => false,
+                'data' => [
+                    'jadwal_id' => $jadwal->id,
+                    'jadwal_type' => 'praktikum',
+                    'mata_kuliah_kode' => $mataKuliah->kode,
+                    'mata_kuliah_nama' => $mataKuliah->nama,
+                    'tanggal' => $jadwal->tanggal,
+                    'jam_mulai' => $jadwal->jam_mulai,
+                    'jam_selesai' => $jadwal->jam_selesai,
+                    'ruangan' => $ruangan->nama,
+                    'kelas_praktikum' => $jadwal->kelas_praktikum,
+                    'materi' => $jadwal->materi,
+                    'topik' => $jadwal->topik,
+                    'dosen_id' => $dosen->id,
+                    'dosen_name' => $dosen->name,
+                    'dosen_role' => $dosen->role
+                ]
+            ]);
+
+            \Log::info("Notifikasi jadwal praktikum berhasil dikirim ke dosen {$dosen->name} (ID: {$dosenId})");
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi jadwal praktikum ke dosen {$dosenId}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get jadwal praktikum untuk dosen tertentu
+     */
+    public function getJadwalForDosen($dosenId, Request $request)
+    {
+        try {
+            $semesterType = $request->query('semester_type');
+
+            $query = JadwalPraktikum::with(['mataKuliah', 'ruangan', 'dosen' => function($query) use ($dosenId) {
+                    $query->where('dosen_id', $dosenId)->withPivot('status_konfirmasi', 'alasan_konfirmasi');
+                }])
+                ->whereHas('dosen', function($query) use ($dosenId) {
+                    $query->where('dosen_id', $dosenId);
+                });
+
+            // Filter berdasarkan semester type jika ada
+            if ($semesterType && $semesterType !== 'all') {
+                if ($semesterType === 'reguler') {
+                    $query->whereHas('mataKuliah', function($q) {
+                        $q->where('semester', '!=', 'Antara');
+                    });
+                } elseif ($semesterType === 'antara') {
+                    // Semester antara tidak memiliki praktikum, return empty result
+                    return response()->json([
+                        'data' => [],
+                        'message' => 'Semester antara tidak memiliki praktikum'
+                    ]);
+                }
+            }
+
+            $jadwal = $query->orderBy('tanggal')
+                ->orderBy('jam_mulai')
+                ->get();
+
+            // Map data untuk menambahkan status_konfirmasi dari pivot table
+            $mappedJadwal = $jadwal->map(function ($item) use ($dosenId) {
+                // Ambil status_konfirmasi dari pivot table
+                $pivotData = $item->dosen->where('id', $dosenId)->first();
+                $statusKonfirmasi = $pivotData && $pivotData->pivot ? $pivotData->pivot->status_konfirmasi ?? 'belum_konfirmasi' : 'belum_konfirmasi';
+                
+                return (object) [
+                    'id' => $item->id,
+                    'tanggal' => $item->tanggal,
+                    'jam_mulai' => $item->jam_mulai,
+                    'jam_selesai' => $item->jam_selesai,
+                    'materi' => $item->materi,
+                    'topik' => $item->topik,
+                    'status_konfirmasi' => $statusKonfirmasi,
+                    'mata_kuliah_kode' => $item->mata_kuliah_kode,
+                    'mata_kuliah' => (object) [
+                        'kode' => $item->mataKuliah->kode ?? '',
+                        'nama' => $item->mataKuliah->nama ?? 'N/A',
+                        'semester' => $item->mataKuliah->semester ?? ''
+                    ],
+                    'kelas_praktikum' => $item->kelas_praktikum,
+                    'dosen' => $item->dosen->map(function($d) {
+                        return (object) [
+                            'id' => $d->id,
+                            'name' => $d->name
+                        ];
+                    }),
+                    'ruangan' => (object) [
+                        'id' => $item->ruangan->id ?? null,
+                        'nama' => $item->ruangan->nama ?? 'N/A'
+                    ],
+                    'jumlah_sesi' => $item->jumlah_sesi,
+                    'semester_type' => $item->mataKuliah && $item->mataKuliah->semester === 'Antara' ? 'antara' : 'reguler',
+                    'created_at' => $item->created_at
+                ];
+            });
+
+            return response()->json([
+                'data' => $mappedJadwal,
+                'message' => 'Jadwal praktikum berhasil diambil'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error("Error getting jadwal praktikum for dosen {$dosenId}: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Gagal mengambil jadwal praktikum',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Konfirmasi ketersediaan dosen untuk jadwal praktikum
+     */
+    public function konfirmasi(Request $request, $id)
+    {
+        $request->validate([
+            'status' => 'required|in:bisa,tidak_bisa',
+            'dosen_id' => 'required|exists:users,id',
+            'alasan' => 'nullable|string|max:1000'
+        ]);
+
+        $jadwal = JadwalPraktikum::findOrFail($id);
+        
+        // Update pivot table untuk konfirmasi dosen
+        $jadwal->dosen()->updateExistingPivot($request->dosen_id, [
+            'status_konfirmasi' => $request->status,
+            'alasan_konfirmasi' => $request->alasan,
+            'updated_at' => now()
+        ]);
+
+        // Kirim notifikasi ke super admin jika dosen tidak bisa
+        if ($request->status === 'tidak_bisa') {
+            $this->sendReplacementNotification($jadwal, $request->dosen_id, $request->alasan);
+        }
+
+        return response()->json([
+            'message' => 'Konfirmasi berhasil disimpan',
+            'status' => $request->status
+        ]);
+    }
+
+    /**
+     * Kirim notifikasi replacement ke super admin
+     */
+    private function sendReplacementNotification($jadwal, $dosenId, $alasan = null)
+    {
+        try {
+            $dosen = \App\Models\User::find($dosenId);
+            $superAdmins = \App\Models\User::where('role', 'super_admin')->get();
+            $alasanText = $alasan ? "\n\nAlasan: {$alasan}" : "";
+
+            foreach ($superAdmins as $admin) {
+                \App\Models\Notification::create([
+                    'user_id' => $dosenId,
+                    'title' => 'Dosen Tidak Bisa Mengajar - Praktikum',
+                    'message' => "Dosen {$dosen->name} tidak bisa mengajar pada jadwal Praktikum {$jadwal->mataKuliah->nama} pada tanggal " . 
+                               date('d/m/Y', strtotime($jadwal->tanggal)) . " jam " . 
+                               str_replace(':', '.', $jadwal->jam_mulai) . "-" . str_replace(':', '.', $jadwal->jam_selesai) . 
+                               " untuk kelas {$jadwal->kelas_praktikum} di ruangan {$jadwal->ruangan->nama}.{$alasanText}",
+                    'type' => 'warning',
+                    'is_read' => false,
+                    'data' => [
+                        'jadwal_id' => $jadwal->id,
+                        'jadwal_type' => 'praktikum',
+                        'dosen_id' => $dosenId,
+                        'mata_kuliah' => $jadwal->mataKuliah->nama,
+                        'tanggal' => $jadwal->tanggal,
+                        'waktu' => $jadwal->jam_mulai . ' - ' . $jadwal->jam_selesai,
+                        'ruangan' => $jadwal->ruangan->nama,
+                        'kelas_praktikum' => $jadwal->kelas_praktikum,
+                        'alasan' => $alasan
+                    ]
+                ]);
+            }
+
+            \Log::info("Notifikasi replacement berhasil dikirim ke super admin untuk jadwal praktikum ID: {$jadwal->id}");
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi replacement untuk jadwal praktikum ID {$jadwal->id}: " . $e->getMessage());
+        }
     }
 }

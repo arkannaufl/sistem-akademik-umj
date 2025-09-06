@@ -109,6 +109,62 @@ class JadwalPBLController extends Controller
             $jadwal->dosen_names = implode(', ', $dosenNames);
         }
         
+        // Buat notifikasi untuk dosen yang di-assign
+        if ($jadwal->dosen_ids && is_array($jadwal->dosen_ids)) {
+            foreach ($jadwal->dosen_ids as $dosenId) {
+                $dosen = User::find($dosenId);
+                if ($dosen) {
+                    \App\Models\Notification::create([
+                        'user_id' => $dosenId,
+                        'title' => 'Jadwal PBL Baru',
+                        'message' => "Anda telah di-assign untuk mengajar PBL {$jadwal->modulPBL->mataKuliah->nama} - {$jadwal->modulPBL->nama_modul} pada tanggal {$jadwal->tanggal} jam {$jadwal->jam_mulai}-{$jadwal->jam_selesai} di ruangan {$jadwal->ruangan->nama}. Silakan konfirmasi ketersediaan Anda.",
+                        'type' => 'info',
+                        'data' => [
+                            'topik' => $jadwal->modulPBL->nama_modul,
+                            'materi' => $jadwal->modulPBL->nama_modul,
+                            'ruangan' => $jadwal->ruangan->nama,
+                            'tanggal' => $jadwal->tanggal,
+                            'jadwal_id' => $jadwal->id,
+                            'jam_mulai' => $jadwal->jam_mulai,
+                            'jadwal_type' => 'pbl',
+                            'jam_selesai' => $jadwal->jam_selesai,
+                            'mata_kuliah_kode' => $jadwal->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $jadwal->modulPBL->mataKuliah->nama,
+                            'modul_ke' => $jadwal->modulPBL->modul_ke,
+                            'pbl_tipe' => $jadwal->pbl_tipe,
+                            'dosen_id' => $dosen->id,
+                            'dosen_name' => $dosen->name,
+                            'dosen_role' => $dosen->role
+                        ]
+                    ]);
+                }
+            }
+        } elseif ($jadwal->dosen_id) {
+            \App\Models\Notification::create([
+                'user_id' => $jadwal->dosen_id,
+                'title' => 'Jadwal PBL Baru',
+                'message' => "Anda telah di-assign untuk mengajar PBL {$jadwal->modulPBL->mataKuliah->nama} - {$jadwal->modulPBL->nama_modul} pada tanggal {$jadwal->tanggal} jam {$jadwal->jam_mulai}-{$jadwal->jam_selesai} di ruangan {$jadwal->ruangan->nama}. Silakan konfirmasi ketersediaan Anda.",
+                'type' => 'info',
+                                        'data' => [
+                            'topik' => $jadwal->modulPBL->nama_modul,
+                            'materi' => $jadwal->modulPBL->nama_modul,
+                            'ruangan' => $jadwal->ruangan->nama,
+                            'tanggal' => $jadwal->tanggal,
+                            'jadwal_id' => $jadwal->id,
+                            'jam_mulai' => $jadwal->jam_mulai,
+                            'jadwal_type' => 'pbl',
+                            'jam_selesai' => $jadwal->jam_selesai,
+                            'mata_kuliah_kode' => $jadwal->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $jadwal->modulPBL->mataKuliah->nama,
+                            'modul_ke' => $jadwal->modulPBL->modul_ke,
+                            'pbl_tipe' => $jadwal->pbl_tipe,
+                            'dosen_id' => $dosen->id,
+                            'dosen_name' => $dosen->name,
+                            'dosen_role' => $dosen->role
+                        ]
+            ]);
+        }
+        
         return response()->json($jadwal, Response::HTTP_CREATED);
     }
 
@@ -206,7 +262,7 @@ class JadwalPBLController extends Controller
     }
 
     // Get jadwal PBL untuk dosen tertentu
-    public function getJadwalForDosen($dosenId)
+    public function getJadwalForDosen($dosenId, Request $request)
     {
         try {
             // Check if user exists
@@ -218,31 +274,93 @@ class JadwalPBLController extends Controller
                 ], 404);
             }
 
-            $jadwal = JadwalPBL::with([
+            $semesterType = $request->query('semester_type');
+
+            $query = JadwalPBL::with([
                 'modulPBL.mataKuliah',
                 'kelompokKecil',
+                'kelompokKecilAntara',
                 'dosen',
                 'ruangan'
             ])
-            ->where('dosen_id', $dosenId)
-            ->orderBy('tanggal')
-            ->orderBy('jam_mulai')
-            ->get();
+            ->where(function($query) use ($dosenId) {
+                $query->where('dosen_id', $dosenId)
+                      ->orWhere('dosen_ids', 'like', '%"' . $dosenId . '"%');
+            });
+
+            // Filter berdasarkan semester type jika ada
+            if ($semesterType && $semesterType !== 'all') {
+                if ($semesterType === 'reguler') {
+                    $query->whereNull('kelompok_kecil_antara_id');
+                } elseif ($semesterType === 'antara') {
+                    $query->whereNotNull('kelompok_kecil_antara_id');
+                }
+            }
+
+            // Use raw query to get data
+            $rawJadwal = \DB::table('jadwal_pbl')
+                ->where(function($q) use ($dosenId) {
+                    $q->where('dosen_id', $dosenId)
+                      ->orWhere('dosen_ids', 'like', '%' . $dosenId . '%');
+                })
+                ->when($semesterType === 'antara', function($q) {
+                    $q->whereNotNull('kelompok_kecil_antara_id');
+                })
+                ->when($semesterType === 'reguler', function($q) {
+                    $q->whereNull('kelompok_kecil_antara_id');
+                })
+                ->orderBy('tanggal')
+                ->orderBy('jam_mulai')
+                ->get();
+            
+            \Log::info("Raw query found {$rawJadwal->count()} records");
+            
+            // Convert to Eloquent models for relationships
+            $jadwal = JadwalPBL::with([
+                'modulPBL.mataKuliah',
+                'kelompokKecil',
+                'kelompokKecilAntara',
+                'dosen',
+                'ruangan'
+            ])->whereIn('id', $rawJadwal->pluck('id'))->get();
+            
+            // Load dosen for each jadwal based on dosen_ids
+            $jadwal->each(function($item) {
+                if ($item->dosen_ids && count($item->dosen_ids) > 0) {
+                    $dosen = User::whereIn('id', $item->dosen_ids)->first();
+                    if ($dosen) {
+                        $item->dosen = $dosen;
+                    }
+                }
+            });
 
             \Log::info("Found {$jadwal->count()} JadwalPBL records for dosen ID: {$dosenId}");
             
             $mappedJadwal = $jadwal->map(function ($jadwal) {
+                // Determine semester type based on kelompok_kecil_antara_id
+                $semesterType = $jadwal->kelompok_kecil_antara_id ? 'antara' : 'reguler';
+                
                 return [
                     'id' => $jadwal->id,
                     'mata_kuliah_kode' => $jadwal->modulPBL->mataKuliah->kode ?? $jadwal->mata_kuliah_kode,
                     'mata_kuliah_nama' => $jadwal->modulPBL->mataKuliah->nama ?? 'Unknown',
-                    'modul_ke' => $jadwal->modulPBL->modul_ke ?? 'Unknown',
-                    'nama_modul' => $jadwal->modulPBL->nama_modul ?? 'Unknown',
+                    'modul' => $jadwal->modulPBL->nama_modul ?? 'Unknown',
+                    'blok' => $jadwal->modulPBL->mataKuliah->blok ?? 1,
+                    'pertemuan_ke' => $jadwal->modulPBL->modul_ke ?? 1,
+                    'topik' => $jadwal->modulPBL->nama_modul ?? 'Unknown',
+                    'tipe_pbl' => $jadwal->pbl_tipe ?? 'PBL 1',
+                    'kelompok' => $jadwal->kelompokKecilAntara ? $jadwal->kelompokKecilAntara->nama_kelompok : ($jadwal->kelompokKecil ? $jadwal->kelompokKecil->nama_kelompok : 'Unknown'),
+                    'x50' => $jadwal->jumlah_sesi ?? 2,
                     'tanggal' => $jadwal->tanggal,
                     'waktu_mulai' => $jadwal->jam_mulai,
-                    'waktu_selesai' => $jadwal->jam_selesai,
+                    'jam_mulai' => $jadwal->jam_mulai,
+                    'jam_selesai' => $jadwal->jam_selesai,
+                    'durasi' => $jadwal->jumlah_sesi ?? 2,
+                    'pengampu' => $jadwal->dosen ? $jadwal->dosen->name : ($jadwal->dosen_ids && count($jadwal->dosen_ids) > 0 ? \App\Models\User::whereIn('id', $jadwal->dosen_ids)->pluck('name')->join(', ') : 'Unknown'),
                     'ruangan' => $jadwal->ruangan->nama ?? 'Unknown',
+                    'lokasi' => $jadwal->ruangan->nama ?? 'Unknown',
                     'status_konfirmasi' => $jadwal->status_konfirmasi ?? 'belum_konfirmasi',
+                    'semester_type' => $semesterType,
                     'created_at' => $jadwal->created_at,
                 ];
             });
@@ -267,16 +385,21 @@ class JadwalPBLController extends Controller
     {
         $request->validate([
             'status' => 'required|in:bisa,tidak_bisa',
-            'dosen_id' => 'required|exists:users,id'
+            'dosen_id' => 'required|exists:users,id',
+            'alasan' => 'nullable|string|max:1000'
         ]);
 
         $jadwal = JadwalPBL::with(['modulPBL.mataKuliah', 'dosen'])
             ->where('id', $jadwalId)
-            ->where('dosen_id', $request->dosen_id)
+            ->where(function($query) use ($request) {
+                $query->where('dosen_id', $request->dosen_id)
+                      ->orWhereJsonContains('dosen_ids', $request->dosen_id);
+            })
             ->firstOrFail();
 
         $jadwal->update([
-            'status_konfirmasi' => $request->status
+            'status_konfirmasi' => $request->status,
+            'alasan_konfirmasi' => $request->alasan
         ]);
 
         // Jika dosen tidak bisa, kirim notifikasi ke admin
@@ -296,16 +419,29 @@ class JadwalPBLController extends Controller
         // Ambil semua super admin
         $superAdmins = User::where('role', 'super_admin')->get();
 
+        // Get dosen name - handle both single dosen and multiple dosen cases
+        $dosenName = 'Unknown';
+        if ($jadwal->dosen) {
+            $dosenName = $jadwal->dosen->name;
+        } elseif ($jadwal->dosen_ids && is_array($jadwal->dosen_ids)) {
+            $dosen = User::whereIn('id', $jadwal->dosen_ids)->first();
+            if ($dosen) {
+                $dosenName = $dosen->name;
+            }
+        }
+
         foreach ($superAdmins as $admin) {
             \App\Models\Notification::create([
-                'user_id' => $admin->id,
+                'user_id' => $jadwal->dosen_id ?? $jadwal->dosen_ids[0] ?? $admin->id,
                 'title' => 'Dosen Tidak Bisa Mengajar',
-                'message' => "Dosen {$jadwal->dosen->name} tidak bisa mengajar pada jadwal PBL {$jadwal->modulPBL->mataKuliah->nama} - Modul {$jadwal->modulPBL->modul_ke}",
+                'message' => "Dosen {$dosenName} tidak bisa mengajar pada jadwal PBL {$jadwal->modulPBL->mataKuliah->nama} - Modul {$jadwal->modulPBL->modul_ke}",
                 'type' => 'warning',
                 'is_read' => false,
                 'data' => [
                     'jadwal_id' => $jadwal->id,
+                    'jadwal_type' => 'pbl',
                     'dosen_id' => $jadwal->dosen_id,
+                    'dosen_ids' => $jadwal->dosen_ids,
                     'mata_kuliah' => $jadwal->modulPBL->mataKuliah->nama,
                     'modul' => $jadwal->modulPBL->modul_ke,
                     'tanggal' => $jadwal->tanggal,

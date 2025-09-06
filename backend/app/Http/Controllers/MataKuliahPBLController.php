@@ -39,7 +39,7 @@ class MataKuliahPBLController extends Controller
         ]);
         $validated['mata_kuliah_kode'] = $kode;
         $pbl = PBL::create($validated);
-        
+
         return response()->json($pbl, Response::HTTP_CREATED);
     }
 
@@ -62,9 +62,9 @@ class MataKuliahPBLController extends Controller
             'modul_ke' => 'sometimes|required|string',
             'nama_modul' => 'sometimes|required|string',
         ]);
-        
+
         $pbl->update($validated);
-        
+
         return response()->json($pbl);
     }
 
@@ -75,7 +75,7 @@ class MataKuliahPBLController extends Controller
     {
         $pbl = \App\Models\PBL::findOrFail($id);
         $pbl->delete();
-        
+
         return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
@@ -130,6 +130,7 @@ class MataKuliahPBLController extends Controller
     {
         $validated = $request->validate([
             'dosen_id' => 'required|exists:users,id',
+            'role' => 'nullable|string|in:koordinator,tim_blok,dosen_mengajar',
         ]);
         $pbl = PBL::findOrFail($pblId);
         // Ambil semester dan blok dari mata kuliah terkait
@@ -141,7 +142,7 @@ class MataKuliahPBLController extends Controller
         // Constraint: Jika dosen sudah jadi Dosen Mengajar di blok tertentu,
         // tidak boleh jadi Dosen Mengajar lagi di blok yang sama dengan semester berbeda
         $dosenId = $validated['dosen_id'];
-        
+
         // Cek apakah dosen ini adalah Koordinator atau Tim Blok untuk mata kuliah ini
         $user = User::find($dosenId);
         $isKoordinatorOrTimBlok = false;
@@ -164,20 +165,20 @@ class MataKuliahPBLController extends Controller
                 })
                 ->with('pbl.mataKuliah')
                 ->get();
-            
+
             foreach ($existingAssignments as $existingAssignment) {
                 $existingMk = $existingAssignment->pbl->mataKuliah;
                 if ($existingMk->semester !== $semester) {
                     // PERUBAHAN: Berikan warning alih-alih memblokir assignment
                     $dosenName = $user ? $user->name : "ID {$dosenId}";
-                    
+
                     // Log warning untuk monitoring
                     \Log::warning("Constraint Warning: Dosen {$dosenName} (ID: {$dosenId}) akan mengajar di Blok {$blok} di multiple semester", [
                         'existing_semester' => $existingMk->semester,
                         'new_semester' => $semester,
                         'blok' => $blok
                     ]);
-                    
+
                     // Berikan warning response tapi tetap izinkan assignment
                     return response()->json([
                         'warning' => true,
@@ -192,14 +193,14 @@ class MataKuliahPBLController extends Controller
                 }
             }
         }
-        
+
         // Validasi: Mata kuliah harus punya keahlian_required
         if (empty($mataKuliah->keahlian_required) || count($mataKuliah->keahlian_required) === 0) {
             return response()->json([
                 'message' => 'Mata kuliah ini belum diisi keahlian yang diperlukan. Silakan lengkapi keahlian_required pada mata kuliah sebelum assign dosen.'
             ], 422);
         }
-        
+
         // Cek apakah dosen sudah di CSR X.Y
         $csr = \App\Models\CSR::where('nomor_csr', $semester . '.' . $blok)->first();
         if ($csr) {
@@ -220,6 +221,7 @@ class MataKuliahPBLController extends Controller
         $mapping = PBLMapping::create([
             'pbl_id' => $pblId,
             'dosen_id' => $validated['dosen_id'],
+            'role' => $validated['role'] ?? 'dosen_mengajar',
         ]);
 
         // === PENTING: Buat DosenPeran record untuk Dosen Mengajar ===
@@ -254,7 +256,7 @@ class MataKuliahPBLController extends Controller
                 ]);
             }
         }
-        
+
         activity()
             ->causedBy(Auth::user())
             ->performedOn($pbl)
@@ -264,7 +266,7 @@ class MataKuliahPBLController extends Controller
         // Tambahkan increment pbl_assignment_count
         $user = \App\Models\User::find($validated['dosen_id']);
         if ($user) $user->increment('pbl_assignment_count');
-        
+
         // Kirim notifikasi ke dosen
         $notificationController = new NotificationController();
         $pblData = [
@@ -275,7 +277,7 @@ class MataKuliahPBLController extends Controller
             'nama_modul' => $pbl->nama_modul,
         ];
         $notificationController->createPBLAssignmentNotification($validated['dosen_id'], $pblData);
-        
+
         return response()->json($mapping->load('dosen'));
     }
 
@@ -290,7 +292,7 @@ class MataKuliahPBLController extends Controller
         }
         $pbl = $mapping->pbl;
         $mapping->delete();
-        
+
         activity()
             ->causedBy(Auth::user())
             ->performedOn($pbl)
@@ -322,11 +324,15 @@ class MataKuliahPBLController extends Controller
             'pbl_ids.*' => 'integer',
         ]);
         $result = [];
-        $pbls = PBL::with('dosen')->whereIn('id', $validated['pbl_ids'])->get();
+        $pbls = PBL::with(['dosen' => function ($query) {
+            $query->withPivot('role');
+        }])->whereIn('id', $validated['pbl_ids'])->get();
         foreach ($pbls as $pbl) {
             // Pastikan pbl_assignment_count di-load untuk setiap dosen
-            $pbl->dosen->each(function($dosen) {
+            $pbl->dosen->each(function ($dosen) {
                 $dosen->pbl_assignment_count = $dosen->pbl_assignment_count ?? 0;
+                // Tambahkan role dari pivot table
+                $dosen->pbl_role = $dosen->pivot->role ?? 'dosen_mengajar';
             });
             $result[$pbl->id] = $pbl->dosen;
         }
@@ -340,7 +346,7 @@ class MataKuliahPBLController extends Controller
     {
         $pbl = PBL::findOrFail($pblId);
         $deleted = PBLMapping::where('pbl_id', $pblId)->delete();
-        
+
         activity()
             ->causedBy(Auth::user())
             ->performedOn($pbl)
@@ -355,29 +361,30 @@ class MataKuliahPBLController extends Controller
     public function assignDosenBatch(Request $request)
     {
         try {
-        $data = $request->validate([
-            'assignments' => 'required|array',
-            'assignments.*.pbl_id' => 'required|integer|exists:pbls,id',
-            'assignments.*.dosen_id' => 'required|integer|exists:users,id',
-        ]);
+            $data = $request->validate([
+                'assignments' => 'required|array',
+                'assignments.*.pbl_id' => 'required|integer|exists:pbls,id',
+                'assignments.*.dosen_id' => 'required|integer|exists:users,id',
+                'assignments.*.role' => 'nullable|string|in:koordinator,tim_blok,dosen_mengajar',
+            ]);
 
             // Validasi berurutan: cek apakah blok sebelumnya sudah di-generate
             $pblIds = collect($data['assignments'])->pluck('pbl_id')->unique();
             $pbls = PBL::with('mataKuliah')->whereIn('id', $pblIds)->get();
-            
+
             // Kelompokkan PBL berdasarkan blok
             $pblsByBlok = $pbls->groupBy(function ($pbl) {
                 return $pbl->mataKuliah->blok ?? 0;
             });
-            
+
             // Cek setiap blok yang akan di-generate
             foreach ($pblsByBlok as $blokId => $pblsInBlok) {
                 if ($blokId > 1) { // Hanya validasi untuk blok > 1
                     $previousBlokId = $blokId - 1;
-                    
+
                     // Cek apakah blok sebelumnya sudah di-generate
                     $previousBlokStatus = $this->checkBlokGeneratedInternal($previousBlokId);
-                    
+
                     if (!$previousBlokStatus['has_pbl']) {
                         return response()->json([
                             'error' => true,
@@ -386,7 +393,7 @@ class MataKuliahPBLController extends Controller
                             'current_blok' => $blokId
                         ], 400);
                     }
-                    
+
                     if (!$previousBlokStatus['has_generated']) {
                         return response()->json([
                             'error' => true,
@@ -403,24 +410,24 @@ class MataKuliahPBLController extends Controller
             // tidak boleh jadi Dosen Mengajar lagi di blok yang sama dengan semester berbeda
             $dosenBlokSemesterMap = []; // dosen_id -> [blok -> [semester]]
             $warnings = []; // Untuk menyimpan warning tanpa memblokir assignment
-            
+
             // === NOTIFIKASI KONSOLIDASI ===
             // Kumpulkan data untuk notifikasi konsolidasi per blok
             $blockNotifications = []; // dosen_id -> [blok -> [semester -> [moduls, mata_kuliah, tipe_peran]]]
-            
-        foreach ($data['assignments'] as $item) {
-            $pbl = PBL::find($item['pbl_id']);
+
+            foreach ($data['assignments'] as $item) {
+                $pbl = PBL::find($item['pbl_id']);
                 if (!$pbl || !$pbl->mataKuliah) continue;
-                
+
                 $mataKuliah = $pbl->mataKuliah;
                 $dosenId = $item['dosen_id'];
                 $blok = $mataKuliah->blok;
                 $semester = $mataKuliah->semester;
-                
+
                 // Skip constraint check untuk Koordinator dan Tim Blok
                 $user = User::find($dosenId);
                 $isKoordinatorOrTimBlok = false;
-                
+
                 if ($user && $user->dosenPeran) {
                     $isKoordinatorOrTimBlok = $user->dosenPeran->contains(function ($peran) use ($mataKuliah) {
                         return ($peran->tipe_peran === 'koordinator' || $peran->tipe_peran === 'tim_blok') &&
@@ -428,7 +435,7 @@ class MataKuliahPBLController extends Controller
                             $peran->semester === $mataKuliah->semester;
                     });
                 }
-                
+
                 // Hanya validasi constraint untuk Dosen Mengajar
                 if (!$isKoordinatorOrTimBlok) {
                     // Cek apakah dosen sudah di-assign sebagai Dosen Mengajar di blok yang sama
@@ -439,20 +446,20 @@ class MataKuliahPBLController extends Controller
                         })
                         ->with('pbl.mataKuliah')
                         ->get();
-                    
+
                     foreach ($existingAssignments as $existingAssignment) {
                         $existingMk = $existingAssignment->pbl->mataKuliah;
                         if ($existingMk->semester !== $semester) {
                             // PERUBAHAN: Berikan warning alih-alih memblokir assignment
                             $dosenName = $user ? $user->name : "ID {$dosenId}";
-                            
+
                             // Log warning untuk monitoring
                             \Log::warning("Constraint Warning: Dosen {$dosenName} (ID: {$dosenId}) akan mengajar di Blok {$blok} di multiple semester", [
                                 'existing_semester' => $existingMk->semester,
                                 'new_semester' => $semester,
                                 'blok' => $blok
                             ]);
-                            
+
                             // Catat warning untuk response (tidak memblokir)
                             if (!isset($warnings)) $warnings = [];
                             $warnings[] = [
@@ -466,7 +473,7 @@ class MataKuliahPBLController extends Controller
                             ];
                         }
                     }
-                    
+
                     // Cek apakah dosen akan di-assign ke blok yang sama di semester berbeda
                     // dalam batch assignment yang sama
                     if (!isset($dosenBlokSemesterMap[$dosenId])) {
@@ -475,11 +482,11 @@ class MataKuliahPBLController extends Controller
                     if (!isset($dosenBlokSemesterMap[$dosenId][$blok])) {
                         $dosenBlokSemesterMap[$dosenId][$blok] = [];
                     }
-                    
+
                     // PERUBAHAN: Izinkan assignment ke blok yang sama di semester yang sama
                     // karena ini adalah assignment yang berbeda (modul PBL yang berbeda)
                     // Yang penting adalah mencegah assignment ke blok yang sama di semester BERBEDA
-                    
+
                     $dosenBlokSemesterMap[$dosenId][$blok][] = $semester;
                 }
             }
@@ -498,9 +505,9 @@ class MataKuliahPBLController extends Controller
                         ];
                         continue;
                     }
-            
-            // Ambil mata kuliah untuk validasi keahlian
-            $mataKuliah = $pbl->mataKuliah;
+
+                    // Ambil mata kuliah untuk validasi keahlian
+                    $mataKuliah = $pbl->mataKuliah;
                     if (!$mataKuliah) {
                         $results[] = [
                             'pbl_id' => $item['pbl_id'],
@@ -525,34 +532,35 @@ class MataKuliahPBLController extends Controller
 
                     // Validasi keahlian_required hanya untuk Dosen Mengajar (bukan Koordinator/Tim Blok)
                     if (!$isKoordinatorOrTimBlok) {
-            if (empty($mataKuliah->keahlian_required) || count($mataKuliah->keahlian_required) === 0) {
-                $results[] = [
-                    'pbl_id' => $item['pbl_id'],
-                    'dosen_id' => $item['dosen_id'],
-                    'status' => 'error',
-                    'message' => 'Mata kuliah belum diisi keahlian_required',
-                ];
-                continue;
-            }
+                        if (empty($mataKuliah->keahlian_required) || count($mataKuliah->keahlian_required) === 0) {
+                            $results[] = [
+                                'pbl_id' => $item['pbl_id'],
+                                'dosen_id' => $item['dosen_id'],
+                                'status' => 'error',
+                                'message' => 'Mata kuliah belum diisi keahlian_required',
+                            ];
+                            continue;
+                        }
                     }
 
-            // Cek existing assignment
-            $existing = PBLMapping::where('pbl_id', $item['pbl_id'])->where('dosen_id', $item['dosen_id'])->first();
-            if ($existing) {
-                $results[] = [
-                    'pbl_id' => $item['pbl_id'],
-                    'dosen_id' => $item['dosen_id'],
-                    'status' => 'skipped',
-                    'message' => 'Sudah diassign',
-                ];
-                continue;
-            }
+                    // Cek existing assignment
+                    $existing = PBLMapping::where('pbl_id', $item['pbl_id'])->where('dosen_id', $item['dosen_id'])->first();
+                    if ($existing) {
+                        $results[] = [
+                            'pbl_id' => $item['pbl_id'],
+                            'dosen_id' => $item['dosen_id'],
+                            'status' => 'skipped',
+                            'message' => 'Sudah diassign',
+                        ];
+                        continue;
+                    }
 
-            // Assign
-            PBLMapping::create([
-                'pbl_id' => $item['pbl_id'],
-                'dosen_id' => $item['dosen_id'],
-            ]);
+                    // Assign
+                    PBLMapping::create([
+                        'pbl_id' => $item['pbl_id'],
+                        'dosen_id' => $item['dosen_id'],
+                        'role' => $item['role'] ?? 'dosen_mengajar',
+                    ]);
 
                     // === PENTING: Buat DosenPeran record untuk Dosen Mengajar ===
                     // Jika dosen ini bukan Koordinator atau Tim Blok, buat record DosenPeran
@@ -597,15 +605,15 @@ class MataKuliahPBLController extends Controller
                         }
                     }
 
-            // Increment pbl_assignment_count
+                    // Increment pbl_assignment_count
                     $user = User::find($item['dosen_id']);
-            if ($user) $user->increment('pbl_assignment_count');
+                    if ($user) $user->increment('pbl_assignment_count');
 
                     // === KUMPULKAN DATA UNTUK NOTIFIKASI KONSOLIDASI ===
                     $dosenId = $item['dosen_id'];
                     $blok = $mataKuliah->blok ?? 0;
                     $semester = $mataKuliah->semester ?? 1; // Default ke semester 1 (Ganjil) jika tidak ada
-                    
+
                     // Ambil peran yang sebenarnya dari database DosenPeran
                     $tipePeran = 'Dosen Mengajar'; // default
                     if ($isKoordinatorOrTimBlok) {
@@ -615,7 +623,7 @@ class MataKuliahPBLController extends Controller
                             'mata_kuliah_kode' => $mataKuliah->kode,
                             'semester' => $mataKuliah->semester
                         ])->whereIn('tipe_peran', ['koordinator', 'tim_blok'])->first();
-                        
+
                         if ($dosenPeran) {
                             // Gunakan peran yang sebenarnya dari database
                             $tipePeran = ucfirst(str_replace('_', ' ', $dosenPeran->tipe_peran));
@@ -623,7 +631,7 @@ class MataKuliahPBLController extends Controller
                             $tipePeran = 'Tim Blok'; // fallback
                         }
                     }
-                    
+
                     if (!isset($blockNotifications[$dosenId])) {
                         $blockNotifications[$dosenId] = [];
                     }
@@ -640,7 +648,7 @@ class MataKuliahPBLController extends Controller
                             'durasi' => '8 Minggu'
                         ];
                     }
-                    
+
                     // Tambahkan modul ke array
                     $blockNotifications[$dosenId][$blok][$semester]['moduls'][] = [
                         'modul_ke' => $pbl->modul_ke,
@@ -651,18 +659,18 @@ class MataKuliahPBLController extends Controller
                     // Buat jadwal PBL untuk dosen ini
                     $jadwalResult = $this->createJadwalPBL($pbl, $item['dosen_id']);
                     \Log::info("JadwalPBL creation result for PBL {$pbl->id}, Dosen {$item['dosen_id']}: " . ($jadwalResult ? 'Success' : 'Failed'));
-            
-            activity()
-                ->causedBy(Auth::user())
-                ->performedOn($pbl)
-                ->withProperties(['attributes' => ['dosen_id' => $item['dosen_id']]])
-                ->log("Dosen dengan ID {$item['dosen_id']} di-assign ke PBL (batch)");
 
-            $results[] = [
-                'pbl_id' => $item['pbl_id'],
-                'dosen_id' => $item['dosen_id'],
-                'status' => 'success',
-            ];
+                    activity()
+                        ->causedBy(Auth::user())
+                        ->performedOn($pbl)
+                        ->withProperties(['attributes' => ['dosen_id' => $item['dosen_id']]])
+                        ->log("Dosen dengan ID {$item['dosen_id']} di-assign ke PBL (batch)");
+
+                    $results[] = [
+                        'pbl_id' => $item['pbl_id'],
+                        'dosen_id' => $item['dosen_id'],
+                        'status' => 'success',
+                    ];
                 } catch (\Exception $e) {
                     $results[] = [
                         'pbl_id' => $item['pbl_id'],
@@ -675,7 +683,7 @@ class MataKuliahPBLController extends Controller
 
             // === KIRIM NOTIFIKASI KONSOLIDASI PER BLOK ===
             $notificationController = new NotificationController();
-            
+
             foreach ($blockNotifications as $dosenId => $blokData) {
                 foreach ($blokData as $blok => $semesterData) {
                     foreach ($semesterData as $semester => $blockInfo) {
@@ -683,12 +691,12 @@ class MataKuliahPBLController extends Controller
                         $totalKelompok = \App\Models\KelompokKecil::where('semester', $semester)
                             ->distinct('nama_kelompok')
                             ->count('nama_kelompok');
-                        
+
                         // Tambahkan total kelompok ke data
                         $blockInfo['total_kelompok'] = $totalKelompok;
                         $blockInfo['blok'] = $blok;
                         $blockInfo['semester'] = $semester; // Tambahkan kembali untuk NotificationController
-                        
+
                         // Kirim notifikasi konsolidasi
                         try {
                             $notificationController->createPBLBlockAssignmentNotification($dosenId, $blockInfo);
@@ -735,13 +743,13 @@ class MataKuliahPBLController extends Controller
 
         foreach ($data['pbl_ids'] as $pblId) {
             try {
-            $pbl = PBL::find($pblId);
-            if ($pbl) {
-                activity()
-                    ->causedBy(Auth::user())
-                    ->performedOn($pbl)
-                    ->log("Semua dosen pada PBL ini telah di-reset (batch)");
-            }
+                $pbl = PBL::find($pblId);
+                if ($pbl) {
+                    activity()
+                        ->causedBy(Auth::user())
+                        ->performedOn($pbl)
+                        ->log("Semua dosen pada PBL ini telah di-reset (batch)");
+                }
 
                 // Ambil semua dosen yang di-assign ke PBL ini sebelum dihapus
                 $assignedDosenIds = PBLMapping::where('pbl_id', $pblId)
@@ -852,7 +860,7 @@ class MataKuliahPBLController extends Controller
 
         // Check if there are any assignments (any assignment counts as "generated")
         $hasDosenMengajar = $assignments->isNotEmpty();
-        
+
         // Log untuk debugging
         Log::info("Blok {$blokId} validation", [
             'has_pbl' => true,
@@ -877,7 +885,7 @@ class MataKuliahPBLController extends Controller
     {
         try {
             \Log::info("Creating JadwalPBL for PBL ID: {$pbl->id}, Dosen ID: {$dosenId}");
-            
+
             // Ambil data mata kuliah
             $mataKuliah = $pbl->mataKuliah;
             if (!$mataKuliah) {
@@ -953,24 +961,24 @@ class MataKuliahPBLController extends Controller
                 'pbl.mataKuliah',
                 'dosen'
             ])
-            ->where('dosen_id', $dosenId)
-            ->get();
+                ->where('dosen_id', $dosenId)
+                ->get();
 
             // Group by blok and semester
             $groupedAssignments = [];
-            
+
             foreach ($pblMappings as $mapping) {
                 $pbl = $mapping->pbl;
                 $mataKuliah = $pbl->mataKuliah;
-                
+
                 if (!$mataKuliah) continue;
-                
+
                 $blok = $mataKuliah->blok;
                 $semester = $mataKuliah->semester;
                 $semesterType = $semester % 2 === 1 ? 'ganjil' : 'genap';
-                
+
                 $key = "blok_{$blok}_semester_{$semester}";
-                
+
                 if (!isset($groupedAssignments[$key])) {
                     $groupedAssignments[$key] = [
                         'blok' => $blok,
@@ -987,16 +995,16 @@ class MataKuliahPBLController extends Controller
                         'status' => 'generated'
                     ];
                 }
-                
+
                 // Get dosen peran for this assignment
                 $dosenPeran = DosenPeran::where([
                     'user_id' => $dosenId,
                     'mata_kuliah_kode' => $mataKuliah->kode,
                     'semester' => $semester
                 ])->first();
-                
+
                 $tipePeran = $dosenPeran ? $dosenPeran->tipe_peran : 'dosen_mengajar';
-                
+
                 $groupedAssignments[$key]['pbl_assignments'][] = [
                     'pbl_id' => $pbl->id,
                     'modul_ke' => $pbl->modul_ke,
@@ -1006,38 +1014,37 @@ class MataKuliahPBLController extends Controller
                     'waktu' => '5x50 menit',
                     'durasi_modul' => '2 Minggu'
                 ];
-                
+
                 $groupedAssignments[$key]['total_pbl']++;
             }
-            
+
             // Convert to array and sort by blok and semester
             $result = array_values($groupedAssignments);
-            usort($result, function($a, $b) {
+            usort($result, function ($a, $b) {
                 if ($a['semester'] !== $b['semester']) {
                     return $a['semester'] - $b['semester'];
                 }
                 return $a['blok'] - $b['blok'];
             });
-            
+
             return response()->json([
                 'message' => 'Data PBL assignments berhasil diambil',
                 'data' => $result,
                 'total_blok' => count($result)
             ]);
-            
         } catch (\Exception $e) {
             \Log::error('Error in getDosenPBLAssignments: ' . $e->getMessage(), [
                 'dosen_id' => $dosenId,
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'message' => 'Terjadi kesalahan saat mengambil data PBL assignments',
                 'data' => []
             ], 500);
         }
     }
-    
+
     /**
      * Helper method to get display text for peran
      */

@@ -33,6 +33,8 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('jadwal_praktikum_id');
             $table->unsignedBigInteger('dosen_id');
+            $table->enum('status_konfirmasi', ['belum_konfirmasi', 'bisa', 'tidak_bisa'])->default('belum_konfirmasi');
+            $table->text('alasan_konfirmasi')->nullable();
             $table->timestamps();
 
             $table->foreign('jadwal_praktikum_id')->references('id')->on('jadwal_praktikum')->onDelete('cascade');

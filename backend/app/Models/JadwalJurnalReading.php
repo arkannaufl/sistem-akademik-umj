@@ -24,6 +24,8 @@ class JadwalJurnalReading extends Model
         'ruangan_id',
         'topik',
         'file_jurnal',
+        'status_konfirmasi',
+        'alasan_konfirmasi',
     ];
 
     protected $casts = [

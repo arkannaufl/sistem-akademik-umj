@@ -15,7 +15,8 @@ class PBLMapping extends Model
 
     protected $fillable = [
         'pbl_id',
-        'dosen_id'
+        'dosen_id',
+        'role'
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -37,4 +38,4 @@ class PBLMapping extends Model
     {
         return $this->belongsTo(User::class, 'dosen_id');
     }
-} 
+}

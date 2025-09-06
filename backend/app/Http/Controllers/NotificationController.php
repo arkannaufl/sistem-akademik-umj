@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class NotificationController extends Controller
 {
@@ -197,8 +198,8 @@ class NotificationController extends Controller
      */
     public function getAllNotificationsForAdmin(Request $request)
     {
-        // Check if user is admin (you can customize this logic)
-        if (!Auth::user() || !in_array(Auth::user()->role, ['admin', 'super_admin'])) {
+        // Check if user is admin or tim akademik
+        if (!Auth::user() || !in_array(Auth::user()->role, ['admin', 'super_admin', 'tim_akademik'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -254,7 +255,8 @@ class NotificationController extends Controller
                     'read_time' => $notification->read_at ? $notification->read_at->setTimezone('Asia/Jakarta')->format('d M Y, H:i') : '-',
                     'time_since_read' => $notification->read_at ? $notification->read_at->diffForHumans() : '-',
                     'created_time' => $notification->created_at->setTimezone('Asia/Jakarta')->format('d M Y, H:i'),
-                    'created_time_ago' => $notification->created_at->diffForHumans()
+                    'created_time_ago' => $notification->created_at->diffForHumans(),
+                    'data' => $notification->data // Add this line to include the data field
                 ];
             });
 
@@ -266,8 +268,8 @@ class NotificationController extends Controller
      */
     public function getNotificationStats(Request $request)
     {
-        // Check if user is admin
-        if (!Auth::user() || !in_array(Auth::user()->role, ['admin', 'super_admin'])) {
+        // Check if user is admin or tim akademik
+        if (!Auth::user() || !in_array(Auth::user()->role, ['admin', 'super_admin', 'tim_akademik'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -315,6 +317,11 @@ class NotificationController extends Controller
             $q->where('role', 'mahasiswa');
         })->count();
 
+        // Get confirmation breakdown
+        $bisaMengajar = Notification::where('title', 'like', '%Bisa Mengajar%')->count();
+        $tidakBisaMengajar = Notification::where('title', 'like', '%Tidak Bisa Mengajar%')->count();
+        $totalConfirmations = $bisaMengajar + $tidakBisaMengajar;
+
         return response()->json([
             'total_notifications' => $totalNotifications,
             'read_notifications' => $readNotifications,
@@ -325,6 +332,11 @@ class NotificationController extends Controller
             'user_type_breakdown' => [
                 'dosen' => $dosenNotifications,
                 'mahasiswa' => $mahasiswaNotifications
+            ],
+            'confirmation_breakdown' => [
+                'bisa_mengajar' => $bisaMengajar,
+                'tidak_bisa_mengajar' => $tidakBisaMengajar,
+                'total_confirmations' => $totalConfirmations
             ],
             'last_7_days' => [
                 'notifications_sent' => $recentNotifications,
@@ -366,5 +378,335 @@ class NotificationController extends Controller
         $notification->delete();
 
         return response()->json(['message' => 'Notification deleted']);
+    }
+
+    /**
+     * Ask dosen to teach again (minta dosen yang sama mengajar lagi)
+     */
+    public function askDosenAgain(Request $request)
+    {
+        $request->validate([
+            'notification_id' => 'required|exists:notifications,id',
+            'jadwal_id' => 'required|integer',
+            'jadwal_type' => 'nullable|string'
+        ]);
+
+        try {
+            $notification = Notification::findOrFail($request->notification_id);
+            
+            // Update notification status to pending
+            $notification->update([
+                'is_read' => false,
+                'read_at' => null
+            ]);
+
+            // Determine jadwal_type from notification data or request
+            $jadwalType = $request->jadwal_type;
+            if (!$jadwalType && isset($notification->data['jadwal_type'])) {
+                $jadwalType = $notification->data['jadwal_type'];
+            }
+            
+            // If still no jadwal_type, try to determine from notification title/message
+            if (!$jadwalType) {
+                $title = strtolower($notification->title);
+                if (strpos($title, 'pbl') !== false) {
+                    $jadwalType = 'pbl';
+                } elseif (strpos($title, 'kuliah besar') !== false) {
+                    $jadwalType = 'kuliah_besar';
+                } elseif (strpos($title, 'praktikum') !== false) {
+                    $jadwalType = 'praktikum';
+                } elseif (strpos($title, 'jurnal') !== false) {
+                    $jadwalType = 'jurnal_reading';
+                } elseif (strpos($title, 'csr') !== false) {
+                    $jadwalType = 'csr';
+                } elseif (strpos($title, 'non blok non csr') !== false) {
+                    $jadwalType = 'non_blok_non_csr';
+                }
+            }
+            
+            if (!$jadwalType) {
+                return response()->json([
+                    'message' => 'Jenis jadwal tidak dapat ditentukan',
+                    'error' => 'Field jadwal_type diperlukan untuk reset konfirmasi'
+                ], 400);
+            }
+
+            // Reset confirmation status in the original schedule
+            $this->resetScheduleConfirmationStatus($request->jadwal_id, $jadwalType, $notification->user_id);
+
+            // Create new notification for the same dosen
+            $newNotification = Notification::create([
+                'user_id' => $notification->user_id,
+                'title' => 'Konfirmasi Ulang Ketersediaan',
+                'message' => 'Admin meminta Anda untuk mengkonfirmasi ulang ketersediaan mengajar pada jadwal yang sama.',
+                'type' => 'info',
+                'is_read' => false,
+                'data' => $notification->data
+            ]);
+
+            return response()->json([
+                'message' => 'Dosen diminta untuk konfirmasi ulang',
+                'notification' => $newNotification
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal meminta dosen konfirmasi ulang',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reset confirmation status in the original schedule
+     */
+    private function resetScheduleConfirmationStatus($jadwalId, $jadwalType, $userId)
+    {
+        try {
+            switch ($jadwalType) {
+                case 'pbl':
+                    $jadwal = \App\Models\JadwalPBL::find($jadwalId);
+                    
+                    if ($jadwal) {
+                        // Cek apakah dosen memiliki akses
+                        $hasAccess = false;
+                        if ($jadwal->dosen_id == $userId) {
+                            $hasAccess = true;
+                        } elseif ($jadwal->dosen_ids && is_array($jadwal->dosen_ids) && !empty($jadwal->dosen_ids)) {
+                            $hasAccess = in_array($userId, $jadwal->dosen_ids);
+                        }
+                        
+                        if ($hasAccess) {
+                            $jadwal->update([
+                                'status_konfirmasi' => 'belum_konfirmasi',
+                                'alasan_konfirmasi' => null
+                            ]);
+                            \Log::info("Reset PBL confirmation status for jadwal ID: {$jadwalId}, user ID: {$userId}");
+                        } else {
+                            \Log::warning("User {$userId} does not have access to PBL jadwal ID: {$jadwalId}");
+                        }
+                    } else {
+                        \Log::warning("PBL jadwal ID: {$jadwalId} not found");
+                    }
+                    break;
+                    
+                case 'kuliah_besar':
+                    $jadwal = \App\Models\JadwalKuliahBesar::where('id', $jadwalId)
+                        ->where(function($query) use ($userId) {
+                            $query->where('dosen_id', $userId)
+                                  ->orWhereJsonContains('dosen_ids', $userId);
+                        })
+                        ->first();
+                    
+                    if ($jadwal) {
+                        $jadwal->update([
+                            'status_konfirmasi' => 'belum_konfirmasi',
+                            'alasan_konfirmasi' => null
+                        ]);
+                    }
+                    break;
+                    
+                case 'non_blok_non_csr':
+                    $jadwal = \App\Models\JadwalNonBlokNonCSR::find($jadwalId);
+                    
+                    if ($jadwal) {
+                        // Cek apakah dosen memiliki akses
+                        $hasAccess = false;
+                        if ($jadwal->dosen_id == $userId) {
+                            $hasAccess = true;
+                        } elseif ($jadwal->dosen_ids && is_array($jadwal->dosen_ids) && !empty($jadwal->dosen_ids)) {
+                            $hasAccess = in_array($userId, $jadwal->dosen_ids);
+                        }
+                        
+                        if ($hasAccess) {
+                            $jadwal->update([
+                                'status_konfirmasi' => 'belum_konfirmasi',
+                                'alasan_konfirmasi' => null
+                            ]);
+                            \Log::info("Reset Non Blok Non CSR confirmation status for jadwal ID: {$jadwalId}, user ID: {$userId}");
+                        } else {
+                            \Log::warning("User {$userId} does not have access to Non Blok Non CSR jadwal ID: {$jadwalId}");
+                        }
+                    } else {
+                        \Log::warning("Non Blok Non CSR jadwal ID: {$jadwalId} not found");
+                    }
+                    break;
+                    
+                case 'csr':
+                    $jadwal = \App\Models\JadwalCSR::where('id', $jadwalId)
+                        ->where('dosen_id', $userId)
+                        ->first();
+                    
+                    if ($jadwal) {
+                        $jadwal->update([
+                            'status_konfirmasi' => 'belum_konfirmasi',
+                            'alasan_konfirmasi' => null
+                        ]);
+                    }
+                    break;
+                    
+                case 'praktikum':
+                    $jadwal = \App\Models\JadwalPraktikum::where('id', $jadwalId)
+                        ->where('dosen_id', $userId)
+                        ->first();
+                    
+                    if ($jadwal) {
+                        $jadwal->update([
+                            'status_konfirmasi' => 'belum_konfirmasi',
+                            'alasan_konfirmasi' => null
+                        ]);
+                    }
+                    break;
+                    
+                case 'jurnal_reading':
+                    $jadwal = \App\Models\JadwalJurnalReading::where('id', $jadwalId)
+                        ->where('dosen_id', $userId)
+                        ->first();
+                    
+                    if ($jadwal) {
+                        $jadwal->update([
+                            'status_konfirmasi' => 'belum_konfirmasi',
+                            'alasan_konfirmasi' => null
+                        ]);
+                    }
+                    break;
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to reset schedule confirmation status: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Replace dosen with another dosen
+     */
+    public function replaceDosen(Request $request)
+    {
+        $request->validate([
+            'notification_id' => 'required|exists:notifications,id',
+            'jadwal_id' => 'required|integer',
+            'jadwal_type' => 'required|string',
+            'new_dosen_id' => 'required|exists:users,id'
+        ]);
+
+        try {
+            $notification = Notification::findOrFail($request->notification_id);
+            $newDosen = User::findOrFail($request->new_dosen_id);
+            
+            // Check if new dosen is available (no conflict)
+            $isAvailable = $this->checkDosenAvailabilityPrivate($request->jadwal_id, $request->jadwal_type, $request->new_dosen_id);
+            
+            if (!$isAvailable) {
+                return response()->json([
+                    'message' => 'Dosen pengganti tidak tersedia pada waktu tersebut',
+                    'error' => 'Dosen memiliki jadwal yang bentrok'
+                ], 400);
+            }
+
+            // Update the schedule with new dosen
+            $this->updateScheduleWithNewDosen($request->jadwal_id, $request->jadwal_type, $request->new_dosen_id);
+
+            // Update original notification status
+            $notification->update([
+                'is_read' => true,
+                'read_at' => now()
+            ]);
+
+            // Create notification for new dosen
+            $newNotification = Notification::create([
+                'user_id' => $request->new_dosen_id,
+                'title' => 'Penugasan Jadwal Baru',
+                'message' => "Anda ditugaskan sebagai dosen pengganti untuk jadwal yang sebelumnya ditolak oleh dosen lain. Silakan konfirmasi ketersediaan Anda.",
+                'type' => 'info',
+                'is_read' => false,
+                'data' => array_merge($notification->data ?? [], [
+                    'replacement' => true,
+                    'original_dosen' => $notification->data['dosen_name'] ?? $notification->data['sender_name'] ?? 'Unknown',
+                    'admin_action' => 'replaced'
+                ])
+            ]);
+
+            return response()->json([
+                'message' => 'Dosen berhasil diganti',
+                'new_dosen' => $newDosen,
+                'notification' => $newNotification
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal mengganti dosen',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Check if dosen is available at specific time
+     */
+    public function checkDosenAvailability(Request $request)
+    {
+        $request->validate([
+            'jadwal_id' => 'required|integer',
+            'jadwal_type' => 'required|string',
+            'dosen_id' => 'required|exists:users,id'
+        ]);
+
+        $isAvailable = $this->checkDosenAvailabilityPrivate(
+            $request->jadwal_id, 
+            $request->jadwal_type, 
+            $request->dosen_id
+        );
+
+        return response()->json([
+            'available' => $isAvailable,
+            'dosen_id' => $request->dosen_id
+        ]);
+    }
+
+    /**
+     * Private method to check dosen availability
+     */
+    private function checkDosenAvailabilityPrivate($jadwalId, $jadwalType, $dosenId)
+    {
+        // This is a simplified check - in real implementation, you would check against actual schedules
+        // For now, we'll assume all dosen are available (you can implement proper conflict checking)
+        
+        // TODO: Implement proper schedule conflict checking
+        // Check if dosen has any conflicting schedules at the same time
+        
+        return true; // Placeholder - always return true for now
+    }
+
+    /**
+     * Private method to update schedule with new dosen
+     */
+    private function updateScheduleWithNewDosen($jadwalId, $jadwalType, $newDosenId)
+    {
+        // Update the schedule based on jadwal_type
+        switch ($jadwalType) {
+            case 'pbl':
+                // Update PBL schedule
+                \DB::table('jadwal_pbl')->where('id', $jadwalId)->update(['dosen_id' => $newDosenId]);
+                break;
+            case 'kuliah_besar':
+                // Update Kuliah Besar schedule
+                \DB::table('jadwal_kuliah_besar')->where('id', $jadwalId)->update(['dosen_id' => $newDosenId]);
+                break;
+            case 'praktikum':
+                // Update Praktikum schedule (pivot table)
+                \DB::table('jadwal_praktikum_dosen')->where('jadwal_praktikum_id', $jadwalId)->update(['dosen_id' => $newDosenId]);
+                break;
+            case 'jurnal':
+                // Update Jurnal Reading schedule
+                \DB::table('jadwal_jurnal_reading')->where('id', $jadwalId)->update(['dosen_id' => $newDosenId]);
+                break;
+            case 'csr':
+                // Update CSR schedule
+                \DB::table('jadwal_csr')->where('id', $jadwalId)->update(['dosen_id' => $newDosenId]);
+                break;
+            case 'non_blok_non_csr':
+                // Update Non Blok Non CSR schedule
+                \DB::table('jadwal_non_blok_non_csr')->where('id', $jadwalId)->update(['dosen_id' => $newDosenId]);
+                break;
+        }
     }
 }

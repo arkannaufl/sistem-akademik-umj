@@ -24,6 +24,8 @@ use App\Http\Controllers\JadwalNonBlokNonCSRController;
 use App\Http\Controllers\KelompokBesarAntaraController;
 use App\Http\Controllers\KelompokKecilAntaraController;
 use App\Http\Controllers\DashboardTimAkademikController;
+use App\Http\Controllers\ForumController;
+use App\Http\Controllers\SupportCenterController;
 
 
 Route::middleware('throttle:5,1')->post('/login', [AuthController::class, 'login']); // 5 attempts per minute
@@ -44,7 +46,9 @@ Route::middleware(['auth:sanctum', 'validate.token'])->put('/profile', [AuthCont
 
 Route::middleware(['auth:sanctum', 'validate.token'])->post('/profile/avatar', [AuthController::class, 'updateAvatar']);
 
-Route::middleware(['auth:sanctum', 'validate.token', 'role:super_admin,tim_akademik'])->apiResource('users', \App\Http\Controllers\UserController::class);
+Route::middleware(['auth:sanctum', 'validate.token'])->get('/users/search', [UserController::class, 'search']);
+
+Route::middleware(['auth:sanctum', 'validate.token', 'role:super_admin,tim_akademik,dosen'])->apiResource('users', \App\Http\Controllers\UserController::class);
 
 Route::middleware(['auth:sanctum', 'validate.token', 'role:super_admin'])->post('/users/import-dosen', [UserController::class, 'importDosen']);
 
@@ -139,8 +143,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dosen/{dosenId}/pbl-assignments', [App\Http\Controllers\MataKuliahPBLController::class, 'getDosenPBLAssignments']);
     
     // Admin notification tracking routes (MUST come BEFORE parameterized routes)
-    Route::middleware(['auth:sanctum', 'role:super_admin'])->get('/notifications/admin/all', [App\Http\Controllers\NotificationController::class, 'getAllNotificationsForAdmin']);
-    Route::middleware(['auth:sanctum', 'role:super_admin'])->get('/notifications/admin/stats', [App\Http\Controllers\NotificationController::class, 'getNotificationStats']);
+    Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->get('/notifications/admin/all', [App\Http\Controllers\NotificationController::class, 'getAllNotificationsForAdmin']);
+    Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->get('/notifications/admin/stats', [App\Http\Controllers\NotificationController::class, 'getNotificationStats']);
     
     // Notification routes - Allow both super_admin and dosen to access their respective endpoints
     Route::middleware(['auth:sanctum'])->get('/notifications/dosen/{userId}', [App\Http\Controllers\NotificationController::class, 'getUserNotifications']);
@@ -153,6 +157,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(['auth:sanctum'])->delete('/notifications/dosen/{userId}/clear-all', [App\Http\Controllers\NotificationController::class, 'clearAllNotifications']);
     Route::middleware(['auth:sanctum', 'role:super_admin'])->delete('/notifications/admin/{userId}/clear-all', [App\Http\Controllers\NotificationController::class, 'clearAllNotifications']);
     Route::middleware(['auth:sanctum', 'sanitize'])->delete('/notifications/{notificationId}', [App\Http\Controllers\NotificationController::class, 'deleteNotification']);
+    
+    // Dosen replacement routes
+    Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->post('/notifications/ask-again', [App\Http\Controllers\NotificationController::class, 'askDosenAgain']);
+    Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->post('/notifications/replace-dosen', [App\Http\Controllers\NotificationController::class, 'replaceDosen']);
+    Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->get('/notifications/check-dosen-availability', [App\Http\Controllers\NotificationController::class, 'checkDosenAvailability']);
 });
 
 Route::middleware('auth:sanctum')->get('/kelompok-besar', [KelompokBesarController::class, 'index']);
@@ -214,7 +223,29 @@ Route::middleware('auth:sanctum')->prefix('mata-kuliah/{kode}')->group(function 
 
 // Jadwal PBL untuk dosen
 Route::middleware('auth:sanctum')->get('/jadwal-pbl/dosen/{dosenId}', [App\Http\Controllers\JadwalPBLController::class, 'getJadwalForDosen']);
-Route::middleware('auth:sanctum')->post('/jadwal-pbl/{jadwalId}/konfirmasi', [App\Http\Controllers\JadwalPBLController::class, 'konfirmasiJadwal']);
+Route::middleware('auth:sanctum')->put('/jadwal-pbl/{jadwalId}/konfirmasi', [App\Http\Controllers\JadwalPBLController::class, 'konfirmasiJadwal']);
+
+// Jadwal Kuliah Besar untuk dosen
+Route::middleware('auth:sanctum')->get('/jadwal-kuliah-besar/dosen/{dosenId}', [JadwalKuliahBesarController::class, 'getJadwalForDosen']);
+Route::middleware('auth:sanctum')->put('/jadwal-kuliah-besar/{id}/konfirmasi', [JadwalKuliahBesarController::class, 'konfirmasi']);
+Route::middleware('auth:sanctum')->get('/riwayat-konfirmasi/dosen/{dosenId}', [JadwalKuliahBesarController::class, 'getRiwayatDosen']);
+
+// Jadwal Praktikum untuk dosen
+Route::middleware('auth:sanctum')->get('/jadwal-praktikum/dosen/{dosenId}', [App\Http\Controllers\JadwalPraktikumController::class, 'getJadwalForDosen']);
+Route::middleware('auth:sanctum')->put('/jadwal-praktikum/{id}/konfirmasi', [App\Http\Controllers\JadwalPraktikumController::class, 'konfirmasi']);
+
+
+// Jadwal Jurnal Reading untuk dosen
+Route::middleware('auth:sanctum')->get('/jadwal-jurnal-reading/dosen/{dosenId}', [App\Http\Controllers\JadwalJurnalReadingController::class, 'getJadwalForDosen']);
+Route::middleware('auth:sanctum')->put('/jadwal-jurnal-reading/{id}/konfirmasi', [App\Http\Controllers\JadwalJurnalReadingController::class, 'konfirmasi']);
+
+// Jadwal CSR untuk dosen
+Route::middleware('auth:sanctum')->get('/jadwal-csr/dosen/{dosenId}', [App\Http\Controllers\JadwalCSRController::class, 'getJadwalForDosen']);
+Route::middleware('auth:sanctum')->put('/jadwal-csr/{id}/konfirmasi', [App\Http\Controllers\JadwalCSRController::class, 'konfirmasiJadwal']);
+
+// Jadwal Non Blok Non CSR untuk dosen
+Route::middleware('auth:sanctum')->get('/jadwal-non-blok-non-csr/dosen/{dosenId}', [App\Http\Controllers\JadwalNonBlokNonCSRController::class, 'getJadwalForDosen']);
+Route::middleware('auth:sanctum')->put('/jadwal-non-blok-non-csr/{id}/konfirmasi', [App\Http\Controllers\JadwalNonBlokNonCSRController::class, 'konfirmasiJadwal']);
 
 Route::middleware('auth:sanctum')->prefix('mata-kuliah/{kode}/kelompok/{kelompok}/pertemuan/{pertemuan}')->group(function () {
     Route::get('penilaian-pbl', [App\Http\Controllers\PenilaianPBLController::class, 'index']);
@@ -235,6 +266,7 @@ Route::middleware('auth:sanctum')->prefix('kuliah-besar')->group(function () {
     Route::post('/jadwal/{kode}', [JadwalKuliahBesarController::class, 'store']);
     Route::put('/jadwal/{kode}/{id}', [JadwalKuliahBesarController::class, 'update']);
     Route::delete('/jadwal/{kode}/{id}', [JadwalKuliahBesarController::class, 'destroy']);
+    Route::put('/jadwal/{id}/konfirmasi', [JadwalKuliahBesarController::class, 'konfirmasi']);
     Route::get('/materi', [JadwalKuliahBesarController::class, 'materi']);
     Route::get('/pengampu', [JadwalKuliahBesarController::class, 'pengampu']);
     Route::get('/all-dosen', [JadwalKuliahBesarController::class, 'allDosen']);
@@ -406,3 +438,69 @@ Route::get('/test/dashboard-health', function () {
 
 // Test dashboard controller tanpa auth untuk debugging
 Route::get('/test/dashboard-data', [App\Http\Controllers\DashboardSuperAdminController::class, 'index']);
+
+// Forum Diskusi Routes
+Route::prefix('forum')->group(function () {
+    // Categories tanpa auth untuk testing
+    Route::get('/categories', [ForumController::class, 'getCategories']);
+
+    // Forums CRUD dengan auth
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/categories/{categorySlug}/forums', [ForumController::class, 'getForumsByCategory']);
+        Route::get('/', [ForumController::class, 'index']);
+        Route::post('/', [ForumController::class, 'store']);
+        Route::put('/{id}', [ForumController::class, 'update']);
+        Route::delete('/{id}', [ForumController::class, 'destroy']);
+        Route::post('/{id}/like', [ForumController::class, 'toggleLike']);
+
+        // Forum Replies
+        Route::post('/{forumId}/replies', [ForumController::class, 'storeReply']);
+        Route::put('/replies/{replyId}', [ForumController::class, 'updateReply']);
+        Route::delete('/replies/{replyId}', [ForumController::class, 'deleteReply']);
+        Route::post('/replies/{replyId}/like', [ForumController::class, 'toggleReplyLike']);
+
+        // Bookmark Routes
+        Route::post('/replies/{replyId}/bookmark', [ForumController::class, 'toggleBookmark']);
+        Route::get('/replies/{replyId}/bookmark-status', [ForumController::class, 'checkBookmarkStatus']);
+        Route::get('/bookmarks', [ForumController::class, 'getUserBookmarks']);
+
+        // Forum bookmarks
+        Route::post('/{forumId}/bookmark', [ForumController::class, 'toggleForumBookmark']);
+        Route::get('/bookmarks/forums', [ForumController::class, 'getUserForumBookmarks']);
+        Route::get('/bookmarks/forums/debug', [ForumController::class, 'getUserForumBookmarksDebug']);
+        Route::get('/bookmarks/forums/simple', [ForumController::class, 'getUserForumBookmarksSimple']);
+    });
+
+    // Forum detail tanpa auth agar bisa diakses tanpa login
+    Route::get('/{slug}', [ForumController::class, 'show']);
+
+    // Test route untuk nested reply (sementara, hapus setelah testing)
+    Route::post('/{forumId}/replies/test', [ForumController::class, 'storeReplyTest']);
+
+    // Categories CRUD dengan auth (hanya Super Admin & Tim Akademik)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/categories', [ForumController::class, 'storeCategory']);
+        Route::put('/categories/{id}', [ForumController::class, 'updateCategory']);
+        Route::delete('/categories/{id}', [ForumController::class, 'destroyCategory']);
+    });
+});
+
+// Support Center Routes
+Route::prefix('support-center')->group(function () {
+    // Public routes (no auth required for form submissions)
+    Route::post('/bug-report', [SupportCenterController::class, 'submitBugReport']);
+    Route::post('/feature-request', [SupportCenterController::class, 'submitFeatureRequest']);
+    Route::post('/contact', [SupportCenterController::class, 'submitContact']);
+
+    // Protected routes (auth required)
+    Route::middleware('auth:sanctum')->group(function () {
+        // Get developers (all users can view)
+        Route::get('/developers', [SupportCenterController::class, 'getDevelopers']);
+        Route::get('/developers/{id}', [SupportCenterController::class, 'getDeveloper']);
+
+        // CRUD developers (Super Admin only)
+        Route::post('/developers', [SupportCenterController::class, 'store']);
+        Route::put('/developers/{id}', [SupportCenterController::class, 'update']);
+        Route::delete('/developers/{id}', [SupportCenterController::class, 'destroy']);
+    });
+});

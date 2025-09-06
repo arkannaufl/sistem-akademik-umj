@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
             RuanganSeeder::class,
             CSRSeeder::class,
             MataKuliahKeahlianSeeder::class,
+            ForumCategorySeeder::class,
         ]);
 
         // Aktifkan lagi logging Spatie

@@ -41,7 +41,7 @@ class UserController extends Controller
         if ($request->role === 'dosen') {
             $users = $users->map(function ($user) {
                 $userArr = $user->toArray();
-                $userArr['dosen_peran'] = $user->dosenPeran()->with('mataKuliah')->get()->map(function($peran) {
+                $userArr['dosen_peran'] = $user->dosenPeran()->with('mataKuliah')->get()->map(function ($peran) {
                     return [
                         'id' => $peran->id,
                         'tipe_peran' => $peran->tipe_peran,
@@ -67,7 +67,7 @@ class UserController extends Controller
             // Jika user adalah dosen, tambahkan data dosen_peran
             if ($user->role === 'dosen') {
                 $userArr = $user->toArray();
-                $userArr['dosen_peran'] = $user->dosenPeran()->with('mataKuliah')->get()->map(function($peran) {
+                $userArr['dosen_peran'] = $user->dosenPeran()->with('mataKuliah')->get()->map(function ($peran) {
                     return [
                         'id' => $peran->id,
                         'tipe_peran' => $peran->tipe_peran,
@@ -374,205 +374,229 @@ class UserController extends Controller
         }
     }
 
-    public function getJadwalMengajar($id)
+    public function getJadwalMengajar($id, Request $request)
     {
         try {
             $dosen = User::findOrFail($id);
+            $semesterType = $request->query('semester_type', 'reguler');
 
             // Log untuk debug
-            Log::info("Fetching jadwal mengajar for dosen ID: " . $id);
+            Log::info("Fetching jadwal mengajar for dosen ID: {$id}, semester_type: {$semesterType}");
 
-            // Ambil semua jadwal mengajar dosen dari berbagai tabel
+            // Ambil semua jadwal mengajar dosen menggunakan controller yang sudah ada
             $jadwalMengajar = collect();
 
             // 1. Jadwal Kuliah Besar
-            $jadwalKuliahBesar = DB::table('jadwal_kuliah_besar as jkb')
-                ->join('mata_kuliah as mk', 'jkb.mata_kuliah_kode', '=', 'mk.kode')
-                ->join('ruangan as r', 'jkb.ruangan_id', '=', 'r.id')
-                ->where('jkb.dosen_id', $id)
-                ->select([
-                    'jkb.id',
-                    'mk.kode as mata_kuliah_kode',
-                    'mk.nama as mata_kuliah_nama',
-                    'jkb.tanggal',
-                    'jkb.jam_mulai',
-                    'jkb.jam_selesai',
-                    DB::raw("'kuliah_besar' as jenis_jadwal"),
-                    'jkb.materi as topik',
-                    'r.nama as ruangan_nama',
-                    'jkb.jumlah_sesi',
-                    'mk.semester',
-                    'mk.blok'
-                ])
-                ->get();
+            try {
+                $kuliahBesarController = new \App\Http\Controllers\JadwalKuliahBesarController();
+                $kuliahBesarRequest = new \Illuminate\Http\Request();
+                $kuliahBesarRequest->query->set('semester_type', $semesterType);
+                $kuliahBesarResponse = $kuliahBesarController->getJadwalForDosen($id, $kuliahBesarRequest);
+                $kuliahBesarData = $kuliahBesarResponse->getData();
+                
+                if (isset($kuliahBesarData->data)) {
+                    $jadwalKuliahBesar = collect($kuliahBesarData->data)->map(function($item) {
+                        return (object) [
+                            'id' => $item->id,
+                            'mata_kuliah_kode' => $item->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $item->mata_kuliah->nama ?? '',
+                            'tanggal' => $item->tanggal,
+                            'jam_mulai' => $item->jam_mulai,
+                            'jam_selesai' => $item->jam_selesai,
+                            'jenis_jadwal' => 'kuliah_besar',
+                            'topik' => $item->materi ?? $item->topik,
+                            'ruangan_nama' => $item->ruangan->nama ?? '',
+                            'jumlah_sesi' => $item->jumlah_sesi,
+                            'semester' => $item->mata_kuliah->semester ?? '',
+                            'blok' => $item->mata_kuliah->blok ?? null,
+                            'kelompok_kecil' => $item->kelompok_besar_antara->nama_kelompok ?? 'Semester ' . $item->kelompok_besar_id
+                        ];
+                    });
+                    $jadwalMengajar = $jadwalMengajar->concat($jadwalKuliahBesar);
+                }
+            } catch (\Exception $e) {
+                Log::error("Error fetching Kuliah Besar: " . $e->getMessage());
+            }
 
-            Log::info("Jadwal Kuliah Besar count: " . $jadwalKuliahBesar->count());
-            $jadwalMengajar = $jadwalMengajar->concat($jadwalKuliahBesar);
+            // 2. Jadwal Praktikum
+            try {
+                $praktikumController = new \App\Http\Controllers\JadwalPraktikumController();
+                $praktikumRequest = new \Illuminate\Http\Request();
+                $praktikumRequest->query->set('semester_type', $semesterType);
+                $praktikumResponse = $praktikumController->getJadwalForDosen($id, $praktikumRequest);
+                $praktikumData = $praktikumResponse->getData();
+                
+                if (isset($praktikumData->data)) {
+                    $jadwalPraktikum = collect($praktikumData->data)->map(function($item) {
+                        return (object) [
+                            'id' => $item->id,
+                            'mata_kuliah_kode' => $item->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $item->mata_kuliah->nama ?? '',
+                            'tanggal' => $item->tanggal,
+                            'jam_mulai' => $item->jam_mulai,
+                            'jam_selesai' => $item->jam_selesai,
+                            'jenis_jadwal' => 'praktikum',
+                            'topik' => $item->topik,
+                            'ruangan_nama' => $item->ruangan->nama ?? '',
+                            'jumlah_sesi' => $item->jumlah_sesi,
+                            'semester' => $item->mata_kuliah->semester ?? '',
+                            'blok' => $item->mata_kuliah->blok ?? null,
+                            'kelompok_kecil' => $item->kelas_praktikum
+                        ];
+                    });
+                    $jadwalMengajar = $jadwalMengajar->concat($jadwalPraktikum);
+                }
+            } catch (\Exception $e) {
+                Log::error("Error fetching Praktikum: " . $e->getMessage());
+            }
 
-            // 2. Jadwal Agenda Khusus
-            $jadwalAgendaKhusus = DB::table('jadwal_agenda_khusus as jak')
-                ->join('mata_kuliah as mk', 'jak.mata_kuliah_kode', '=', 'mk.kode')
-                ->join('ruangan as r', 'jak.ruangan_id', '=', 'r.id')
-                ->select([
-                    'jak.id',
-                    'mk.kode as mata_kuliah_kode',
-                    'mk.nama as mata_kuliah_nama',
-                    'jak.tanggal',
-                    'jak.jam_mulai',
-                    'jak.jam_selesai',
-                    DB::raw("'agenda_khusus' as jenis_jadwal"),
-                    'jak.agenda',
-                    'r.nama as ruangan_nama',
-                    'jak.jumlah_sesi',
-                    'mk.semester',
-                    'mk.blok'
-                ])
-                ->get();
+            // 3. Jadwal Jurnal Reading
+            try {
+                $jurnalController = new \App\Http\Controllers\JadwalJurnalReadingController();
+                $jurnalRequest = new \Illuminate\Http\Request();
+                $jurnalRequest->query->set('semester_type', $semesterType);
+                $jurnalResponse = $jurnalController->getJadwalForDosen($id, $jurnalRequest);
+                $jurnalData = $jurnalResponse->getData();
+                
+                if (isset($jurnalData->data)) {
+                    $jadwalJurnal = collect($jurnalData->data)->map(function($item) {
+                        return (object) [
+                            'id' => $item->id,
+                            'mata_kuliah_kode' => $item->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $item->mata_kuliah->nama ?? '',
+                            'tanggal' => $item->tanggal,
+                            'jam_mulai' => $item->jam_mulai,
+                            'jam_selesai' => $item->jam_selesai,
+                            'jenis_jadwal' => 'jurnal_reading',
+                            'topik' => $item->topik,
+                            'ruangan_nama' => $item->ruangan->nama ?? '',
+                            'jumlah_sesi' => $item->jumlah_sesi,
+                            'semester' => $item->mata_kuliah->semester ?? '',
+                            'blok' => $item->mata_kuliah->blok ?? null,
+                            'kelompok_kecil' => $item->kelompok_kecil->nama ?? $item->kelompok_kecil_antara->nama_kelompok ?? ''
+                        ];
+                    });
+                    $jadwalMengajar = $jadwalMengajar->concat($jadwalJurnal);
+                }
+            } catch (\Exception $e) {
+                Log::error("Error fetching Jurnal Reading: " . $e->getMessage());
+            }
 
-            Log::info("Jadwal Agenda Khusus count: " . $jadwalAgendaKhusus->count());
-            $jadwalMengajar = $jadwalMengajar->concat($jadwalAgendaKhusus);
+            // 4. Jadwal PBL
+            try {
+                $pblController = new \App\Http\Controllers\JadwalPBLController();
+                $pblRequest = new \Illuminate\Http\Request();
+                $pblRequest->query->set('semester_type', $semesterType);
+                $pblResponse = $pblController->getJadwalForDosen($id, $pblRequest);
+                $pblData = $pblResponse->getData();
+                
+                if (isset($pblData->data)) {
+                    Log::info("PBL data found: " . count($pblData->data) . " records for semester_type: {$semesterType}");
+                    $jadwalPBL = collect($pblData->data)->map(function($item) {
+                        // Handle both array and object data
+                        $isArray = is_array($item);
+                        
+                        return (object) [
+                            'id' => $isArray ? $item['id'] : $item->id,
+                            'mata_kuliah_kode' => $isArray ? $item['mata_kuliah_kode'] : $item->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $isArray ? ($item['mata_kuliah_nama'] ?? '') : ($item->mata_kuliah_nama ?? ''),
+                            'tanggal' => $isArray ? $item['tanggal'] : $item->tanggal,
+                            'jam_mulai' => $isArray ? $item['jam_mulai'] : $item->jam_mulai,
+                            'jam_selesai' => $isArray ? $item['jam_selesai'] : $item->jam_selesai,
+                            'jenis_jadwal' => 'pbl',
+                            'modul_pbl' => $isArray ? ($item['modul'] ?? '') : ($item->modul ?? ''),
+                            'pbl_tipe' => $isArray ? $item['tipe_pbl'] : $item->tipe_pbl,
+                            'ruangan_nama' => $isArray ? ($item['ruangan'] ?? '') : ($item->ruangan ?? ''),
+                            'jumlah_sesi' => $isArray ? $item['x50'] : $item->x50,
+                            'semester' => $isArray ? ($item['semester'] ?? '') : ($item->semester ?? ''),
+                            'blok' => $isArray ? ($item['blok'] ?? null) : ($item->blok ?? null),
+                            'kelompok_kecil' => $isArray ? ($item['kelompok'] ?? '') : ($item->kelompok ?? ''),
+                            'semester_type' => $isArray ? ($item['semester_type'] ?? 'reguler') : ($item->semester_type ?? 'reguler')
+                        ];
+                    });
+                    $jadwalMengajar = $jadwalMengajar->concat($jadwalPBL);
+                    Log::info("PBL mapped: " . $jadwalPBL->count() . " records added to jadwalMengajar");
+                }
+            } catch (\Exception $e) {
+                Log::error("Error fetching PBL: " . $e->getMessage());
+            }
 
-            // 3. Jadwal Praktikum
-            // Debug: cek apakah ada data di jadwal_praktikum_dosen
-            $debugJadwalPraktikumDosen = DB::table('jadwal_praktikum_dosen')
-                ->where('dosen_id', $id)
-                ->get();
-            Log::info("Debug - jadwal_praktikum_dosen for dosen $id: " . $debugJadwalPraktikumDosen->toJson());
+            // 5. Jadwal CSR
+            try {
+                $csrController = new \App\Http\Controllers\JadwalCSRController();
+                $csrRequest = new \Illuminate\Http\Request();
+                $csrRequest->query->set('semester_type', $semesterType);
+                $csrResponse = $csrController->getJadwalForDosen($id, $csrRequest);
+                $csrData = $csrResponse->getData();
+                
+                if (isset($csrData->data)) {
+                    $jadwalCSR = collect($csrData->data)->map(function($item) {
+                        // Handle both array and object data
+                        $isArray = is_array($item);
+                        
+                        return (object) [
+                            'id' => $isArray ? $item['id'] : $item->id,
+                            'mata_kuliah_kode' => $isArray ? $item['mata_kuliah_kode'] : $item->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $isArray ? ($item['mata_kuliah_nama'] ?? '') : ($item->mata_kuliah_nama ?? ''),
+                            'tanggal' => $isArray ? $item['tanggal'] : $item->tanggal,
+                            'jam_mulai' => $isArray ? $item['jam_mulai'] : $item->jam_mulai,
+                            'jam_selesai' => $isArray ? $item['jam_selesai'] : $item->jam_selesai,
+                            'jenis_jadwal' => 'csr',
+                            'topik' => $isArray ? $item['topik'] : $item->topik,
+                            'kategori_csr' => $isArray ? ($item['kategori']['nama'] ?? '') : ($item->kategori->nama ?? ''),
+                            'jenis_csr' => $isArray ? $item['jenis_csr'] : $item->jenis_csr,
+                            'ruangan_nama' => $isArray ? ($item['ruangan']['nama'] ?? '') : ($item->ruangan->nama ?? ''),
+                            'jumlah_sesi' => $isArray ? $item['jumlah_sesi'] : $item->jumlah_sesi,
+                            'semester' => '',
+                            'blok' => null,
+                            'kelompok_kecil' => $isArray ? ($item['kelompok_kecil']['nama'] ?? '') : ($item->kelompok_kecil->nama ?? '')
+                        ];
+                    });
+                    $jadwalMengajar = $jadwalMengajar->concat($jadwalCSR);
+                }
+            } catch (\Exception $e) {
+                Log::error("Error fetching CSR: " . $e->getMessage());
+            }
 
-            $jadwalPraktikum = DB::table('jadwal_praktikum as jp')
-                ->join('mata_kuliah as mk', 'jp.mata_kuliah_kode', '=', 'mk.kode')
-                ->join('ruangan as r', 'jp.ruangan_id', '=', 'r.id')
-                ->join('jadwal_praktikum_dosen as jpd', 'jp.id', '=', 'jpd.jadwal_praktikum_id')
-                ->where('jpd.dosen_id', $id)
-                ->select([
-                    'jp.id',
-                    'mk.kode as mata_kuliah_kode',
-                    'mk.nama as mata_kuliah_nama',
-                    'jp.tanggal',
-                    'jp.jam_mulai',
-                    'jp.jam_selesai',
-                    DB::raw("'praktikum' as jenis_jadwal"),
-                    'jp.topik',
-                    'r.nama as ruangan_nama',
-                    'jp.kelas_praktikum as kelompok_kecil',
-                    'jp.jumlah_sesi',
-                    'mk.semester',
-                    'mk.blok'
-                ])
-                ->get();
+            // 6. Jadwal Non Blok Non CSR
+            try {
+                $nonBlokController = new \App\Http\Controllers\JadwalNonBlokNonCSRController();
+                $nonBlokRequest = new \Illuminate\Http\Request();
+                $nonBlokRequest->query->set('semester_type', $semesterType);
+                $nonBlokResponse = $nonBlokController->getJadwalForDosen($id, $nonBlokRequest);
+                $nonBlokData = $nonBlokResponse->getData();
+                
+                if (isset($nonBlokData->data)) {
+                    $jadwalNonBlok = collect($nonBlokData->data)->map(function($item) {
+                        // Handle both array and object data
+                        $isArray = is_array($item);
+                        
+                        return (object) [
+                            'id' => $isArray ? $item['id'] : $item->id,
+                            'mata_kuliah_kode' => $isArray ? $item['mata_kuliah_kode'] : $item->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $isArray ? ($item['mata_kuliah_nama'] ?? '') : ($item->mata_kuliah_nama ?? ''),
+                            'tanggal' => $isArray ? $item['tanggal'] : $item->tanggal,
+                            'jam_mulai' => $isArray ? $item['jam_mulai'] : $item->jam_mulai,
+                            'jam_selesai' => $isArray ? $item['jam_selesai'] : $item->jam_selesai,
+                            'jenis_jadwal' => $isArray ? $item['jenis_baris'] : $item->jenis_baris,
+                            'materi' => $isArray ? $item['materi'] : $item->materi,
+                            'agenda' => $isArray ? $item['agenda'] : $item->agenda,
+                            'ruangan_nama' => $isArray ? ($item['ruangan']['nama'] ?? '') : ($item->ruangan->nama ?? ''),
+                            'jumlah_sesi' => $isArray ? $item['jumlah_sesi'] : $item->jumlah_sesi,
+                            'semester' => '',
+                            'blok' => null,
+                            'kelompok_kecil' => $isArray ? 
+                                ($item['kelompok_besar']['semester'] ?? $item['kelompok_besar_antara']['nama_kelompok'] ?? '') : 
+                                ($item->kelompok_besar->semester ?? $item->kelompok_besar_antara->nama_kelompok ?? '')
+                        ];
+                    });
+                    $jadwalMengajar = $jadwalMengajar->concat($jadwalNonBlok);
+                }
+            } catch (\Exception $e) {
+                Log::error("Error fetching Non Blok Non CSR: " . $e->getMessage());
+            }
 
-            Log::info("Jadwal Praktikum count: " . $jadwalPraktikum->count());
-            Log::info("Jadwal Praktikum data: " . $jadwalPraktikum->toJson());
-            $jadwalMengajar = $jadwalMengajar->concat($jadwalPraktikum);
-
-            // 4. Jadwal Jurnal Reading
-            $jadwalJurnalReading = DB::table('jadwal_jurnal_reading as jjr')
-                ->join('mata_kuliah as mk', 'jjr.mata_kuliah_kode', '=', 'mk.kode')
-                ->join('ruangan as r', 'jjr.ruangan_id', '=', 'r.id')
-                ->join('kelompok_kecil as kk', 'jjr.kelompok_kecil_id', '=', 'kk.id')
-                ->where('jjr.dosen_id', $id)
-                ->select([
-                    'jjr.id',
-                    'mk.kode as mata_kuliah_kode',
-                    'mk.nama as mata_kuliah_nama',
-                    'jjr.tanggal',
-                    'jjr.jam_mulai',
-                    'jjr.jam_selesai',
-                    DB::raw("'jurnal_reading' as jenis_jadwal"),
-                    'jjr.topik',
-                    'r.nama as ruangan_nama',
-                    'kk.nama_kelompok as kelompok_kecil',
-                    'jjr.jumlah_sesi',
-                    'mk.semester',
-                    'mk.blok'
-                ])
-                ->get();
-
-            Log::info("Jadwal Jurnal Reading count: " . $jadwalJurnalReading->count());
-            $jadwalMengajar = $jadwalMengajar->concat($jadwalJurnalReading);
-
-            // 5. Jadwal PBL
-            $jadwalPBL = DB::table('jadwal_pbl as jp')
-                ->join('mata_kuliah as mk', 'jp.mata_kuliah_kode', '=', 'mk.kode')
-                ->join('ruangan as r', 'jp.ruangan_id', '=', 'r.id')
-                ->join('kelompok_kecil as kk', 'jp.kelompok_kecil_id', '=', 'kk.id')
-                ->join('pbls as pbl', 'jp.pbl_id', '=', 'pbl.id')
-                ->where('jp.dosen_id', $id)
-                ->select([
-                    'jp.id',
-                    'mk.kode as mata_kuliah_kode',
-                    'mk.nama as mata_kuliah_nama',
-                    'jp.tanggal',
-                    'jp.jam_mulai',
-                    'jp.jam_selesai',
-                    DB::raw("'pbl' as jenis_jadwal"),
-                    'pbl.nama_modul as modul_pbl',
-                    'r.nama as ruangan_nama',
-                    'kk.nama_kelompok as kelompok_kecil',
-                    DB::raw('CASE
-                        WHEN jp.pbl_tipe = "PBL 1" THEN 2
-                        WHEN jp.pbl_tipe = "PBL 2" THEN 3
-                        ELSE 2
-                    END as jumlah_sesi'),
-                    'jp.pbl_tipe',
-                    'mk.semester',
-                    'mk.blok'
-                ])
-                ->get();
-
-            Log::info("Jadwal PBL count: " . $jadwalPBL->count());
-            $jadwalMengajar = $jadwalMengajar->concat($jadwalPBL);
-
-            // 6. Jadwal CSR
-            $jadwalCSR = DB::table('jadwal_csr as jc')
-                ->join('mata_kuliah as mk', 'jc.mata_kuliah_kode', '=', 'mk.kode')
-                ->join('ruangan as r', 'jc.ruangan_id', '=', 'r.id')
-                ->join('kelompok_kecil as kk', 'jc.kelompok_kecil_id', '=', 'kk.id')
-                ->where('jc.dosen_id', $id)
-                ->select([
-                    'jc.id',
-                    'mk.kode as mata_kuliah_kode',
-                    'mk.nama as mata_kuliah_nama',
-                    'jc.tanggal',
-                    'jc.jam_mulai',
-                    'jc.jam_selesai',
-                    DB::raw("'csr' as jenis_jadwal"),
-                    'jc.topik',
-                    'r.nama as ruangan_nama',
-                    'kk.nama_kelompok as kelompok_kecil',
-                    DB::raw('NULL as kategori_csr'),
-                    'jc.jenis_csr',
-                    'jc.jumlah_sesi',
-                    'mk.semester'
-                ])
-                ->get();
-
-            Log::info("Jadwal CSR count: " . $jadwalCSR->count());
-            $jadwalMengajar = $jadwalMengajar->concat($jadwalCSR);
-
-            // 7. Jadwal Non-Blok Non-CSR
-            $jadwalNonBlokNonCSR = DB::table('jadwal_non_blok_non_csr as jnbnc')
-                ->join('mata_kuliah as mk', 'jnbnc.mata_kuliah_kode', '=', 'mk.kode')
-                ->join('ruangan as r', 'jnbnc.ruangan_id', '=', 'r.id')
-                ->where('jnbnc.dosen_id', $id)
-                ->select([
-                    'jnbnc.id',
-                    'mk.kode as mata_kuliah_kode',
-                    'mk.nama as mata_kuliah_nama',
-                    'jnbnc.tanggal',
-                    'jnbnc.jam_mulai',
-                    'jnbnc.jam_selesai',
-                    'jnbnc.jenis_baris as jenis_jadwal',
-                    'jnbnc.materi',
-                    'jnbnc.agenda',
-                    'r.nama as ruangan_nama',
-                    'jnbnc.jumlah_sesi',
-                    'mk.semester'
-                ])
-                ->get();
-
-            Log::info("Jadwal Non-Blok Non-CSR count: " . $jadwalNonBlokNonCSR->count());
-            $jadwalMengajar = $jadwalMengajar->concat($jadwalNonBlokNonCSR);
+            Log::info("Total jadwal mengajar untuk semester {$semesterType}: " . $jadwalMengajar->count());
 
             // Sort berdasarkan tanggal dan jam
             $jadwalMengajar = $jadwalMengajar->sortBy([
@@ -592,4 +616,37 @@ class UserController extends Controller
             ], 500);
         }
     }
+     // GET /users/search?q=query
+     public function search(Request $request)
+     {
+         try {
+             $query = $request->get('q');
+ 
+             if (!$query || strlen($query) < 2) {
+                 return response()->json([
+                     'success' => true,
+                     'data' => []
+                 ]);
+             }
+ 
+             $users = User::where('name', 'like', "%{$query}%")
+                 ->orWhere('username', 'like', "%{$query}%")
+                 ->orWhere('email', 'like', "%{$query}%")
+                 ->select(['id', 'name', 'username', 'email', 'role'])
+                 ->limit(20)
+                 ->get();
+ 
+             return response()->json([
+                 'success' => true,
+                 'data' => $users
+             ]);
+         } catch (\Exception $e) {
+             Log::error("Error in user search: " . $e->getMessage());
+             return response()->json([
+                 'success' => false,
+                 'message' => 'Gagal mencari user',
+                 'error' => $e->getMessage()
+             ], 500);
+         }
+     }
 }
