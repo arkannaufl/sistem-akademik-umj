@@ -130,12 +130,66 @@ class JadwalJurnalReadingController extends Controller
         $jadwal = JadwalJurnalReading::create($data);
         
         // Load relasi dan tambahkan dosen_names
-        $jadwal->load(['kelompokKecil', 'kelompokKecilAntara', 'dosen', 'ruangan']);
+        $jadwal->load(['kelompokKecil', 'kelompokKecilAntara', 'dosen', 'ruangan', 'mataKuliah']);
         
         // Tambahkan nama dosen untuk response
         if ($jadwal->dosen_ids && is_array($jadwal->dosen_ids)) {
             $dosenNames = User::whereIn('id', $jadwal->dosen_ids)->pluck('name')->toArray();
             $jadwal->dosen_names = implode(', ', $dosenNames);
+        }
+        
+        // Buat notifikasi untuk dosen yang di-assign
+        if ($jadwal->dosen_ids && is_array($jadwal->dosen_ids)) {
+            foreach ($jadwal->dosen_ids as $dosenId) {
+                $dosen = User::find($dosenId);
+                if ($dosen) {
+                    \App\Models\Notification::create([
+                        'user_id' => $dosenId,
+                        'title' => 'Jadwal Jurnal Reading Baru',
+                        'message' => "Anda telah di-assign untuk mengajar Jurnal Reading {$jadwal->mataKuliah->nama} pada tanggal {$jadwal->tanggal} jam {$jadwal->jam_mulai}-{$jadwal->jam_selesai} di ruangan {$jadwal->ruangan->nama}. Silakan konfirmasi ketersediaan Anda.",
+                        'type' => 'info',
+                        'data' => [
+                            'topik' => $jadwal->topik,
+                            'materi' => $jadwal->topik,
+                            'ruangan' => $jadwal->ruangan->nama,
+                            'tanggal' => $jadwal->tanggal,
+                            'jadwal_id' => $jadwal->id,
+                            'jam_mulai' => $jadwal->jam_mulai,
+                            'jadwal_type' => 'jurnal_reading',
+                            'jam_selesai' => $jadwal->jam_selesai,
+                            'mata_kuliah_kode' => $jadwal->mata_kuliah_kode,
+                            'mata_kuliah_nama' => $jadwal->mataKuliah->nama,
+                            'file_jurnal' => $jadwal->file_jurnal,
+                            'dosen_id' => $dosen->id,
+                            'dosen_name' => $dosen->name,
+                            'dosen_role' => $dosen->role
+                        ]
+                    ]);
+                }
+            }
+        } elseif ($jadwal->dosen_id) {
+            \App\Models\Notification::create([
+                'user_id' => $jadwal->dosen_id,
+                'title' => 'Jadwal Jurnal Reading Baru',
+                'message' => "Anda telah di-assign untuk mengajar Jurnal Reading {$jadwal->mataKuliah->nama} pada tanggal {$jadwal->tanggal} jam {$jadwal->jam_mulai}-{$jadwal->jam_selesai} di ruangan {$jadwal->ruangan->nama}. Silakan konfirmasi ketersediaan Anda.",
+                'type' => 'info',
+                'data' => [
+                    'topik' => $jadwal->topik,
+                    'materi' => $jadwal->topik,
+                    'ruangan' => $jadwal->ruangan->nama,
+                    'tanggal' => $jadwal->tanggal,
+                    'jadwal_id' => $jadwal->id,
+                    'jam_mulai' => $jadwal->jam_mulai,
+                    'jadwal_type' => 'jurnal_reading',
+                    'jam_selesai' => $jadwal->jam_selesai,
+                    'mata_kuliah_kode' => $jadwal->mata_kuliah_kode,
+                    'mata_kuliah_nama' => $jadwal->mataKuliah->nama,
+                    'file_jurnal' => $jadwal->file_jurnal,
+                    'dosen_id' => $jadwal->dosen->id,
+                    'dosen_name' => $jadwal->dosen->name,
+                    'dosen_role' => $jadwal->dosen->role
+                ]
+            ]);
         }
         
         return response()->json($jadwal, Response::HTTP_CREATED);
@@ -793,5 +847,269 @@ class JadwalJurnalReadingController extends Controller
         }
 
         return null; // Kapasitas mencukupi
+    }
+
+    // Get jadwal Jurnal Reading untuk dosen tertentu
+    public function getJadwalForDosen($dosenId, Request $request)
+    {
+        try {
+            // Check if user exists
+            $user = User::find($dosenId);
+            if (!$user) {
+                return response()->json([
+                    'message' => 'Dosen tidak ditemukan',
+                    'data' => []
+                ], 404);
+            }
+
+            $semesterType = $request->query('semester_type');
+
+            // Use raw query to get data first
+            $rawJadwal = \DB::table('jadwal_jurnal_reading')
+                ->where(function($q) use ($dosenId) {
+                    $q->where('dosen_id', $dosenId)
+                      ->orWhere('dosen_ids', 'like', '%' . $dosenId . '%');
+                })
+                ->when($semesterType === 'antara', function($q) {
+                    $q->whereNotNull('kelompok_kecil_antara_id');
+                })
+                ->when($semesterType === 'reguler', function($q) {
+                    $q->whereNull('kelompok_kecil_antara_id');
+                })
+                ->orderBy('tanggal')
+                ->orderBy('jam_mulai')
+                ->get();
+            
+            // Convert to Eloquent models for relationships
+            $jadwal = JadwalJurnalReading::with([
+                'mataKuliah:kode,nama,semester',
+                'ruangan:id,nama,gedung',
+                'dosen:id,name',
+                'kelompokKecil:id,nama',
+                'kelompokKecilAntara:id,nama_kelompok'
+            ])
+            ->select([
+                'id', 'mata_kuliah_kode', 'tanggal', 'jam_mulai', 'jam_selesai',
+                'topik', 'ruangan_id', 'dosen_id', 'dosen_ids', 'jumlah_sesi',
+                'kelompok_kecil_id', 'kelompok_kecil_antara_id', 'file_jurnal',
+                'status_konfirmasi', 'alasan_konfirmasi', 'created_at'
+            ])
+            ->whereIn('id', $rawJadwal->pluck('id'))->get();
+
+
+            \Log::info("Found {$jadwal->count()} JadwalJurnalReading records for dosen ID: {$dosenId}");
+            
+            $mappedJadwal = $jadwal->map(function ($jadwal) {
+                // Determine semester type based on kelompok_kecil_antara_id
+                $semesterType = $jadwal->kelompok_kecil_antara_id ? 'antara' : 'reguler';
+                
+                // Get dosen names from dosen_ids array
+                $dosenNames = [];
+                if ($jadwal->dosen_ids && is_array($jadwal->dosen_ids)) {
+                    $dosenNames = User::whereIn('id', $jadwal->dosen_ids)->pluck('name')->toArray();
+                } elseif ($jadwal->dosen) {
+                    $dosenNames = [$jadwal->dosen->name];
+                }
+                
+                return (object) [
+                    'id' => $jadwal->id,
+                    'mata_kuliah_kode' => $jadwal->mata_kuliah_kode,
+                    'mata_kuliah' => (object) [
+                        'kode' => $jadwal->mataKuliah->kode ?? '',
+                        'nama' => $jadwal->mataKuliah->nama ?? 'Unknown',
+                        'semester' => $jadwal->mataKuliah->semester ?? ''
+                    ],
+                    'tanggal' => $jadwal->tanggal,
+                    'jam_mulai' => $jadwal->jam_mulai,
+                    'jam_selesai' => $jadwal->jam_selesai,
+                    'topik' => $jadwal->topik,
+                    'ruangan' => (object) [
+                        'id' => $jadwal->ruangan->id ?? null,
+                        'nama' => $jadwal->ruangan->nama ?? 'Unknown'
+                    ],
+                    'status_konfirmasi' => $jadwal->status_konfirmasi ?? 'belum_konfirmasi',
+                    'dosen' => !empty($dosenNames) ? (object) [
+                        'id' => $jadwal->dosen_ids[0] ?? $jadwal->dosen_id,
+                        'name' => implode(', ', $dosenNames)
+                    ] : null,
+                    'dosen_id' => $jadwal->dosen_id,
+                    'dosen_ids' => $jadwal->dosen_ids,
+                    'jumlah_sesi' => $jadwal->jumlah_sesi ?? 1,
+                    'kelompok_kecil_id' => $jadwal->kelompok_kecil_id,
+                    'kelompok_kecil_antara_id' => $jadwal->kelompok_kecil_antara_id,
+                    'kelompok_kecil' => $jadwal->kelompokKecil ? (object) [
+                        'id' => $jadwal->kelompokKecil->id,
+                        'nama' => $jadwal->kelompokKecil->nama
+                    ] : null,
+                    'kelompok_kecil_antara' => $jadwal->kelompokKecilAntara ? (object) [
+                        'id' => $jadwal->kelompokKecilAntara->id,
+                        'nama_kelompok' => $jadwal->kelompokKecilAntara->nama_kelompok
+                    ] : null,
+                    'file_jurnal' => $jadwal->file_jurnal,
+                    'semester_type' => $semesterType,
+                    'created_at' => $jadwal->created_at,
+                ];
+            });
+
+            return response()->json([
+                'message' => 'Data jadwal Jurnal Reading berhasil diambil',
+                'data' => $mappedJadwal,
+                'count' => $mappedJadwal->count()
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error("Error getting jadwal jurnal reading for dosen: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Gagal mengambil data jadwal Jurnal Reading',
+                'data' => []
+            ], 500);
+        }
+    }
+
+    // Konfirmasi jadwal Jurnal Reading
+    public function konfirmasi(Request $request, $id)
+    {
+        $request->validate([
+            'status' => 'required|in:bisa,tidak_bisa',
+            'alasan' => 'nullable|string|max:1000',
+            'dosen_id' => 'required|exists:users,id'
+        ]);
+
+        $jadwal = JadwalJurnalReading::with(['mataKuliah', 'ruangan'])->findOrFail($id);
+        
+        // Check if dosen is assigned to this jadwal
+        $isAssigned = false;
+        if ($jadwal->dosen_id == $request->dosen_id) {
+            $isAssigned = true;
+        } elseif ($jadwal->dosen_ids && in_array($request->dosen_id, $jadwal->dosen_ids)) {
+            $isAssigned = true;
+        }
+
+        if (!$isAssigned) {
+            return response()->json([
+                'message' => 'Anda tidak memiliki akses untuk mengkonfirmasi jadwal ini'
+            ], 403);
+        }
+
+        $jadwal->update([
+            'status_konfirmasi' => $request->status,
+            'alasan_konfirmasi' => $request->alasan
+        ]);
+
+        // Get dosen info
+        $dosen = User::find($request->dosen_id);
+        
+        // Save to history
+        $this->saveRiwayatKonfirmasi($jadwal, $request->status, $request->alasan, $request->dosen_id);
+        
+        // Send notification
+        if ($request->status === 'tidak_bisa') {
+            $this->sendReplacementNotification($jadwal, $request->alasan, $dosen);
+        } elseif ($request->status === 'bisa') {
+            $this->sendConfirmationNotification($jadwal, 'bisa', $dosen);
+        }
+
+        return response()->json(['message' => 'Konfirmasi berhasil disimpan', 'status' => $request->status]);
+    }
+
+    private function saveRiwayatKonfirmasi($jadwal, $status, $alasan = null, $dosen_id = null)
+    {
+        try {
+            \App\Models\RiwayatKonfirmasiDosen::create([
+                'dosen_id' => $dosen_id ?: $jadwal->dosen_id,
+                'jadwal_type' => 'jurnal_reading',
+                'jadwal_id' => $jadwal->id,
+                'mata_kuliah_kode' => $jadwal->mata_kuliah_kode,
+                'mata_kuliah_nama' => $jadwal->mataKuliah->nama,
+                'tanggal' => $jadwal->tanggal,
+                'jam_mulai' => $jadwal->jam_mulai,
+                'jam_selesai' => $jadwal->jam_selesai,
+                'ruangan' => $jadwal->ruangan->nama,
+                'materi' => $jadwal->topik,
+                'topik' => $jadwal->topik,
+                'status_konfirmasi' => $status,
+                'alasan_konfirmasi' => $alasan,
+                'waktu_konfirmasi' => now()
+            ]);
+        } catch (\Exception $e) {
+            \Log::error("Gagal menyimpan riwayat konfirmasi jurnal reading: " . $e->getMessage());
+        }
+    }
+
+    private function sendConfirmationNotification($jadwal, $status, $dosen)
+    {
+        try {
+            \Log::info("Memulai pengiriman notifikasi konfirmasi untuk jadwal ID: {$jadwal->id}, Status: {$status}");
+            $superAdmins = \App\Models\User::where('role', 'super_admin')->get();
+            \Log::info("Ditemukan {$superAdmins->count()} super admin");
+            $statusText = $status === 'bisa' ? 'Bisa Mengajar' : 'Tidak Bisa Mengajar';
+            $type = $status === 'bisa' ? 'success' : 'warning';
+            foreach ($superAdmins as $admin) {
+                \Log::info("Mengirim notifikasi ke admin ID: {$admin->id}, Nama: {$admin->name}");
+                \App\Models\Notification::create([
+                    'user_id' => $dosen->id,
+                    'title' => "Konfirmasi Jadwal - {$statusText}",
+                    'message' => "Dosen {$dosen->name} telah mengkonfirmasi {$statusText} untuk jadwal Jurnal Reading {$jadwal->mataKuliah->nama} pada tanggal " . 
+                               date('d/m/Y', strtotime($jadwal->tanggal)) . " jam " . 
+                               str_replace(':', '.', $jadwal->jam_mulai) . "-" . str_replace(':', '.', $jadwal->jam_selesai) . 
+                               " di ruangan {$jadwal->ruangan->nama}.",
+                    'type' => $type,
+                    'is_read' => false,
+                    'data' => [
+                        'jadwal_id' => $jadwal->id,
+                        'jadwal_type' => 'jurnal_reading',
+                        'dosen_id' => $dosen->id,
+                        'dosen_name' => $dosen->name,
+                        'dosen_role' => $dosen->role,
+                        'mata_kuliah' => $jadwal->mataKuliah->nama,
+                        'tanggal' => $jadwal->tanggal,
+                        'waktu' => $jadwal->jam_mulai . ' - ' . $jadwal->jam_selesai,
+                        'ruangan' => $jadwal->ruangan->nama,
+                        'status_konfirmasi' => $status
+                    ]
+                ]);
+            }
+            \Log::info("Notifikasi konfirmasi {$status} berhasil dikirim ke super admin untuk jadwal jurnal reading ID: {$jadwal->id}");
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi konfirmasi: " . $e->getMessage());
+        }
+    }
+
+    private function sendReplacementNotification($jadwal, $alasan = null, $dosen = null)
+    {
+        try {
+            $superAdmins = \App\Models\User::where('role', 'super_admin')->get();
+            $alasanText = $alasan ? "\n\nAlasan: {$alasan}" : "";
+            if (!$dosen && $jadwal->dosen) {
+                $dosen = $jadwal->dosen;
+            }
+            foreach ($superAdmins as $admin) {
+                \App\Models\Notification::create([
+                    'user_id' => $dosen->id,
+                    'title' => 'Dosen Tidak Bisa Mengajar - Jurnal Reading',
+                    'message' => "Dosen {$dosen->name} tidak bisa mengajar pada jadwal Jurnal Reading {$jadwal->mataKuliah->nama} pada tanggal " . 
+                               date('d/m/Y', strtotime($jadwal->tanggal)) . " jam " . 
+                               str_replace(':', '.', $jadwal->jam_mulai) . "-" . str_replace(':', '.', $jadwal->jam_selesai) . 
+                               " di ruangan {$jadwal->ruangan->nama}.{$alasanText}",
+                    'type' => 'warning',
+                    'is_read' => false,
+                    'data' => [
+                        'jadwal_id' => $jadwal->id,
+                        'jadwal_type' => 'jurnal_reading',
+                        'dosen_id' => $dosen->id,
+                        'dosen_name' => $dosen->name,
+                        'dosen_role' => $dosen->role,
+                        'mata_kuliah' => $jadwal->mataKuliah->nama,
+                        'tanggal' => $jadwal->tanggal,
+                        'waktu' => $jadwal->jam_mulai . ' - ' . $jadwal->jam_selesai,
+                        'ruangan' => $jadwal->ruangan->nama,
+                        'alasan' => $alasan
+                    ]
+                ]);
+            }
+            \Log::info("Notifikasi replacement berhasil dikirim ke super admin untuk jadwal jurnal reading ID: {$jadwal->id}");
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi replacement: " . $e->getMessage());
+        }
     }
 }

@@ -1,6 +1,5 @@
 import React from "react";
 import { Navigate } from "react-router";
-import DosenAccessDenied from "./DosenAccessDenied";
 
 interface RequireDosenRoleProps {
   children: React.ReactNode;
@@ -27,12 +26,8 @@ export default function RequireDosenRole({
 
   // Cek apakah user memiliki role yang diizinkan
   if (!allowedRoles.includes(user.role)) {
-    // Jika user adalah dosen dan mencoba mengakses halaman yang tidak diizinkan
-    if (user.role === "dosen") {
-      return <DosenAccessDenied />;
-    }
-    // Jika user bukan dosen dan tidak memiliki akses
-    return <Navigate to="/" replace />;
+    // Redirect semua user yang tidak memiliki akses ke dashboard
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

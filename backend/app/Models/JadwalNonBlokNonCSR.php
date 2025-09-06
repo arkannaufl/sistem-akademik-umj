@@ -26,6 +26,8 @@ class JadwalNonBlokNonCSR extends Model
         'kelompok_besar_id',
         'kelompok_besar_antara_id',
         'use_ruangan',
+        'status_konfirmasi',
+        'alasan_konfirmasi',
     ];
 
     protected $casts = [
@@ -49,6 +51,11 @@ class JadwalNonBlokNonCSR extends Model
     public function ruangan()
     {
         return $this->belongsTo(Ruangan::class, 'ruangan_id');
+    }
+
+    public function kelompokBesar()
+    {
+        return $this->belongsTo(KelompokBesar::class, 'kelompok_besar_id');
     }
 
     public function kelompokBesarAntara()

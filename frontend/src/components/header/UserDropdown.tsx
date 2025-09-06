@@ -143,6 +143,30 @@ export default function UserDropdown() {
                 Edit profile
               </Link>
             </li>
+            <li>
+              <Link
+                to="/bookmarks"
+                className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+                onClick={closeDropdown}
+              >
+                <svg
+                  className="fill-gray-500 group-hover:fill-gray-700 dark:fill-gray-400 dark:group-hover:fill-gray-300"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M6.32 2.577a.75.75 0 01.75-.75h9.86a.75.75 0 01.75.75v18.5l-5.43-3.947a.75.75 0 00-.86 0L6.32 21.077V2.577zM7.82 3.327v15.95l4.68-3.4a2.25 2.25 0 012.6 0l4.68 3.4V3.327H7.82z"
+                    fill=""
+                  />
+                </svg>
+                Bookmarks
+              </Link>
+            </li>
           </ul>
           <button
             onClick={handleLogout}

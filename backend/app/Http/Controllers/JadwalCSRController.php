@@ -800,4 +800,144 @@ class JadwalCSRController extends Controller
             return response()->json(['message' => 'Gagal menyimpan absensi: ' . $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Get jadwal CSR for specific dosen
+     */
+    public function getJadwalForDosen($dosenId, Request $request)
+    {
+        try {
+            $semesterType = $request->query('semester_type', 'reguler'); // CSR hanya ada di semester reguler
+
+            $query = JadwalCSR::with(['mataKuliah', 'ruangan', 'dosen', 'kelompokKecil', 'kategori'])
+                ->where('dosen_id', $dosenId);
+
+            // CSR hanya ada di semester reguler, tidak ada semester antara
+            if ($semesterType === 'antara') {
+                return response()->json([
+                    'data' => [],
+                    'message' => 'CSR tidak tersedia untuk semester antara'
+                ]);
+            }
+
+            $jadwal = $query->orderBy('tanggal')
+                ->orderBy('jam_mulai')
+                ->get();
+
+            // Map data untuk konsistensi dengan jadwal lain
+            $mappedJadwal = $jadwal->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'tanggal' => date('d-m-Y', strtotime($item->tanggal)),
+                    'jam_mulai' => substr(str_replace(':', '.', $item->jam_mulai), 0, 5), // Remove seconds
+                    'jam_selesai' => substr(str_replace(':', '.', $item->jam_selesai), 0, 5), // Remove seconds
+                    'materi' => $item->topik,
+                    'topik' => $item->topik,
+                    'status_konfirmasi' => $item->status_konfirmasi ?? 'belum_konfirmasi',
+                    'alasan_konfirmasi' => $item->alasan_konfirmasi,
+                    'mata_kuliah_kode' => $item->mata_kuliah_kode,
+                    'mata_kuliah_nama' => $item->mataKuliah->nama ?? 'N/A',
+                    'jenis_csr' => $item->jenis_csr,
+                    'dosen' => [
+                        'id' => $item->dosen->id,
+                        'name' => $item->dosen->name
+                    ],
+                    'ruangan' => [
+                        'id' => $item->ruangan->id ?? null,
+                        'nama' => $item->ruangan->nama ?? 'N/A'
+                    ],
+                    'kelompok_kecil' => [
+                        'id' => $item->kelompokKecil->id ?? null,
+                        'nama' => $item->kelompokKecil->nama_kelompok ?? 'N/A'
+                    ],
+                    'kategori' => [
+                        'id' => $item->kategori->id ?? null,
+                        'nama' => $item->kategori->nama ?? 'N/A'
+                    ],
+                    'jumlah_sesi' => $item->jumlah_sesi,
+                    'semester_type' => 'reguler', // CSR hanya semester reguler
+                    'created_at' => $item->created_at
+                ];
+            });
+
+            return response()->json([
+                'data' => $mappedJadwal,
+                'message' => 'Jadwal CSR berhasil diambil'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error("Error getting jadwal CSR for dosen {$dosenId}: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Gagal mengambil jadwal CSR',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Konfirmasi ketersediaan dosen untuk jadwal CSR
+     */
+    public function konfirmasiJadwal(Request $request, $jadwalId)
+    {
+        $request->validate([
+            'status' => 'required|in:bisa,tidak_bisa',
+            'dosen_id' => 'required|exists:users,id',
+            'alasan' => 'nullable|string|max:1000'
+        ]);
+
+        $jadwal = JadwalCSR::with(['mataKuliah', 'dosen', 'ruangan', 'kategori'])
+            ->where('id', $jadwalId)
+            ->where('dosen_id', $request->dosen_id)
+            ->firstOrFail();
+
+        $jadwal->update([
+            'status_konfirmasi' => $request->status,
+            'alasan_konfirmasi' => $request->alasan
+        ]);
+
+        // Kirim notifikasi ke super admin jika dosen tidak bisa
+        if ($request->status === 'tidak_bisa') {
+            $this->sendReplacementNotification($jadwal, $request->alasan);
+        }
+
+        return response()->json([
+            'message' => 'Status konfirmasi berhasil diperbarui',
+            'status' => $request->status
+        ]);
+    }
+
+    /**
+     * Kirim notifikasi replacement ke super admin
+     */
+    private function sendReplacementNotification($jadwal, $alasan = null)
+    {
+        try {
+            $superAdmins = User::where('role', 'super_admin')->get();
+            $alasanText = $alasan ? "\n\nAlasan: {$alasan}" : "";
+
+            foreach ($superAdmins as $admin) {
+                \App\Models\Notification::create([
+                    'user_id' => $jadwal->dosen_id,
+                    'title' => 'Dosen Tidak Bisa Mengajar - CSR',
+                    'message' => "Dosen {$jadwal->dosen->name} tidak bisa mengajar pada jadwal CSR {$jadwal->mataKuliah->nama} ({$jadwal->kategori->nama}) pada tanggal " . 
+                               date('d/m/Y', strtotime($jadwal->tanggal)) . " jam " . 
+                               str_replace(':', '.', $jadwal->jam_mulai) . "-" . str_replace(':', '.', $jadwal->jam_selesai) . 
+                               " di ruangan {$jadwal->ruangan->nama}.{$alasanText}",
+                    'type' => 'warning',
+                    'is_read' => false,
+                    'data' => [
+                        'jadwal_id' => $jadwal->id,
+                        'jadwal_type' => 'csr',
+                        'dosen_id' => $jadwal->dosen_id,
+                        'mata_kuliah' => $jadwal->mataKuliah->nama,
+                        'kategori' => $jadwal->kategori->nama,
+                        'tanggal' => $jadwal->tanggal,
+                        'waktu' => $jadwal->jam_mulai . ' - ' . $jadwal->jam_selesai,
+                        'ruangan' => $jadwal->ruangan->nama
+                    ]
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Log::error("Error sending replacement notification for CSR: " . $e->getMessage());
+        }
+    }
 }

@@ -13,12 +13,20 @@ import {
   UserIcon,
   GroupIcon,
   PlusIcon,
+  ChatIcon,
 } from "../icons";
 
 // Dashboard icon component
 const DashboardIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+);
+
+// History icon component
+const HistoryIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 import { useSidebar } from "../context/SidebarContext";
@@ -48,13 +56,6 @@ type NavItem = {
 // Menu items berdasarkan role
 const getNavItems = (userRole?: string): NavItem[] => {
   const allItems: NavItem[] = [
-    // Menu khusus untuk dosen - dipindah ke atas
-    {
-      icon: <UserIcon />,
-      name: "Detail Riwayat Penugasan",
-      path: "/dosen-riwayat",
-      roles: ["dosen"],
-    },
   {
     icon: <DashboardIcon />,
     name: "Dashboard",
@@ -84,10 +85,10 @@ const getNavItems = (userRole?: string): NavItem[] => {
     icon: <PlusIcon />,
     name: "Generate Mahasiswa",
     subItems: [
-        { name: "Kelompok", path: "/generate/kelompok", roles: ["super_admin", "tim_akademik"] },
-        { name: "Kelas", path: "/generate/kelas", roles: ["super_admin", "tim_akademik"] },
+        { name: "Kelompok", path: "/generate/kelompok", roles: ["super_admin", "tim_akademik", "dosen"] },
+        { name: "Kelas", path: "/generate/kelas", roles: ["super_admin", "tim_akademik", "dosen"] },
     ],
-      roles: ["super_admin", "tim_akademik"],
+      roles: ["super_admin", "tim_akademik", "dosen"],
   },
   {
     icon: <GroupIcon />,
@@ -105,13 +106,26 @@ const getNavItems = (userRole?: string): NavItem[] => {
     icon: <UserIcon />,
     name: "Mahasiswa",
     path: "/mahasiswa",
-      roles: ["super_admin", "tim_akademik"],
+      roles: ["super_admin", "tim_akademik", "dosen"],
   },
   {
     icon: <BoxCubeIcon />,
     name: "Ruangan",
     path: "/ruangan",
-      roles: ["super_admin", "tim_akademik"],
+      roles: ["super_admin", "tim_akademik", "dosen"],
+  },
+  {
+    icon: <HistoryIcon />,
+    name: "Detail Riwayat Penugasan",
+    path: "/dosen-riwayat",
+    roles: ["dosen"],
+  },
+  {
+    icon: <ChatIcon />,
+    name: "Forum Diskusi",
+    path: "/forum-diskusi",
+    roles: ["super_admin", "dosen", "mahasiswa", "tim_akademik"],
+    new: true,
   },
   {
     icon: <PieChartIcon />,
@@ -119,9 +133,15 @@ const getNavItems = (userRole?: string): NavItem[] => {
     subItems: [
         { name: "Reporting Dosen", path: "/reporting/dosen", roles: ["super_admin", "tim_akademik"] },
         { name: "History Aplikasi", path: "/reporting/histori", roles: ["super_admin"] },
-        { name: "Notifikasi Admin", path: "/admin-notifications", roles: ["super_admin"], new: true },
       ],
       roles: ["super_admin", "tim_akademik"],
+  },
+
+  {
+    icon: <PieChartIcon />,
+    name: "Service Center",
+    path: "/support-center",
+    roles: ["super_admin", "dosen", "mahasiswa", "tim_akademik"],
   },
 
 ];
@@ -130,22 +150,22 @@ const getNavItems = (userRole?: string): NavItem[] => {
   if (!userRole) {
     return allItems;
   }
-  
-  return allItems.filter(item => {
+
+  return allItems.filter((item) => {
     // Check main item role
     if (item.roles && !item.roles.includes(userRole)) {
       return false;
     }
-    
+
     // Check subItems roles
     if (item.subItems) {
-      item.subItems = item.subItems.filter(subItem => 
-        !subItem.roles || subItem.roles.includes(userRole)
+      item.subItems = item.subItems.filter(
+        (subItem) => !subItem.roles || subItem.roles.includes(userRole)
       );
       // Only show parent if it has visible subItems
       return item.subItems.length > 0;
     }
-    
+
     return true;
   });
 };
@@ -174,9 +194,7 @@ const othersItems: NavItem[] = [
   {
     icon: <PlugInIcon />,
     name: "Authentication",
-    subItems: [
-      { name: "Sign Up", path: "/signup", pro: false },
-    ],
+    subItems: [{ name: "Sign Up", path: "/signup", pro: false }],
   },
 ];
 
@@ -196,7 +214,9 @@ const AppSidebar: React.FC = () => {
     type: "main" | "others";
     index: number;
   } | null>(null);
-  const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({});
+  const [openNestedMenus, setOpenNestedMenus] = useState<
+    Record<string, boolean>
+  >({});
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
     {}
   );
@@ -213,9 +233,9 @@ const AppSidebar: React.FC = () => {
   );
 
   const toggleNestedMenu = (menuKey: string) => {
-    setOpenNestedMenus(prev => ({
+    setOpenNestedMenus((prev) => ({
       ...prev,
-      [menuKey]: !prev[menuKey]
+      [menuKey]: !prev[menuKey],
     }));
   };
 
@@ -226,24 +246,26 @@ const AppSidebar: React.FC = () => {
       items.forEach((nav, index) => {
         if (nav.subItems) {
           // Check if any of the subItems or their nested subItems are active
-          const isNavSubItemOrNestedActive = nav.subItems.some((subItem, subIndex) => {
-            if (subItem.subItems) {
-              // If subItem has nested subItems, check if any nested item is active
-              return subItem.subItems.some((nestedItem) => {
-                if (isActive(nestedItem.path)) {
-                  setOpenNestedMenus(prev => ({
-                    ...prev,
-                    [`${menuType}-${index}-${subIndex}`]: true
-                  }));
-                  return true;
-                }
-                return false;
-              });
-            } else {
-              // If subItem does not have nested subItems, check if the subItem itself is active
-              return isActive(subItem.path || '');
+          const isNavSubItemOrNestedActive = nav.subItems.some(
+            (subItem, subIndex) => {
+              if (subItem.subItems) {
+                // If subItem has nested subItems, check if any nested item is active
+                return subItem.subItems.some((nestedItem) => {
+                  if (isActive(nestedItem.path)) {
+                    setOpenNestedMenus((prev) => ({
+                      ...prev,
+                      [`${menuType}-${index}-${subIndex}`]: true,
+                    }));
+                    return true;
+                  }
+                  return false;
+                });
+              } else {
+                // If subItem does not have nested subItems, check if the subItem itself is active
+                return isActive(subItem.path || "");
+              }
             }
-          });
+          );
 
           if (isNavSubItemOrNestedActive) {
             setOpenSubmenu({
@@ -307,18 +329,22 @@ const AppSidebar: React.FC = () => {
               <button
                 onClick={() => toggleNestedMenu(`${parentKey}-${index}`)}
                 className={`menu-dropdown-item w-full text-left ${
-                  isActive(subItem.path || '') ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'
+                  isActive(subItem.path || "")
+                    ? "menu-dropdown-item-active"
+                    : "menu-dropdown-item-inactive"
                 }`}
               >
                 {subItem.name}
-                <ChevronDownIcon className={`ml-auto w-4 h-4 transition-transform duration-300 ease-in-out ${
-                  openNestedMenus[`${parentKey}-${index}`] ? "rotate-180" : ""
-                }`} />
+                <ChevronDownIcon
+                  className={`ml-auto w-4 h-4 transition-transform duration-300 ease-in-out ${
+                    openNestedMenus[`${parentKey}-${index}`] ? "rotate-180" : ""
+                  }`}
+                />
               </button>
               <div
                 className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  openNestedMenus[`${parentKey}-${index}`] 
-                    ? "max-h-[500px] opacity-100" 
+                  openNestedMenus[`${parentKey}-${index}`]
+                    ? "max-h-[500px] opacity-100"
                     : "max-h-0 opacity-0"
                 }`}
               >
@@ -342,15 +368,15 @@ const AppSidebar: React.FC = () => {
             </div>
           ) : (
             <Link
-              to={subItem.path || '#'}
+              to={subItem.path || "#"}
               className={`menu-dropdown-item ${
-                isActive(subItem.path || '')
+                isActive(subItem.path || "")
                   ? "menu-dropdown-item-active"
                   : "menu-dropdown-item-inactive"
               }`}
             >
               <span className="flex items-center gap-2">
-              {subItem.name}
+                {subItem.name}
                 {subItem.new && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
                     New

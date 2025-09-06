@@ -30,7 +30,7 @@ class User extends Authenticatable
         'current_token',
         'semester',
         'tahun_ajaran_masuk_id', 'semester_masuk',
-        'matkul_ketua_id', 'matkul_anggota_id', 'peran_kurikulum_mengajar',
+        'matkul_ketua_id', 'matkul_anggota_id', 'peran_kurikulum_mengajar','peran_utama',
     ];
 
     /**
@@ -103,5 +103,22 @@ class User extends Authenticatable
     public function penilaianJurnal()
     {
         return $this->hasMany(PenilaianJurnal::class, 'mahasiswa_nim', 'nim');
+    }
+    
+    /**
+     * Get all bookmarks for this user
+     */
+    public function bookmarks()
+    {
+        return $this->hasMany(UserReplyBookmark::class);
+    }
+
+    /**
+     * Get all bookmarked replies for this user
+     */
+    public function bookmarkedReplies()
+    {
+        return $this->belongsToMany(ForumReply::class, 'user_reply_bookmarks', 'user_id', 'forum_reply_id')
+            ->withTimestamps();
     }
 }

@@ -46,6 +46,12 @@ import DosenRiwayat from "./pages/DosenRiwayat";
 import MataKuliahDosen from "./pages/MataKuliahDosen";
 import AdminNotifications from "./pages/AdminNotifications";
 import DashboardTimAkademik from "./pages/DashboardTimAkademik";
+import MaintenanceGuard from "./components/common/MaintenanceGuard";
+import ForumDiskusi from "./pages/ForumDiskusi";
+import ForumDetail from "./pages/ForumDetail";
+import ForumCategory from "./pages/ForumCategory";
+import Bookmarks from "./pages/Bookmarks";
+import SupportCenter from "./pages/SupportCenter";
 
 function AppContent() {
   const { isSessionExpired, setSessionExpired } = useSession();
@@ -111,33 +117,90 @@ function AppContent() {
               } />
               {/* Super Admin Only Routes */}
               <Route path="/pbl" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
-                  <PBLList />
+                <RequireDosenRole allowedRoles={["super_admin"]}>
+               <MaintenanceGuard
+                      maintenanceConfig={{
+                        title: "Sistem PBL Sedang Dalam Perbaikan",
+                        message:
+                          "Fitur PBL sedang dalam proses perbaikan untuk memberikan pengalaman yang lebih baik. Mohon maaf atas ketidaknyamanan ini.",
+                      }}
+                    >
+                      <PBLList />
+                    </MaintenanceGuard>
                 </RequireDosenRole>
               } />
-              <Route path="/pbl/blok/:blokId" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
-                  <PBLDetail />
-                </RequireDosenRole>
-              } />
-              <Route path="/pbl/generate/:blokId" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
-                  <PBLGenerate />
-                </RequireDosenRole>
-              } />
-              <Route path="/pbl/keahlian" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
-                  <MataKuliahKeahlian />
-                </RequireDosenRole>
-              } />
+             <Route
+                path="/pbl/blok/:blokId"
+                element={
+                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                    <MaintenanceGuard
+                      maintenanceConfig={{
+                        title: "Sistem PBL Sedang Dalam Perbaikan",
+                        message:
+                          "Fitur PBL sedang dalam proses perbaikan untuk memberikan pengalaman yang lebih baik. Mohon maaf atas ketidaknyamanan ini.",
+                      }}
+                    >
+                      <PBLDetail />
+                    </MaintenanceGuard>
+                  </RequireDosenRole>
+                }
+              />
+              <Route
+                path="/pbl/generate/:blokId"
+                element={
+                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                    <MaintenanceGuard
+                      maintenanceConfig={{
+                        title: "Sistem PBL Sedang Dalam Perbaikan",
+                        message:
+                          "Fitur PBL sedang dalam proses perbaikan untuk memberikan pengalaman yang lebih baik. Mohon maaf atas ketidaknyamanan ini.",
+                      }}
+                    >
+                      <PBLGenerate />
+                    </MaintenanceGuard>
+                  </RequireDosenRole>
+                }
+              />
+              <Route
+                path="/pbl/keahlian"
+                element={
+                  <RequireDosenRole allowedRoles={["super_admin"]}>
+                    <MaintenanceGuard
+                      maintenanceConfig={{
+                        title: "Sistem PBL Sedang Dalam Perbaikan",
+                        message:
+                          "Fitur PBL sedang dalam proses perbaikan untuk memberikan pengalaman yang lebih baik. Mohon maaf atas ketidaknyamanan ini.",
+                      }}
+                    >
+                      <MataKuliahKeahlian />
+                    </MaintenanceGuard>
+                  </RequireDosenRole>
+                }
+              />
               <Route path="/csr" element={
                 <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
-                  <CSR />
+                  <MaintenanceGuard
+                    maintenanceConfig={{
+                      title: "Sistem CSR Sedang Dalam Perbaikan",
+                      message:
+                        "Fitur CSR sedang dalam proses perbaikan untuk memberikan pengalaman yang lebih baik. Mohon maaf atas ketidaknyamanan ini.",
+                    }}
+                  >
+                    <CSR />
+                  </MaintenanceGuard>
                 </RequireDosenRole>
               } />
               <Route path="/csr/:csrId" element={
                 <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
-                  <CSRDetail />
+                  <MaintenanceGuard
+                    maintenanceConfig={{
+                      title: "Sistem CSR Sedang Dalam Perbaikan",
+                      message:
+                        "Fitur CSR sedang dalam proses perbaikan untuk memberikan pengalaman yang lebih baik. Mohon maaf atas ketidaknyamanan ini.",
+                    }}
+                  >
+                    <CSRDetail />
+                  </MaintenanceGuard>
                 </RequireDosenRole>
               } />
               <Route path="/dosen" element={
@@ -151,7 +214,7 @@ function AppContent() {
                 </RequireDosenRole>
               } />
               <Route path="/mahasiswa" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik", "dosen"]}>
                   <Mahasiswa />
                 </RequireDosenRole>
               } />
@@ -166,11 +229,13 @@ function AppContent() {
                 </RequireDosenRole>
               } />
               <Route path="/ruangan" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik", "dosen"]}>
                   <Ruangan />
                 </RequireDosenRole>
               } />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/bookmarks" element={<Bookmarks />} />
+              <Route path="/support-center" element={<SupportCenter />} />
               
               {/* Peta Routes - Available for both super_admin and dosen */}
               <Route path="/peta-akademik" element={
@@ -193,18 +258,18 @@ function AppContent() {
               <Route
                 path="/generate/kelompok-besar/:semester"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik", "dosen"]}>
                     <KelompokBesar />
                   </RequireDosenRole>
                 }
               />
               <Route path="/generate/kelompok" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik", "dosen"]}>
                   <Kelompok />
                 </RequireDosenRole>
               } />
               <Route path="/generate/kelas" element={
-                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik", "dosen"]}>
                   <Kelas />
                 </RequireDosenRole>
               } />
@@ -219,14 +284,14 @@ function AppContent() {
                 </RequireDosenRole>
               } />
               <Route path="/admin-notifications" element={
-                <RequireDosenRole allowedRoles={["super_admin"]}>
+                <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                   <AdminNotifications />
                 </RequireDosenRole>
               } />
               <Route
                 path="/generate/kelompok/:semester"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik", "dosen"]}>
                     <KelompokKecil />
                   </RequireDosenRole>
                 }
@@ -234,7 +299,7 @@ function AppContent() {
               <Route
                 path="/generate/kelas/:semester"
                 element={
-                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
+                  <RequireDosenRole allowedRoles={["super_admin", "tim_akademik", "dosen"]}>
                     <KelasDetail />
                   </RequireDosenRole>
                 }
@@ -253,7 +318,15 @@ function AppContent() {
                 path="/mata-kuliah/non-blok-csr/:kode"
                 element={
                   <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
-                    <DetailNonBlokCSR />
+                    <MaintenanceGuard
+                      maintenanceConfig={{
+                        title: "Sistem CSR Sedang Dalam Perbaikan",
+                        message:
+                          "Fitur CSR sedang dalam proses perbaikan untuk memberikan pengalaman yang lebih baik. Mohon maaf atas ketidaknyamanan ini.",
+                      }}
+                    >
+                      <DetailNonBlokCSR />
+                    </MaintenanceGuard>
                   </RequireDosenRole>
                 }
               />
@@ -296,12 +369,59 @@ function AppContent() {
                     <PenilaianJurnalPage />
                   </RequireDosenRole>
                 }
-              />
+              />              
               <Route
                 path="/penilaian-jurnal-antara/:kode_blok/:kelompok/:jurnal_id"
                 element={
                   <RequireDosenRole allowedRoles={["super_admin", "tim_akademik"]}>
                     <PenilaianJurnalAntaraPage />
+                  </RequireDosenRole>
+                }
+              />
+
+                {/* Forum Diskusi - Available for all users */}
+                <Route
+                path="/forum-diskusi"
+                element={
+                  <RequireDosenRole
+                    allowedRoles={[
+                      "super_admin",
+                      "dosen",
+                      "mahasiswa",
+                      "tim_akademik",
+                    ]}
+                  >
+                    <ForumDiskusi />
+                  </RequireDosenRole>
+                }
+              />
+              <Route
+                path="/forum/category/:categorySlug"
+                element={
+                  <RequireDosenRole
+                    allowedRoles={[
+                      "super_admin",
+                      "dosen",
+                      "mahasiswa",
+                      "tim_akademik",
+                    ]}
+                  >
+                    <ForumCategory />
+                  </RequireDosenRole>
+                }
+              />
+              <Route
+                path="/forum/:slug"
+                element={
+                  <RequireDosenRole
+                    allowedRoles={[
+                      "super_admin",
+                      "dosen",
+                      "mahasiswa",
+                      "tim_akademik",
+                    ]}
+                  >
+                    <ForumDetail />
                   </RequireDosenRole>
                 }
               />

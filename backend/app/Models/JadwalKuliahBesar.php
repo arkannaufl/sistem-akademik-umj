@@ -24,6 +24,8 @@ class JadwalKuliahBesar extends Model
         'jam_mulai',
         'jam_selesai',
         'jumlah_sesi',
+        'status_konfirmasi',
+        'alasan_konfirmasi',
     ];
 
     protected $casts = [

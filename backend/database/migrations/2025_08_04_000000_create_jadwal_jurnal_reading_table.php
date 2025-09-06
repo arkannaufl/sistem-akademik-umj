@@ -25,6 +25,8 @@ return new class extends Migration
             $table->unsignedBigInteger('ruangan_id');
             $table->string('topik');
             $table->string('file_jurnal')->nullable();
+            $table->enum('status_konfirmasi', ['belum_konfirmasi', 'bisa', 'tidak_bisa'])->default('belum_konfirmasi');
+            $table->text('alasan_konfirmasi')->nullable();
             $table->timestamps();
 
             $table->foreign('mata_kuliah_kode')->references('kode')->on('mata_kuliah')->onDelete('cascade');

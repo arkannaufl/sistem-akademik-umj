@@ -22,9 +22,13 @@ return new class extends Migration
             $table->string('agenda')->nullable(); // untuk agenda khusus
             $table->string('materi')->nullable(); // untuk jadwal materi
             $table->unsignedBigInteger('dosen_id')->nullable(); // untuk jadwal materi
+            $table->json('dosen_ids')->nullable(); // untuk multiple dosen
             $table->unsignedBigInteger('ruangan_id')->nullable(); // Bisa null jika tidak menggunakan ruangan
             $table->unsignedBigInteger('kelompok_besar_id')->nullable(); // Menyimpan semester (1, 2, 3, dst.), bukan ID dari tabel kelompok_besar
+            $table->unsignedBigInteger('kelompok_besar_antara_id')->nullable();
             $table->boolean('use_ruangan')->default(true); // Flag untuk menentukan apakah menggunakan ruangan atau tidak
+            $table->enum('status_konfirmasi', ['belum_konfirmasi', 'bisa', 'tidak_bisa'])->default('belum_konfirmasi');
+            $table->text('alasan_konfirmasi')->nullable();
             $table->timestamps();
 
             $table->foreign('mata_kuliah_kode')->references('kode')->on('mata_kuliah')->onDelete('cascade');

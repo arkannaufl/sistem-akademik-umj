@@ -55,6 +55,7 @@ type JadwalMengajar = {
   jumlah_sesi: number;
   semester: string;
   blok?: string;
+  semester_type?: 'reguler' | 'antara';
 };
 
 export default function DosenRiwayat() {
@@ -67,7 +68,6 @@ export default function DosenRiwayat() {
   const [error, setError] = useState("");
   const [filterSemester, setFilterSemester] = useState<string>("");
   const [filterJenis, setFilterJenis] = useState<string>("");
-  const [filterBlok, setFilterBlok] = useState<string>("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -99,11 +99,24 @@ export default function DosenRiwayat() {
           dosenId = dosenDataToUse.id;
         }
 
-        // Fetch jadwal mengajar dosen
+        // Fetch jadwal mengajar dosen untuk semester reguler dan antara
         if (dosenId) {
           try {
-            const jadwalResponse = await api.get(`/users/${dosenId}/jadwal-mengajar`);
-            setJadwalMengajar(jadwalResponse.data);
+            // Fetch jadwal reguler
+            const jadwalRegulerResponse = await api.get(`/users/${dosenId}/jadwal-mengajar?semester_type=reguler`);
+            const jadwalReguler = jadwalRegulerResponse.data || [];
+            
+            // Fetch jadwal antara
+            const jadwalAntaraResponse = await api.get(`/users/${dosenId}/jadwal-mengajar?semester_type=antara`);
+            const jadwalAntara = jadwalAntaraResponse.data || [];
+            
+            // Gabungkan data dan tambahkan informasi semester type
+            const allJadwal = [
+              ...jadwalReguler.map((jadwal: any) => ({ ...jadwal, semester_type: 'reguler' })),
+              ...jadwalAntara.map((jadwal: any) => ({ ...jadwal, semester_type: 'antara' }))
+            ];
+            
+            setJadwalMengajar(allJadwal);
           } catch (jadwalError) {
             console.error("Error fetching jadwal mengajar:", jadwalError);
             setJadwalMengajar([]);
@@ -402,11 +415,19 @@ export default function DosenRiwayat() {
       const totalSesi = filteredJadwal.reduce((sum, j) => sum + j.jumlah_sesi, 0);
       const jumlahMataKuliah = new Set(filteredJadwal.map(j => j.mata_kuliah_kode)).size;
       const jenisKegiatan = Object.keys(statistikPerJenis).length;
-  
+      
+      // Hitung breakdown semester type
+      const jadwalReguler = filteredJadwal.filter(j => j.semester_type === 'reguler');
+      const jadwalAntara = filteredJadwal.filter(j => j.semester_type === 'antara');
+      const sesiReguler = jadwalReguler.reduce((sum, j) => sum + j.jumlah_sesi, 0);
+      const sesiAntara = jadwalAntara.reduce((sum, j) => sum + j.jumlah_sesi, 0);
+
       const ringkasan = [
         `Bahwa dalam periode pelaporan, yang bersangkutan telah melaksanakan ${filteredJadwal.length} pertemuan`,
         `dengan total ${totalSesi} sesi mengajar dan ${formatJamMenit(totalJamMengajar)}, mengajar ${jumlahMataKuliah} mata kuliah`,
         `dalam ${jenisKegiatan} jenis kegiatan akademik yang berbeda.`,
+        "",
+        `Rincian: ${jadwalReguler.length} pertemuan (${sesiReguler} sesi) pada Semester Reguler dan ${jadwalAntara.length} pertemuan (${sesiAntara} sesi) pada Semester Antara.`,
         "",
         "Bahwa Surat Keterangan ini dibuat untuk keperluan referensi atau untuk dipergunakan",
         "sebagaimana mestinya.",
@@ -448,15 +469,17 @@ export default function DosenRiwayat() {
       const colPertemuan = colJenis + 60; // Mengurangi dari 80 ke 60
       const colSesi = colPertemuan + 40; // Mengurangi dari 50 ke 40
       const colJam = colSesi + 40; // Mengurangi dari 50 ke 40
+      const colSemesterType = colJam + 30; // Tambah kolom semester type
 
       doc.text("Jenis Kegiatan", colJenis, yPos);
       doc.text("Pertemuan", colPertemuan, yPos);
       doc.text("Sesi", colSesi, yPos);
       doc.text("Jam", colJam, yPos);
+      doc.text("Semester Type", colSemesterType, yPos);
       yPos += 6;
 
       // Garis bawah header
-      doc.line(colJenis, yPos, colJam + 30, yPos); // Mengurangi dari +20 ke +30
+      doc.line(colJenis, yPos, colSemesterType + 30, yPos); // Perpanjang garis
       yPos += 6;
 
       doc.setFont("times", "normal");
@@ -474,10 +497,16 @@ export default function DosenRiwayat() {
       semuaJenisKegiatan.forEach((jenisKegiatan) => {
         const dataJenis = statistikPerJenis[jenisKegiatan.jenis] || { jumlah: 0, sesi: 0, jam: 0 };
         
+        // Hitung breakdown per semester type untuk jenis ini
+        const jadwalJenis = filteredJadwal.filter(j => j.jenis_jadwal === jenisKegiatan.jenis);
+        const regulerCount = jadwalJenis.filter(j => j.semester_type === 'reguler').length;
+        const antaraCount = jadwalJenis.filter(j => j.semester_type === 'antara').length;
+        
         doc.text(jenisKegiatan.label, colJenis, yPos);
         doc.text(`${dataJenis.jumlah}`, colPertemuan, yPos);
         doc.text(`${dataJenis.sesi}`, colSesi, yPos);
         doc.text(`${formatJamMenit(dataJenis.jam)}`, colJam, yPos);
+        doc.text(`R:${regulerCount} A:${antaraCount}`, colSemesterType, yPos);
 
         yPos += 8;
 
@@ -612,20 +641,16 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
   };
 
   const filteredJadwal = jadwalMengajar.filter(jadwal => {
-    // Filter semester
-    const semesterStr = String(jadwal.semester);
-    const matchSemester = !filterSemester || semesterStr === filterSemester;
+    // Filter semester type (reguler/antara)
+    const matchSemesterType = !filterSemester || 
+      (filterSemester === 'reguler' && jadwal.semester_type === 'reguler') ||
+      (filterSemester === 'antara' && jadwal.semester_type === 'antara') ||
+      filterSemester === '';
     
     // Filter jenis jadwal
     const matchJenis = !filterJenis || jadwal.jenis_jadwal === filterJenis;
     
-    // Filter blok - handle null/undefined dan konversi ke string
-    const blokStr = jadwal.blok ? String(jadwal.blok) : "";
-    const matchBlok = !filterBlok || blokStr === filterBlok;
-    
-
-    
-    return matchSemester && matchJenis && matchBlok;
+    return matchSemesterType && matchJenis;
   });
 
   const totalJamMengajar = filteredJadwal.reduce((total, jadwal) => {
@@ -690,7 +715,7 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
           {/* Filter dan Statistik Skeleton */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
             <div className="flex flex-col md:flex-row gap-4 mb-6">
-              {Array.from({ length: 3 }).map((_, idx) => (
+              {Array.from({ length: 2 }).map((_, idx) => (
                 <div key={idx} className="flex-1">
                   <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-lg w-32 mb-2 animate-pulse"></div>
                   <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
@@ -937,29 +962,8 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
               className="w-full md:w-44 h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="">Semua Semester</option>
-                <option value="1">Semester 1</option>
-                <option value="2">Semester 2</option>
-                <option value="3">Semester 3</option>
-                <option value="4">Semester 4</option>
-                <option value="5">Semester 5</option>
-                <option value="6">Semester 6</option>
-                <option value="7">Semester 7</option>
-                <option value="8">Semester 8</option>
-              </select>
-              <select
-                value={filterBlok}
-                onChange={(e) => setFilterBlok(e.target.value)}
-              className="w-full md:w-44 h-11 text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Semua Blok</option>
-                <option value="1">Blok 1</option>
-                <option value="2">Blok 2</option>
-                <option value="3">Blok 3</option>
-                <option value="4">Blok 4</option>
-                <option value="5">Blok 5</option>
-                <option value="6">Blok 6</option>
-                <option value="7">Blok 7</option>
-                <option value="8">Blok 8</option>
+                <option value="reguler">Semester Reguler</option>
+                <option value="antara">Semester Antara</option>
               </select>
               <select
                 value={filterJenis}
@@ -1087,6 +1091,7 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
                             <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Ruangan</th>
                             <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Peserta</th>
                             <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Sesi</th>
+                            <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Semester Type</th>
                             <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400 whitespace-nowrap">Semester/Blok</th>
                             </tr>
                           </thead>
@@ -1118,6 +1123,15 @@ doc.text("(_________________________)", doc.internal.pageSize.width - margin, li
                               <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{jadwal.ruangan_nama}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{jadwal.kelompok_kecil || '-'}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{jadwal.jumlah_sesi}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                                  jadwal.semester_type === 'reguler' 
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                }`}>
+                                  {jadwal.semester_type === 'reguler' ? 'Reguler' : 'Antara'}
+                                </span>
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                                 <div>Semester {jadwal.semester}</div>
                                     {jadwal.blok && <div className="text-xs">Blok {jadwal.blok}</div>}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../../utils/api";
 
 interface Notification {
@@ -41,12 +42,15 @@ export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifying, setNotifying] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [userRole, setUserRole] = useState<string>('');
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // Get user role from localStorage
     const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setUserRole(user.role || '');
     
     // Load notifications based on user role
     if (user.id) {
@@ -65,7 +69,7 @@ export default function NotificationDropdown() {
       setLoading(true);
       let response;
       
-      if (role === 'super_admin') {
+      if (role === 'super_admin' || role === 'tim_akademik') {
         // Use AdminNotifications API
         response = await api.get(`/notifications/admin/all?limit=5`);
         setNotifications(response.data.slice(0, 5)); // Show only first 5
@@ -106,7 +110,7 @@ export default function NotificationDropdown() {
         const unreadNotifications = notifications.filter(n => !n.is_read);
         
         if (unreadNotifications.length > 0) {
-          if (user.role === 'super_admin') {
+          if (user.role === 'super_admin' || user.role === 'tim_akademik') {
             // Mark all admin notifications as read
             await Promise.all(
               unreadNotifications.map(n => api.put(`/notifications/${n.id}/read`))
@@ -248,7 +252,7 @@ export default function NotificationDropdown() {
         </svg>
       </button>
       {isOpen && (
-        <div className="absolute -right-[240px] mt-[17px] flex h-[480px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[361px] lg:right-0 z-50">
+        <div className="absolute -right-[240px] mt-[17px] flex h-[520px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[361px] lg:right-0 z-50">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100 dark:border-gray-700">
             <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
               Notifikasi
@@ -321,6 +325,24 @@ export default function NotificationDropdown() {
               </li>
             )}
           </ul>
+          
+          {/* Button Lihat Semua Notifikasi untuk Super Admin dan Tim Akademik */}
+          {(userRole === 'super_admin' || userRole === 'tim_akademik') && notifications.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+              <button
+                onClick={() => {
+                  navigate('/admin-notifications');
+                  setIsOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors duration-200"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                Lihat Semua Notifikasi
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
