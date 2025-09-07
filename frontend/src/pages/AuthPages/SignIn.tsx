@@ -194,7 +194,7 @@ export default function SignIn() {
           {/* Right: Logo & Grid */}
           <div className="hidden w-1/2 md:flex flex-col justify-center">
             <div className="relative flex items-center justify-center z-1">
-              <div className="flex flex-col items-center max-w-xs">
+              <div className="flex flex-col items-center max-w-md">
                 <Link to="/" className="block mb-4">
                   <img width={151} height={48} src="/images/logo/logo.svg" alt="Logo" />
                 </Link>
@@ -204,7 +204,7 @@ export default function SignIn() {
                 <div className="absolute bottom-0 left-0 -z-1 w-full max-w-[250px] rotate-180 xl:max-w-[450px]">
                   <img src="/images/shape/grid-01.svg" alt="grid" />
                 </div>
-                <p className="text-center text-gray-800 dark:text-white text-2xl mb-3">
+                <p className="text-center text-gray-800 dark:text-white text-xl leading-relaxed mb-3 px-4">
                   Integrated System Medical Education Fakultas Kedokteran dan Kesehatan Universitas Muhammadiyah Jakarta
                 </p>
                 <p className="text-center text-gray-400 dark:text-white/60">
