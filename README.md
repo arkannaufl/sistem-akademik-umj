@@ -214,9 +214,10 @@ npm run build:prod
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| **Frontend** | http://localhost:5173 | React application |
-| **Backend API** | http://localhost:8000 | Laravel API |
-| **API Docs** | http://localhost:8000/api | API documentation |
+| **Frontend** | http://localhost:5173 | React application (dev) |
+| **Backend API** | http://localhost:8000 | Laravel API (dev) |
+| **API Docs** | http://localhost:8000/api | API documentation (dev) |
+| **Production** | https://isme.fkkumj.ac.id | Live application |
 
 ### 🔑 Default Credentials
 
@@ -305,7 +306,7 @@ APP_NAME="Sistem Akademik UMJ"
 APP_ENV=local
 APP_KEY=base64:your-app-key
 APP_DEBUG=true
-APP_URL=http://localhost:8000
+APP_URL=https://isme.fkkumj.ac.id
 
 DB_CONNECTION=sqlite
 DB_DATABASE=/path/to/database.sqlite
