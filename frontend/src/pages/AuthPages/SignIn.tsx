@@ -205,7 +205,7 @@ export default function SignIn() {
                   <img src="/images/shape/grid-01.svg" alt="grid" />
                 </div>
                 <p className="text-center text-gray-800 dark:text-white text-2xl mb-3">
-                  Sistem Akademik Universitas Muhammadiyah Jakarta
+                  Integrated System Medical Education Fakultas Kedokteran dan Kesehatan Universitas Muhammadiyah Jakarta
                 </p>
                 <p className="text-center text-gray-400 dark:text-white/60">
                   Platform Terintegrasi untuk Presensi, Jadwal dan Evaluasi

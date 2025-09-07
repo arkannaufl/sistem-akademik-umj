@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc --noEmit --skipLibCheck && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup:dev": "node setup-env.js development",
+    "setup:prod": "node setup-env.js production",
+    "start:dev": "npm run setup:dev && npm run dev",
+    "build:prod": "npm run setup:prod && npm run build"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

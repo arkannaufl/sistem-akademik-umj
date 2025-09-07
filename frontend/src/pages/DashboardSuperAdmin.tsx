@@ -8,6 +8,7 @@ import {
   generateAssessmentReport, 
   generateAcademicReport 
 } from '../utils/exportUtils';
+import api, { BASE_URL } from '../utils/api';
 
 interface WeatherData {
   temperature: number;
@@ -175,6 +176,30 @@ const DashboardSuperAdmin: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
+  
+  // Get current user data
+  const [user, setUser] = useState<any>(() => {
+    return JSON.parse(localStorage.getItem("user") || "{}");
+  });
+
+  // Update user data when localStorage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const newUser = JSON.parse(localStorage.getItem("user") || "{}");
+      setUser(newUser);
+    };
+
+    // Listen for custom event
+    window.addEventListener("user-updated", handleStorageChange);
+    
+    // Also listen for storage event (in case localStorage is modified directly)
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("user-updated", handleStorageChange);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
   
   // Modal states
   const [showExportModal, setShowExportModal] = useState(false);
@@ -475,7 +500,7 @@ const DashboardSuperAdmin: React.FC = () => {
       
       // Call API for each selected report type and format
       for (const reportType of selectedReportTypes) {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/reports/export/${reportType}`, {
+        const response = await fetch(`${BASE_URL}/api/reports/export/${reportType}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -559,7 +584,7 @@ const DashboardSuperAdmin: React.FC = () => {
 
     setIsResetting(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/system/reset`, {
+      const response = await fetch(`${BASE_URL}/api/system/reset`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -634,7 +659,7 @@ const DashboardSuperAdmin: React.FC = () => {
     
     setIsBacking(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/system/backup`, {
+      const response = await fetch(`${BASE_URL}/api/system/backup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -687,7 +712,7 @@ const DashboardSuperAdmin: React.FC = () => {
     formData.append('type', backupType || 'full'); // Use selected type or default to full
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/system/import`, {
+      const response = await fetch(`${BASE_URL}/api/system/import`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -1118,8 +1143,8 @@ const DashboardSuperAdmin: React.FC = () => {
         throw new Error('Authentication token not found. Please login again.');
       }
 
-      // For development, use full URL to Laravel backend
-      const baseURL = process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : '';
+      // Use centralized BASE_URL
+      const baseURL = BASE_URL;
       
       // Try main endpoint first, fallback to test endpoint for debugging
       let endpoint = `${baseURL}/api/dashboard/super-admin`;
@@ -1589,6 +1614,11 @@ const DashboardSuperAdmin: React.FC = () => {
                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                      Sistem Akademik Universitas Muhammadiyah Jakarta
         </p>
+                   {user && user.name && (
+                     <p className="mt-1 text-sm text-blue-600 dark:text-blue-400 font-medium">
+                       Logged in as: {user.name} ({user.username})
+        </p>
+                   )}
       </div>
                </div>
                <div className="flex flex-col sm:flex-row gap-3 mt-4 sm:mt-0">

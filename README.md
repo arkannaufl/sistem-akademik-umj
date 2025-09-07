@@ -197,8 +197,15 @@ cd frontend
 # Install dependencies
 npm install
 
+# Setup environment (Development)
+npm run setup:dev
+
 # Jalankan development server
 npm run dev
+
+# Atau untuk production
+npm run setup:prod
+npm run build:prod
 ```
 
 </details>
@@ -308,8 +315,23 @@ SANCTUM_STATEFUL_DOMAINS=localhost:5173
 
 ### API Configuration (Frontend)
 ```typescript
-// src/api/index.ts
-const API_BASE_URL = 'http://localhost:8000/api';
+// src/utils/api.ts - Centralized API configuration
+export const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = `${BASE_URL}/api`;
+```
+
+### Environment Files (Frontend)
+- `env.development` - Development environment (localhost:8000)
+- `env.production` - Production environment (isme.fkkumj.ac.id)
+- `env.example` - Template environment file
+
+**Quick Setup:**
+```bash
+# Development
+npm run setup:dev
+
+# Production  
+npm run setup:prod
 ```
 
 ## 📊 Database Schema
