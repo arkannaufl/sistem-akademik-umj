@@ -48,6 +48,38 @@ class ReportingController extends Controller
 
         $perPage = $request->get('per_page', 15);
         $logs = $query->paginate($perPage);
+        
+        // Transform data to include role information
+        $transformedLogs = $logs->getCollection()->map(function ($log) {
+            return [
+                'id' => $log->id,
+                'description' => $log->description,
+                'subject_type' => $log->subject_type,
+                'subject_id' => $log->subject_id,
+                'causer_type' => $log->causer_type,
+                'causer_id' => $log->causer_id,
+                'event' => $log->event,
+                'properties' => $log->properties,
+                'created_at' => $log->created_at,
+                'causer' => $log->causer ? [
+                    'id' => $log->causer->id,
+                    'name' => $log->causer->name,
+                ] : null,
+                'role' => $log->causer ? $log->causer->role : 'System',
+            ];
+        });
+        
+        // Create new paginator with transformed data
+        $transformedPaginator = new LengthAwarePaginator(
+            $transformedLogs,
+            $logs->total(),
+            $logs->perPage(),
+            $logs->currentPage(),
+            [
+                'path' => $logs->path(),
+                'pageName' => $logs->getPageName(),
+            ]
+        );
 
         // Ambil filter options
         $actions = Activity::distinct()->pluck('event');
@@ -58,7 +90,7 @@ class ReportingController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $logs,
+            'data' => $transformedPaginator,
             'filters' => [
                 'actions' => $actions,
                 'modules' => $modules,

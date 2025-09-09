@@ -36,6 +36,7 @@ class DashboardSuperAdminController extends Controller
             $totalMahasiswa = User::where('role', 'mahasiswa')->count();
             $totalDosen = User::where('role', 'dosen')->count();
             $totalTimAkademik = User::where('role', 'tim_akademik')->count();
+            $totalSuperAdmin = User::where('role', 'super_admin')->count();
 
             // Get academic statistics
             $totalMataKuliah = MataKuliah::count();
@@ -71,11 +72,19 @@ class DashboardSuperAdminController extends Controller
                 ], 404);
             }
 
+            // Get Super Admin list
+            $superAdmins = User::where('role', 'super_admin')
+                ->select('id', 'name', 'email', 'username', 'created_at', 'is_logged_in')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
             return response()->json([
                 'totalUsers' => $totalUsers,
                 'totalMahasiswa' => $totalMahasiswa,
                 'totalDosen' => $totalDosen,
                 'totalTimAkademik' => $totalTimAkademik,
+                'totalSuperAdmin' => $totalSuperAdmin,
+                'superAdmins' => $superAdmins,
                 'totalMataKuliah' => $totalMataKuliah,
                 'totalKelas' => $totalKelas,
                 'totalRuangan' => $totalRuangan,
@@ -132,16 +141,22 @@ class DashboardSuperAdminController extends Controller
                 ->limit(10)
                 ->get()
                 ->map(function ($activity) {
-                    $user = $activity->causer ? $activity->causer->nama : 'System';
+                    $user = $activity->causer ? $activity->causer->name : 'System';
+                    $userRole = $activity->causer ? $activity->causer->role : 'System';
                     $action = $this->formatActivityDescription($activity->description);
                     $target = $activity->subject_type ? class_basename($activity->subject_type) : 'Unknown';
                     
                     return [
                         'id' => $activity->id,
                         'user' => $user,
+                        'role' => $userRole,
                         'action' => $action,
                         'target' => $target,
+                        'description' => $activity->description,
+                        'created_at' => $activity->created_at->toISOString(),
                         'timestamp' => $activity->created_at->diffForHumans(),
+                        'event' => $activity->event,
+                        'subject_type' => $activity->subject_type,
                         'type' => $this->getActivityType($activity->description)
                     ];
                 });

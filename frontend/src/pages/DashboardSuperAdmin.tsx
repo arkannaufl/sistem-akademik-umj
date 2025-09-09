@@ -19,67 +19,14 @@ interface WeatherData {
   windSpeed: number;
 }
 
-// Add new interfaces for system monitoring
-interface SystemMetrics {
-  cpu: {
-    usage: number;
-    cores: number;
-    threads: number;
-    temperature: number;
-    frequency: number;
-  };
-  memory: {
-    total: number;
-    used: number;
-    available: number;
-    usage: number;
-  };
-  storage: {
-    total: number;
-    used: number;
-    available: number;
-    usage: number;
-  };
-  network: {
-    upload: number;
-    download: number;
-    connections: number;
-  };
-  // Academic-specific metrics
-  database: {
-    responseTime: number;
-    connections: number;
-    size: number;
-    lastBackup: string;
-  };
-  application: {
-    activeUsers: number;
-    activeStudents: number;
-    activeLecturers: number;
-    apiResponseTime: number;
-    errorRate: number;
-  };
-  security: {
-    failedLogins: number;
-    sslStatus: 'valid' | 'expired' | 'invalid';
-    firewallStatus: 'active' | 'inactive';
-    lastSecurityScan: string;
-  };
-}
 
-interface ChartDataPoint {
-  timestamp: number;
-  value: number;
-}
-
-interface SystemChartData {
-  cpu: ChartDataPoint[];
-  memory: ChartDataPoint[];
-  storage: ChartDataPoint[];
-  network: ChartDataPoint[];
-  database: ChartDataPoint[];
-  application: ChartDataPoint[];
-  security: ChartDataPoint[];
+interface SuperAdmin {
+  id: number;
+  name: string;
+  email: string;
+  username: string;
+  created_at: string;
+  is_logged_in: number;
 }
 
 interface DashboardStats {
@@ -87,6 +34,8 @@ interface DashboardStats {
   totalMahasiswa: number;
   totalDosen: number;
   totalTimAkademik: number;
+  totalSuperAdmin: number;
+  superAdmins: SuperAdmin[];
   totalMataKuliah: number;
   totalKelas: number;
   totalRuangan: number;
@@ -106,12 +55,32 @@ interface DashboardStats {
 }
 
 interface Activity {
-  id: string;
-  user: string;
-  action: string;
-  target: string;
-  timestamp: string;
-  type: 'create' | 'update' | 'delete' | 'login' | 'export';
+  id: number;
+  description: string;
+  subject_type: string | null;
+  subject_id: number | null;
+  causer_type: string | null;
+  causer_id: number | null;
+  event: string | null;
+  properties: {
+    attributes?: Record<string, any>;
+    old?: Record<string, any>;
+    details?: {
+      ip_address?: string;
+      browser?: string;
+      os?: string;
+      method?: string;
+      path?: string;
+    }
+  } | null;
+  created_at: string;
+  causer?: {
+    id: number;
+    name: string;
+  };
+  role?: string;
+  timestamp?: string;
+  user?: string;
 }
 
 interface SystemHealth {
@@ -223,67 +192,19 @@ const DashboardSuperAdmin: React.FC = () => {
   const [resetConfirmationText, setResetConfirmationText] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   
-  // System monitoring states
-  const [activeTab, setActiveTab] = useState<'cpu' | 'memory' | 'storage' | 'network' | 'database' | 'application' | 'security'>('cpu');
-  const [systemMetrics, setSystemMetrics] = useState<SystemMetrics>({
-    cpu: { usage: 0, cores: 8, threads: 16, temperature: 45, frequency: 2.4 },
-    memory: { total: 16, used: 8, available: 8, usage: 50 },
-    storage: { total: 512, used: 256, available: 256, usage: 50 },
-    network: { upload: 0, download: 0, connections: 0 },
-    database: { responseTime: 0, connections: 0, size: 0, lastBackup: '' },
-    application: { activeUsers: 0, activeStudents: 0, activeLecturers: 0, apiResponseTime: 0, errorRate: 0 },
-    security: { failedLogins: 0, sslStatus: 'valid', firewallStatus: 'active', lastSecurityScan: '' }
+  // Super Admin Account Creation Modal States
+  const [showCreateAdminModal, setShowCreateAdminModal] = useState(false);
+  const [adminFormData, setAdminFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    phone: '',
+    position: ''
   });
-  const [chartData, setChartData] = useState<SystemChartData>({
-    cpu: [],
-    memory: [],
-    storage: [],
-    network: [],
-    database: [],
-    application: [],
-    security: []
-  });
+  const [adminFormErrors, setAdminFormErrors] = useState<Record<string, string>>({});
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
   
-  // Initialize chart data with some initial points
-  useEffect(() => {
-    const now = Date.now();
-    const initialMetrics = generateSystemMetrics();
-    
-    const initialData: SystemChartData = {
-      cpu: Array.from({ length: 10 }, (_, i) => ({
-        timestamp: now - (10 - i) * 1000,
-        value: initialMetrics.cpu.usage + Math.random() * 10 - 5
-      })),
-      memory: Array.from({ length: 10 }, (_, i) => ({
-        timestamp: now - (10 - i) * 1000,
-        value: initialMetrics.memory.usage + Math.random() * 10 - 5
-      })),
-      storage: Array.from({ length: 10 }, (_, i) => ({
-        timestamp: now - (10 - i) * 1000,
-        value: initialMetrics.storage.usage + Math.random() * 10 - 5
-      })),
-      network: Array.from({ length: 10 }, (_, i) => ({
-        timestamp: now - (10 - i) * 1000,
-        value: (initialMetrics.network.upload + initialMetrics.network.download) + Math.random() * 5
-      })),
-      database: Array.from({ length: 10 }, (_, i) => ({
-        timestamp: now - (10 - i) * 1000,
-        value: initialMetrics.database.responseTime + Math.random() * 20 - 10
-      })),
-      application: Array.from({ length: 10 }, (_, i) => ({
-        timestamp: now - (10 - i) * 1000,
-        value: initialMetrics.application.apiResponseTime + Math.random() * 30 - 15
-      })),
-      security: Array.from({ length: 10 }, (_, i) => ({
-        timestamp: now - (10 - i) * 1000,
-        value: initialMetrics.security.failedLogins + Math.random() * 2
-      }))
-    };
-    
-    setChartData(initialData);
-  }, []); // Empty dependency array - only run once on mount
-  const [isMonitoring, setIsMonitoring] = useState(false); // Start with monitoring stopped
-  const monitoringIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Attendance semester state
   // const [activeAttendanceSemester, setActiveAttendanceSemester] = useState<'regular' | 'antara'>('regular');
@@ -293,6 +214,8 @@ const DashboardSuperAdmin: React.FC = () => {
     totalMahasiswa: 0,
     totalDosen: 0,
     totalTimAkademik: 0,
+    totalSuperAdmin: 0,
+    superAdmins: [],
     totalMataKuliah: 0,
     totalKelas: 0,
     totalRuangan: 0,
@@ -776,116 +699,7 @@ const DashboardSuperAdmin: React.FC = () => {
     }
   };
 
-  // System monitoring functions
-  const generateSystemMetrics = (): SystemMetrics => {
-    // For development, generate realistic simulated data
-    const now = Date.now();
-    const baseUsage = 20 + Math.sin(now / 10000) * 30; // Oscillating base usage
-    
-    return {
-      cpu: {
-        usage: Math.max(0, Math.min(100, baseUsage + Math.random() * 20)),
-        cores: 8,
-        threads: 16,
-        temperature: 40 + Math.random() * 20,
-        frequency: 2.4 + Math.random() * 1.2
-      },
-      memory: {
-        total: 16,
-        used: 8 + Math.random() * 4,
-        available: 16 - (8 + Math.random() * 4),
-        usage: 50 + Math.random() * 30
-      },
-      storage: {
-        total: 512,
-        used: 256 + Math.random() * 50,
-        available: 512 - (256 + Math.random() * 50),
-        usage: 50 + Math.random() * 20
-      },
-      network: {
-        upload: Math.random() * 10,
-        download: Math.random() * 15,
-        connections: Math.floor(Math.random() * 100)
-      },
-      database: {
-        responseTime: 50 + Math.random() * 100,
-        connections: 10 + Math.floor(Math.random() * 50),
-        size: 2.5 + Math.random() * 1.5,
-        lastBackup: new Date(Date.now() - Math.random() * 86400000).toISOString()
-      },
-      application: {
-        activeUsers: 20 + Math.floor(Math.random() * 30),
-        activeStudents: 15 + Math.floor(Math.random() * 25),
-        activeLecturers: 5 + Math.floor(Math.random() * 10),
-        apiResponseTime: 100 + Math.random() * 200,
-        errorRate: Math.random() * 2
-      },
-      security: {
-        failedLogins: Math.floor(Math.random() * 5),
-        sslStatus: 'valid' as const,
-        firewallStatus: 'active' as const,
-        lastSecurityScan: new Date(Date.now() - Math.random() * 604800000).toISOString()
-      }
-    };
-  };
 
-  const updateChartData = (metrics: SystemMetrics) => {
-    const now = Date.now();
-    
-    setChartData(prev => {
-      const newData = { ...prev };
-      
-      // Update all chart data simultaneously, not just the active tab
-      const cpuDataPoint: ChartDataPoint = { timestamp: now, value: metrics.cpu.usage };
-      const memoryDataPoint: ChartDataPoint = { timestamp: now, value: metrics.memory.usage };
-      const storageDataPoint: ChartDataPoint = { timestamp: now, value: metrics.storage.usage };
-      const networkDataPoint: ChartDataPoint = { timestamp: now, value: metrics.network.upload + metrics.network.download };
-      const databaseDataPoint: ChartDataPoint = { timestamp: now, value: metrics.database.responseTime };
-      const applicationDataPoint: ChartDataPoint = { timestamp: now, value: metrics.application.apiResponseTime };
-      const securityDataPoint: ChartDataPoint = { timestamp: now, value: metrics.security.failedLogins };
-      
-      // Update all charts with new data points
-      newData.cpu = [...prev.cpu, cpuDataPoint].slice(-60); // Keep last 60 points
-      newData.memory = [...prev.memory, memoryDataPoint].slice(-60);
-      newData.storage = [...prev.storage, storageDataPoint].slice(-60);
-      newData.network = [...prev.network, networkDataPoint].slice(-60);
-      newData.database = [...prev.database, databaseDataPoint].slice(-60);
-      newData.application = [...prev.application, applicationDataPoint].slice(-60);
-      newData.security = [...prev.security, securityDataPoint].slice(-60);
-      
-      return newData;
-    });
-  };
-
-  const startSystemMonitoring = () => {
-    // Clear any existing interval first
-    if (monitoringIntervalRef.current) {
-      clearInterval(monitoringIntervalRef.current);
-      monitoringIntervalRef.current = null;
-    }
-    
-    setIsMonitoring(true);
-    const interval = setInterval(() => {
-      const metrics = generateSystemMetrics();
-      setSystemMetrics(metrics);
-      updateChartData(metrics);
-    }, 1000); // Update every second
-
-    monitoringIntervalRef.current = interval;
-  };
-
-  const stopSystemMonitoring = () => {
-    setIsMonitoring(false);
-    
-    // Clear the interval
-    if (monitoringIntervalRef.current) {
-      clearInterval(monitoringIntervalRef.current);
-      monitoringIntervalRef.current = null;
-    }
-    
-    // Force stop any ongoing updates
-    setSystemMetrics(prev => ({ ...prev }));
-  };
 
   // Helper function to get user initials from name
   const getUserInitials = (userName: string): string => {
@@ -913,20 +727,165 @@ const DashboardSuperAdmin: React.FC = () => {
     }
   };
 
+  // Helper functions for activity display (consistent with Histori.tsx)
+  const getActionColor = (action: string) => {
+    if (!action) return 'bg-gray-100 text-gray-700';
+    switch (action) {
+      case 'created': return 'bg-green-100 text-green-700';
+      case 'updated': return 'bg-blue-100 text-blue-700';
+      case 'deleted': return 'bg-red-100 text-red-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getModuleColor = (module: string) => {
+    if (!module) return 'bg-gray-100 text-gray-700';
+    const moduleName = module.split('\\').pop()?.toUpperCase() || 'UNKNOWN';
+    switch (moduleName) {
+      case 'USER': return 'bg-indigo-100 text-indigo-700';
+      case 'MATAKULIAH': return 'bg-pink-100 text-pink-700';
+      case 'RUANGAN': return 'bg-orange-100 text-orange-700';
+      case 'KEGIATAN': return 'bg-teal-100 text-teal-700';
+      case 'AUTH': return 'bg-cyan-100 text-cyan-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const formatActivityTime = (createdAt: string): string => {
+    const now = new Date();
+    const activityTime = new Date(createdAt);
+    const diffInMinutes = Math.floor((now.getTime() - activityTime.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Baru saja';
+    if (diffInMinutes < 60) return `${diffInMinutes} menit yang lalu`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours} jam yang lalu`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays} hari yang lalu`;
+    
+    return activityTime.toLocaleDateString('id-ID');
+  };
+
+  // Super Admin Account Creation Functions
+  const handleCreateAdmin = () => {
+    setShowCreateAdminModal(true);
+    setAdminFormData({
+      name: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      phone: '',
+      position: ''
+    });
+    setAdminFormErrors({});
+  };
+
+  const handleAdminFormChange = (field: string, value: string) => {
+    setAdminFormData(prev => ({ ...prev, [field]: value }));
+    // Clear error when user starts typing
+    if (adminFormErrors[field]) {
+      setAdminFormErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const validateAdminForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!adminFormData.name.trim()) {
+      errors.name = 'Nama wajib diisi';
+    }
+
+    if (!adminFormData.email.trim()) {
+      errors.email = 'Email wajib diisi';
+    } else if (!/\S+@\S+\.\S+/.test(adminFormData.email)) {
+      errors.email = 'Format email tidak valid';
+    }
+
+    if (!adminFormData.password) {
+      errors.password = 'Password wajib diisi';
+    } else if (adminFormData.password.length < 8) {
+      errors.password = 'Password minimal 8 karakter';
+    }
+
+    if (!adminFormData.confirmPassword) {
+      errors.confirmPassword = 'Konfirmasi password wajib diisi';
+    } else if (adminFormData.password !== adminFormData.confirmPassword) {
+      errors.confirmPassword = 'Password tidak sama';
+    }
+
+    if (!adminFormData.phone.trim()) {
+      errors.phone = 'Nomor telepon wajib diisi';
+    }
+
+    if (!adminFormData.position.trim()) {
+      errors.position = 'Posisi wajib diisi';
+    }
+
+    setAdminFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmitCreateAdmin = async () => {
+    if (!validateAdminForm()) {
+      return;
+    }
+
+    try {
+      setIsCreatingAdmin(true);
+      
+      const response = await api.post('/admin/create-super-admin', {
+        name: adminFormData.name.trim(),
+        email: adminFormData.email.trim(),
+        password: adminFormData.password,
+        phone: adminFormData.phone.trim(),
+        position: adminFormData.position.trim(),
+        role: 'super_admin'
+      });
+
+      if (response.data.success) {
+        setSuccess('Akun Super Admin berhasil dibuat!');
+        setShowCreateAdminModal(false);
+        setAdminFormData({
+          name: '',
+          email: '',
+          password: '',
+          confirmPassword: '',
+          phone: '',
+          position: ''
+        });
+        setAdminFormErrors({});
+        // Refresh dashboard data
+        fetchDashboardData();
+      } else {
+        throw new Error(response.data.message || 'Gagal membuat akun Super Admin');
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || 'Terjadi kesalahan saat membuat akun';
+      setError(`Gagal membuat akun Super Admin: ${errorMessage}`);
+    } finally {
+      setIsCreatingAdmin(false);
+    }
+  };
+
+  const handleCloseCreateAdminModal = () => {
+    setShowCreateAdminModal(false);
+    setAdminFormData({
+      name: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      phone: '',
+      position: ''
+    });
+    setAdminFormErrors({});
+  };
+
   // Helper function to get role color for avatar
   const getRoleColor = (role: string): string => {
-    switch (role) {
-      case 'Dosen':
-        return 'bg-blue-500 dark:bg-blue-600';
-      case 'Tim Akademik':
-        return 'bg-purple-500 dark:bg-purple-600';
-      case 'Super Admin':
-        return 'bg-red-500 dark:bg-red-600';
-      case 'Mahasiswa':
-        return 'bg-green-500 dark:bg-green-600';
-      default:
-        return 'bg-gray-300 dark:bg-gray-600';
-    }
+    // Semua avatar menggunakan warna abu-abu netral yang cocok untuk tema gelap dan terang
+    return 'bg-gray-400 dark:bg-gray-500';
   };
 
   // Helper function to convert weather code to icon
@@ -1037,49 +996,6 @@ const DashboardSuperAdmin: React.FC = () => {
     };
   };
 
-  // Chart component for system monitoring
-  const SystemChart = ({ data, title, color }: { data: ChartDataPoint[], title: string, color: string }) => {
-    if (data.length === 0) {
-      return (
-        <div className="w-full h-48 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">{title}</div>
-            <div className="text-xs text-gray-400 dark:text-gray-500">Loading chart data...</div>
-          </div>
-        </div>
-      );
-    }
-    
-    const maxValue = Math.max(...data.map(d => d.value));
-    const minValue = Math.min(...data.map(d => d.value));
-    const range = maxValue - minValue || 1;
-    
-    const points = data.map((point, index) => {
-      const x = (index / (data.length - 1)) * 100;
-      const y = 100 - ((point.value - minValue) / range) * 100;
-      return `${x},${y}`;
-    }).join(' ');
-    
-    return (
-      <div className="w-full h-48 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
-        <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">{title}</div>
-        <svg className="w-full h-40" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <polyline
-            fill="none"
-            stroke={color}
-            strokeWidth="1.5"
-            points={points}
-            vectorEffect="non-scaling-stroke"
-          />
-          <polygon
-            fill={`${color}20`}
-            points={`0,100 ${points} 100,100`}
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-      </div>
-    );
-  };
 
   // Weather icon component
   const WeatherIcon = ({ iconCode }: { iconCode: string }) => {
@@ -1101,14 +1017,6 @@ const DashboardSuperAdmin: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     fetchWeatherData();
-    
-    // Auto-start monitoring on component mount
-    startSystemMonitoring();
-    
-    // No cleanup needed since monitoring is user-controlled
-    // return () => {
-    //   stopSystemMonitoring();
-    // };
   }, []);
 
   // Auto-clear success message after 5 seconds
@@ -1121,17 +1029,24 @@ const DashboardSuperAdmin: React.FC = () => {
     }
   }, [success]);
 
-  // Cleanup monitoring only when component unmounts
-  useEffect(() => {
-    return () => {
-      if (monitoringIntervalRef.current) {
-        clearInterval(monitoringIntervalRef.current);
-        monitoringIntervalRef.current = null;
-      }
-    };
-  }, []);
 
 
+
+  // Fetch recent activities using the same API as Histori.tsx
+  const fetchRecentActivities = async (): Promise<Activity[]> => {
+    try {
+      const params = new URLSearchParams({
+        per_page: '10', // Get only 10 recent activities for dashboard
+        page: '1'
+      });
+      
+      const response = await api.get(`/reporting?${params}`);
+      return response.data.data.data || [];
+    } catch (error) {
+      console.error('Error fetching recent activities:', error);
+      return [];
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -1206,9 +1121,13 @@ const DashboardSuperAdmin: React.FC = () => {
 
       const data = await response.json();
       
+      // Use recent activities from dashboard API (already includes role data)
+      // const recentActivities = await fetchRecentActivities();
+      
             // Ensure data has the required structure with fallbacks
       const safeData: DashboardStats = {
         ...data,
+        recentActivities: data.recentActivities || [], // Use data from dashboard API
         attendanceStats: {
           regular: {
             overall_rate: data.attendanceStats?.overall_rate || 0,
@@ -1248,6 +1167,12 @@ const DashboardSuperAdmin: React.FC = () => {
           totalMahasiswa: 120,
           totalDosen: 25,
           totalTimAkademik: 5,
+          totalSuperAdmin: 3,
+          superAdmins: [
+            { id: 1, name: 'Atmin', email: 'atmin444@gmail.com', username: 'atmin444', created_at: '2025-09-09T08:39:29.000000Z', is_logged_in: 1 },
+            { id: 2, name: 'Admin 2', email: 'admin2@example.com', username: 'admin2', created_at: '2025-09-08T10:30:00.000000Z', is_logged_in: 0 },
+            { id: 3, name: 'Admin 3', email: 'admin3@example.com', username: 'admin3', created_at: '2025-09-07T14:15:00.000000Z', is_logged_in: 0 }
+          ],
           totalMataKuliah: 45,
           totalKelas: 12,
           totalRuangan: 15,
@@ -1956,10 +1881,10 @@ const DashboardSuperAdmin: React.FC = () => {
 
 
 
-      {/* Second Row - System Monitor & Quick Actions */}
+      {/* Second Row - Super Admin Management & Quick Actions */}
       <div className="col-span-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-          {/* System Monitor & Health - Takes 2 columns */}
+          {/* Super Admin Management - Takes 2 columns */}
         <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1967,330 +1892,111 @@ const DashboardSuperAdmin: React.FC = () => {
             className="md:col-span-2 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-white">System Monitor</h3>
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Super Admin Management</h3>
               <div className="flex items-center space-x-2">
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></div>
-                Online
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mr-1.5"></div>
+                {stats.totalSuperAdmin || 0} Super Admin
             </span>
                 <button
-                  onClick={() => {
-                    if (isMonitoring) {
-                      stopSystemMonitoring();
-                    } else {
-                      startSystemMonitoring();
-                    }
-                  }}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    isMonitoring 
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' 
-                      : 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                  }`}
+                  onClick={handleCreateAdmin}
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
                 >
-                  {isMonitoring ? 'Stop' : 'Start'} Monitoring
+                  + Add Super Admin
                 </button>
               </div>
           </div>
           
-            {/* System Resource Tabs */}
-            <div className="flex space-x-1 mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 overflow-x-auto hide-scroll">
-              {[
-                { key: 'cpu', label: 'CPU', icon: '🔵', color: 'text-blue-600' },
-                { key: 'memory', label: 'RAM', icon: '🟢', color: 'text-green-600' },
-                { key: 'storage', label: 'Storage', icon: '🟡', color: 'text-yellow-600' },
-                { key: 'network', label: 'Network', icon: '🟣', color: 'text-purple-600' },
-                { key: 'database', label: 'Database', icon: '🗄️', color: 'text-indigo-600' },
-                { key: 'application', label: 'App', icon: '📱', color: 'text-pink-600' },
-                { key: 'security', label: 'Security', icon: '🔒', color: 'text-red-600' }
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key as any)}
-                  className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
-                    activeTab === tab.key
-                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              ))}
+            {/* Super Admin List */}
+            <div className="flex-1 overflow-hidden">
+              <div className="h-full overflow-y-auto hide-scroll">
+                <div className="space-y-3">
+                  {/* Current Super Admin */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <span className="text-sm font-semibold text-white">
+                          {user?.name?.charAt(0) || 'A'}
+                        </span>
               </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {user?.name || 'Current User'}
+                    </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {user?.email || 'current@example.com'}
+                    </div>
+                  </div>
+                </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                        Active
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        You
+                      </span>
+                  </div>
+                      </div>
 
-            {/* Resource Details and Chart */}
-            <div className="flex-1 space-y-4">
-              {/* Current Resource Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {activeTab === 'cpu' && (
-                  <>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                        {systemMetrics.cpu.usage.toFixed(1)}%
-                    </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">CPU Usage</div>
-                    </div>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                        {systemMetrics.cpu.frequency.toFixed(1)} GHz
-                  </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Frequency</div>
+                  {/* Other Super Admins */}
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Other Super Admins ({stats.superAdmins ? stats.superAdmins.length - 1 : 0})
                 </div>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                        {systemMetrics.cpu.temperature.toFixed(0)}°C
-                  </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Temperature</div>
-                      </div>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                        {systemMetrics.cpu.cores}/{systemMetrics.cpu.threads}
+                  
+                  {/* List of other Super Admins */}
+                  {stats.superAdmins && stats.superAdmins.length > 1 ? (
+                    <div className="space-y-2">
+                      {stats.superAdmins
+                        .filter(admin => admin.email !== user?.email) // Exclude current user
+                        .map((admin) => (
+                          <div key={admin.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-gray-400 rounded-lg flex items-center justify-center">
+                                <span className="text-xs font-semibold text-white">
+                                  {admin.name.charAt(0).toUpperCase()}
+                                </span>
                     </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Cores/Threads</div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {admin.name}
+                    </div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {admin.email}
                   </div>
-                  </>
-                )}
-                
-                {activeTab === 'memory' && (
-                  <>
-                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {systemMetrics.memory.usage.toFixed(1)}%
+                  </div>
                 </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Memory Usage</div>
-              </div>
-                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {systemMetrics.memory.used.toFixed(1)} GB
+                            <div className="flex items-center space-x-2">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                admin.is_logged_in 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                  : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
+                              }`}>
+                                {admin.is_logged_in ? 'Online' : 'Offline'}
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {new Date(admin.created_at).toLocaleDateString()}
+                              </span>
+                    </div>
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Used</div>
+                        ))}
                     </div>
-                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {systemMetrics.memory.available.toFixed(1)} GB
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Available</div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center mx-auto mb-3">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
                     </div>
-                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {systemMetrics.memory.total} GB
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Total</div>
+                      <p className="text-sm">No other Super Admins</p>
+                      <p className="text-xs">Create new Super Admin accounts to manage them here</p>
                     </div>
-                  </>
-                )}
-                
-                {activeTab === 'storage' && (
-                  <>
-                    <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                        {systemMetrics.storage.usage.toFixed(1)}%
+                  )}
                     </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Storage Usage</div>
                     </div>
-                    <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                        {systemMetrics.storage.used.toFixed(0)} GB
                   </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Used</div>
-                  </div>
-                    <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                        {systemMetrics.storage.available.toFixed(0)} GB
-                </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Available</div>
-                    </div>
-                    <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                        {systemMetrics.storage.total} GB
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Total</div>
-                    </div>
-                  </>
-                )}
-                
-                                 {activeTab === 'network' && (
-                   <>
-                     <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                         {(systemMetrics.network.upload + systemMetrics.network.download).toFixed(1)} MB/s
-                    </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Total Traffic</div>
-                    </div>
-                     <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                         {systemMetrics.network.upload.toFixed(1)} MB/s
-                  </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Upload</div>
-                  </div>
-                     <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                         {systemMetrics.network.download.toFixed(1)} MB/s
-                </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Download</div>
-                     </div>
-                     <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                         {systemMetrics.network.connections}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Connections</div>
-                     </div>
-                   </>
-                 )}
-                 
-                 {activeTab === 'database' && (
-                   <>
-                     <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                         {systemMetrics.database.responseTime.toFixed(0)} ms
-                    </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Response Time</div>
-                    </div>
-                     <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                         {systemMetrics.database.connections}
-                  </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Connections</div>
-                  </div>
-                     <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                         {systemMetrics.database.size.toFixed(1)} GB
-                </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Database Size</div>
-              </div>
-                     <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                         {new Date(systemMetrics.database.lastBackup).toLocaleDateString()}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Last Backup</div>
-                     </div>
-                   </>
-                 )}
-                 
-                 {activeTab === 'application' && (
-                   <>
-                     <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-                         {systemMetrics.application.activeUsers}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Active Users</div>
-                     </div>
-                     <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-                         {systemMetrics.application.activeStudents}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Active Students</div>
-                     </div>
-                     <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-                         {systemMetrics.application.apiResponseTime.toFixed(0)} ms
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">API Response</div>
-                     </div>
-                     <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-                         {systemMetrics.application.errorRate.toFixed(2)}%
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Error Rate</div>
-                     </div>
-                   </>
-                 )}
-                 
-                 {activeTab === 'security' && (
-                   <>
-                     <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                         {systemMetrics.security.failedLogins}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Failed Logins</div>
-                     </div>
-                     <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                         {systemMetrics.security.sslStatus}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">SSL Status</div>
-                     </div>
-                     <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                         {systemMetrics.security.firewallStatus}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Firewall</div>
-                     </div>
-                     <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
-                       <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                         {new Date(systemMetrics.security.lastSecurityScan).toLocaleDateString()}
-                       </div>
-                       <div className="text-xs text-gray-600 dark:text-gray-400">Last Scan</div>
-                     </div>
-                   </>
-                 )}
-              </div>
 
-              {/* Real-time Chart */}
-              <div className="flex-1">
-                {activeTab === 'cpu' && (
-                  <SystemChart 
-                    data={chartData.cpu} 
-                    title="CPU Usage (%)" 
-                    color="#3B82F6" 
-                  />
-                )}
-                {activeTab === 'memory' && (
-                  <SystemChart 
-                    data={chartData.memory} 
-                    title="Memory Usage (%)" 
-                    color="#10B981" 
-                  />
-                )}
-                {activeTab === 'storage' && (
-                  <SystemChart 
-                    data={chartData.storage} 
-                    title="Storage Usage (%)" 
-                    color="#F59E0B" 
-                  />
-                )}
-                {activeTab === 'network' && (
-                  <SystemChart 
-                    data={chartData.network} 
-                    title="Network Traffic (MB/s)" 
-                    color="#8B5CF6" 
-                  />
-                )}
-                {activeTab === 'database' && (
-                  <SystemChart 
-                    data={chartData.database} 
-                    title="Database Response Time (ms)" 
-                    color="#6366F1" 
-                  />
-                )}
-                {activeTab === 'application' && (
-                  <SystemChart 
-                    data={chartData.application} 
-                    title="API Response Time (ms)" 
-                    color="#EC4899" 
-                  />
-                )}
-                {activeTab === 'security' && (
-                  <SystemChart 
-                    data={chartData.security} 
-                    title="Failed Login Attempts" 
-                    color="#EF4444" 
-                  />
-                )}
-              </div>
-            </div>
-            
-            {/* System Status Footer */}
-            <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Last updated: {new Date().toLocaleTimeString()}
-                </span>
-                <span className="text-xs text-green-600 dark:text-green-400 font-medium">
-                  {isMonitoring ? 'Monitoring Active' : 'Monitoring Stopped'}
-                </span>
-              </div>
-          </div>
+                
+                
         </motion.div>
           
           {/* Quick Actions - Takes 1 column */}
@@ -2376,6 +2082,7 @@ const DashboardSuperAdmin: React.FC = () => {
                   <p className="text-xs text-gray-600 dark:text-gray-400">Restore dari backup file</p>
             </div>
               </button>
+              
               
               <button 
                 onClick={handleResetSystem}
@@ -2514,7 +2221,8 @@ const DashboardSuperAdmin: React.FC = () => {
                   <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">User</th>
                    <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Role</th>
                   <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Action</th>
-                  <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Target</th>
+                  <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Module</th>
+                  <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Description</th>
                   <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Time</th>
                   <th className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
                 </tr>
@@ -2522,7 +2230,7 @@ const DashboardSuperAdmin: React.FC = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {stats.recentActivities.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={7} className="py-8 text-center text-gray-500 dark:text-gray-400">
                       No recent activities
                     </td>
                   </tr>
@@ -2531,27 +2239,31 @@ const DashboardSuperAdmin: React.FC = () => {
                     <tr key={activity.id}>
                       <td className="py-3">
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getRoleColor(getUserRole(activity.user))}`}>
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getRoleColor(activity.role || 'System')}`}>
                             <span className="text-sm font-semibold text-white">
-                              {getUserInitials(activity.user)}
+                              {getUserInitials(activity.user || 'System')}
                             </span>
                 </div>
-
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {activity.user || 'System'}
+                            </div>
+                          </div>
                     </div>
                       </td>
-                      <td className="py-3 text-sm text-gray-500 dark:text-gray-400">{getUserRole(activity.user)}</td>
-                      <td className="py-3 text-sm text-gray-500 dark:text-gray-400">{activity.action}</td>
-                      <td className="py-3 text-sm text-gray-500 dark:text-gray-400">{activity.target}</td>
-                      <td className="py-3 text-sm text-gray-500 dark:text-gray-400">{activity.timestamp}</td>
-                      <td className="py-3">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          activity.type === 'create' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
-                          activity.type === 'update' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' :
-                          activity.type === 'delete' ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400' :
-                          'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-                        }`}>
-                          {activity.type.charAt(0).toUpperCase() + activity.type.slice(1)}
-                        </span>
+                      <td className="py-3 text-sm text-gray-500 dark:text-gray-400">{activity.role || 'System'}</td>
+                      <td className="py-3 text-sm text-gray-900 dark:text-white">
+                        {activity.event || 'custom'}
+                      </td>
+                      <td className="py-3 text-sm text-gray-900 dark:text-white">
+                        {activity.subject_type ? activity.subject_type.split('\\').pop() : 'System'}
+                      </td>
+                      <td className="py-3 text-sm text-gray-900 dark:text-white/90 max-w-xs truncate" title={activity.description}>
+                        {activity.description}
+                      </td>
+                      <td className="py-3 text-sm text-gray-500 dark:text-gray-400">{activity.timestamp || formatActivityTime(activity.created_at)}</td>
+                      <td className="py-3 text-sm text-gray-900 dark:text-white">
+                        {activity.event || 'custom'}
                       </td>
                     </tr>
                   ))
@@ -3432,6 +3144,213 @@ const DashboardSuperAdmin: React.FC = () => {
 
 
        </div>
+
+      {/* Create Super Admin Modal */}
+      <AnimatePresence>
+      {showCreateAdminModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center">
+          {/* Overlay */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100000] bg-gray-500/30 dark:bg-gray-500/50 backdrop-blur-md"
+            onClick={handleCloseCreateAdminModal}
+          ></motion.div>
+          {/* Modal Content */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-3xl px-8 py-8 shadow-lg z-[100001] max-h-[90vh] overflow-y-auto hide-scroll"
+          >
+            {/* Close Button */}
+            <button
+              onClick={handleCloseCreateAdminModal}
+              className="absolute z-20 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white right-6 top-6 h-11 w-11"
+            >
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" className="w-6 h-6">
+                <path
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M6.04289 16.5413C5.65237 16.9318 5.65237 17.565 6.04289 17.9555C6.43342 18.346 7.06658 18.346 7.45711 17.9555L11.9987 13.4139L16.5408 17.956C16.9313 18.3466 17.5645 18.3466 17.955 17.956C18.3455 17.5655 18.3455 16.9323 17.955 16.5418L13.4129 11.9997L17.955 7.4576C18.3455 7.06707 18.3455 6.43391 17.955 6.04338C17.5645 5.65286 16.9313 5.65286 16.5408 6.04338L11.9987 10.5855L7.45711 6.0439C7.06658 5.65338 6.43342 5.65338 6.04289 6.0439C5.65237 6.43442 5.65237 7.06759 6.04289 7.45811L10.5845 11.9997L6.04289 16.5413Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+            <div>
+              <div className="flex items-center justify-between pb-4 sm:pb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">
+                  Tambah Super Admin
+                </h2>
+              </div>
+              
+              <div>
+                <div className="mb-3 sm:mb-4">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-white">Buat Akun Super Admin Baru</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Isi form di bawah ini untuk membuat akun Super Admin baru</p>
+                    </div>
+                  </div>
+                </div>
+
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmitCreateAdmin(); }} className="space-y-4">
+                  {/* Nama */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Nama Lengkap *
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFormData.name}
+                      onChange={(e) => handleAdminFormChange('name', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                        adminFormErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                      placeholder="Masukkan nama lengkap"
+                    />
+                    {adminFormErrors.name && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{adminFormErrors.name}</p>
+                    )}
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Email *
+                    </label>
+                    <input
+                      type="email"
+                      value={adminFormData.email}
+                      onChange={(e) => handleAdminFormChange('email', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                        adminFormErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                      placeholder="Masukkan email"
+                    />
+                    {adminFormErrors.email && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{adminFormErrors.email}</p>
+                    )}
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Password *
+                    </label>
+                    <input
+                      type="password"
+                      value={adminFormData.password}
+                      onChange={(e) => handleAdminFormChange('password', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                        adminFormErrors.password ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                      placeholder="Masukkan password (min 8 karakter)"
+                    />
+                    {adminFormErrors.password && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{adminFormErrors.password}</p>
+                    )}
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Konfirmasi Password *
+                    </label>
+                    <input
+                      type="password"
+                      value={adminFormData.confirmPassword}
+                      onChange={(e) => handleAdminFormChange('confirmPassword', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                        adminFormErrors.confirmPassword ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                      placeholder="Konfirmasi password"
+                    />
+                    {adminFormErrors.confirmPassword && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{adminFormErrors.confirmPassword}</p>
+                    )}
+                  </div>
+
+                  {/* Phone */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Nomor Telepon *
+                    </label>
+                    <input
+                      type="tel"
+                      value={adminFormData.phone}
+                      onChange={(e) => handleAdminFormChange('phone', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                        adminFormErrors.phone ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                      placeholder="Masukkan nomor telepon"
+                    />
+                    {adminFormErrors.phone && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{adminFormErrors.phone}</p>
+                    )}
+                  </div>
+
+                  {/* Position */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Posisi/Jabatan *
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFormData.position}
+                      onChange={(e) => handleAdminFormChange('position', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                        adminFormErrors.position ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                      placeholder="Masukkan posisi/jabatan"
+                    />
+                    {adminFormErrors.position && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{adminFormErrors.position}</p>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-3 pt-6">
+                    <button
+                      type="button"
+                      onClick={handleCloseCreateAdminModal}
+                      className="flex-1 px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition font-medium"
+                      disabled={isCreatingAdmin}
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isCreatingAdmin}
+                      className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex items-center justify-center"
+                    >
+                      {isCreatingAdmin ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Membuat...
+                        </>
+                      ) : (
+                        'Buat Akun'
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      </AnimatePresence>
     </>
   );
 };

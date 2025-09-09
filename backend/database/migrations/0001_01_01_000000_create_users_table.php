@@ -24,6 +24,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('username');
             $table->string('email')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
             $table->string('telp')->nullable();
             $table->string('ket')->nullable();
             $table->enum('role', ['super_admin', 'tim_akademik', 'dosen', 'mahasiswa'])->default('mahasiswa');

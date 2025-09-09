@@ -350,23 +350,6 @@ class UserSeeder extends Seeder
             ]
         );
 
-        // Tambah user super admin kedua
-        User::updateOrCreate(
-            ['username' => 'drputraa'],
-            [
-                'name' => 'Dr. Putra',
-                'username' => 'drputraa',
-                'email' => 'drputraa@umj.ac.id',
-                'telp' => null,
-                'role' => 'super_admin',
-                'password' => Hash::make('password'),
-                'kompetensi' => null,
-                'keahlian' => null,
-                'is_logged_in' => false,
-                'current_token' => null,
-                'semester' => null,
-            ]
-        );
 
         // Tambah user tim akademik
         User::updateOrCreate(

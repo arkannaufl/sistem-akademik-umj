@@ -26,6 +26,7 @@ use App\Http\Controllers\KelompokKecilAntaraController;
 use App\Http\Controllers\DashboardTimAkademikController;
 use App\Http\Controllers\ForumController;
 use App\Http\Controllers\SupportCenterController;
+use App\Http\Controllers\AdminController;
 
 
 Route::middleware('throttle:5,1')->post('/login', [AuthController::class, 'login']); // 5 attempts per minute
@@ -436,6 +437,20 @@ Route::get('/test/dashboard-health', function () {
     ]);
 });
 
+// Test route untuk check users data
+Route::get('/test/users-check', function () {
+    $totalUsers = \App\Models\User::count();
+    $superAdminCount = \App\Models\User::where('role', 'super_admin')->count();
+    $latestSuperAdmin = \App\Models\User::where('role', 'super_admin')->latest()->first(['name', 'email', 'username', 'created_at']);
+    
+    return response()->json([
+        'total_users' => $totalUsers,
+        'super_admin_count' => $superAdminCount,
+        'latest_super_admin' => $latestSuperAdmin,
+        'all_roles' => \App\Models\User::select('role', \DB::raw('count(*) as count'))->groupBy('role')->get()
+    ]);
+});
+
 // Test dashboard controller tanpa auth untuk debugging
 Route::get('/test/dashboard-data', [App\Http\Controllers\DashboardSuperAdminController::class, 'index']);
 
@@ -503,4 +518,12 @@ Route::prefix('support-center')->group(function () {
         Route::put('/developers/{id}', [SupportCenterController::class, 'update']);
         Route::delete('/developers/{id}', [SupportCenterController::class, 'destroy']);
     });
+});
+
+// Admin Management Routes (Super Admin only)
+Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('admin')->group(function () {
+    Route::post('/create-super-admin', [AdminController::class, 'createSuperAdmin']);
+    Route::get('/super-admins', [AdminController::class, 'getSuperAdmins']);
+    Route::put('/super-admins/{id}', [AdminController::class, 'updateSuperAdmin']);
+    Route::delete('/super-admins/{id}', [AdminController::class, 'deleteSuperAdmin']);
 });
