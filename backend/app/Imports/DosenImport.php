@@ -30,52 +30,70 @@ class DosenImport implements ToCollection, WithHeadingRow
             $rowArray['name'] = $originalRowArray['nama'] ?? null;
             $rowArray['telp'] = $originalRowArray['telepon'] ?? null;
             $rowArray['kompetensi'] = $originalRowArray['kompetensi'] ?? null;
-
-            // Convert 'peran_dalam_kurikulum' string to JSON array
-            $peranKurikulumString = $originalRowArray['peran_dalam_kurikulum'] ?? null;
-            if (!is_null($peranKurikulumString)) {
-                $roles = array_map('trim', explode(',', $peranKurikulumString));
-                // Filter out empty strings that might result from extra commas or leading/trailing commas
-                $rowArray['peran_kurikulum'] = array_values(array_filter($roles));
-            } else {
-                $rowArray['peran_kurikulum'] = null;
-            }
-
-            $rowArray['peran_utama'] = $originalRowArray['peran_utama'] ?? null;
-            $rowArray['matkul_ketua_id'] = $originalRowArray['matkul_ketua_id'] ?? null;
-            $rowArray['matkul_anggota_id'] = $originalRowArray['matkul_anggota_id'] ?? null;
-            $rowArray['peran_kurikulum_mengajar'] = $originalRowArray['peran_kurikulum_mengajar'] ?? null;
+            $rowArray['keahlian'] = $originalRowArray['keahlian'] ?? null;
 
             $currentRowErrors = [];
 
+            // Check if dosen is standby based on keahlian
+            $keahlianString = strtolower(trim($rowArray['keahlian'] ?? ''));
+            $isStandby = strpos($keahlianString, 'standby') !== false;
+
             // 1. Validasi keberadaan field wajib dan isinya tidak kosong (basic validation)
-            $basicValidator = Validator::make($rowArray, [
+            $validationRules = [
                 'nid' => 'required',
                 'nidn' => 'required',
                 'name' => 'required',
                 'username' => 'required',
-                'email' => 'required',
+                'email' => 'required|email',
                 'telp' => 'required',
                 'password' => 'required|min:6',
-                'peran_utama' => 'required|in:koordinator,tim_blok,dosen_mengajar',
-                'matkul_ketua_id' => 'nullable|required_if:peran_utama,koordinator|exists:mata_kuliah,kode',
-                'matkul_anggota_id' => 'nullable|required_if:peran_utama,tim_blok|exists:mata_kuliah,kode',
-                'peran_kurikulum_mengajar' => 'nullable|required_if:peran_utama,dosen_mengajar|string',
-            ], [
+                'keahlian' => 'required',
+            ];
+
+            $validationMessages = [
                 'nid.required' => 'NID harus diisi (Baris '.($index+2).')',
                 'nidn.required' => 'NIDN harus diisi (Baris '.($index+2).')',
                 'name.required' => 'Nama harus diisi (Baris '.($index+2).')',
                 'username.required' => 'Username harus diisi (Baris '.($index+2).')',
                 'email.required' => 'Email harus diisi (Baris '.($index+2).')',
+                'email.email' => 'Email tidak valid (Baris '.($index+2).')',
                 'telp.required' => 'Nomor telepon harus diisi (Baris '.($index+2).')',
                 'password.required' => 'Password harus diisi (Baris '.($index+2).')',
                 'password.min' => 'Password minimal 6 karakter (Baris '.($index+2).')',
-                'peran_utama.required' => 'Peran utama harus diisi (Baris '.($index+2).')',
-                'peran_utama.in' => 'Peran utama tidak valid (Baris '.($index+2).')',
-                'matkul_ketua_id.required_if' => 'Mata kuliah koordinator harus diisi jika peran koordinator (Baris '.($index+2).')',
-                'matkul_anggota_id.required_if' => 'Mata kuliah tim blok harus diisi jika peran tim blok (Baris '.($index+2).')',
-                'peran_kurikulum_mengajar.required_if' => 'Peran kurikulum mengajar harus diisi jika peran dosen mengajar (Baris '.($index+2).')',
-            ]);
+                'keahlian.required' => 'Keahlian harus diisi (Baris '.($index+2).')',
+            ];
+
+            // Add kompetensi validation based on standby status
+            if ($isStandby) {
+                // Validate keahlian for standby dosen - must be ONLY "standby"
+                $keahlianArray = array_map('trim', explode(',', $keahlianString));
+                $hasOnlyStandby = count($keahlianArray) === 1 && $keahlianArray[0] === 'standby';
+
+                if (!$hasOnlyStandby) {
+                    $currentRowErrors[] = [
+                        'type' => 'standby_keahlian_error',
+                        'field' => 'keahlian',
+                        'message' => 'Dosen standby hanya boleh memiliki keahlian "standby" saja, tidak boleh ada keahlian lain (Baris '.($index+2).')',
+                        'nid' => $rowArray['nid'] ?? null,
+                    ];
+                }
+
+                // If keahlian contains "standby", kompetensi should be empty
+                if (!empty($rowArray['kompetensi'])) {
+                    $currentRowErrors[] = [
+                        'type' => 'standby_kompetensi_error',
+                        'field' => 'kompetensi',
+                        'message' => 'Jika keahlian mengandung "standby", kompetensi harus kosong (Baris '.($index+2).')',
+                        'nid' => $rowArray['nid'] ?? null,
+                    ];
+                }
+            } else {
+                // If keahlian does not contain "standby", kompetensi is required
+                $validationRules['kompetensi'] = 'required';
+                $validationMessages['kompetensi.required'] = 'Kompetensi harus diisi jika keahlian tidak mengandung "standby" (Baris '.($index+2).')';
+            }
+
+            $basicValidator = Validator::make($rowArray, $validationRules, $validationMessages);
 
             if ($basicValidator->fails()) {
                 foreach ($basicValidator->errors()->messages() as $field => $messages) {
@@ -146,24 +164,6 @@ class DosenImport implements ToCollection, WithHeadingRow
                 }
             }
 
-            // Validasi satu matkul hanya satu koordinator
-            if ($rowArray['peran_utama'] === 'koordinator' && User::where('matkul_ketua_id', $rowArray['matkul_ketua_id'])->where('peran_utama', 'koordinator')->exists()) {
-                $currentRowErrors[] = [
-                    'type' => 'duplicate_koordinator',
-                    'field' => 'matkul_ketua_id',
-                    'message' => 'Mata kuliah ini sudah memiliki koordinator (Baris '.($index+2).')',
-                    'nid' => $rowArray['nid'] ?? null,
-                ];
-            }
-            // Validasi anggota max 3 per matkul
-            if ($rowArray['peran_utama'] === 'tim_blok' && User::where('matkul_anggota_id', $rowArray['matkul_anggota_id'])->where('peran_utama', 'tim_blok')->count() >= 3) {
-                $currentRowErrors[] = [
-                    'type' => 'max_tim_blok',
-                    'field' => 'matkul_anggota_id',
-                    'message' => 'Mata kuliah ini sudah memiliki 3 tim blok (Baris '.($index+2).')',
-                    'nid' => $rowArray['nid'] ?? null,
-                ];
-            }
 
             // 3. Validasi duplikat terhadap database yang sudah ada
             // Gunakan Laravel Validator untuk unique di database
@@ -214,7 +214,7 @@ class DosenImport implements ToCollection, WithHeadingRow
             }
 
             // Simpan data jika semua validasi berhasil
-            User::create([
+            $userData = [
                 'nid' => $rowArray['nid'],
                 'nidn' => $rowArray['nidn'],
                 'name' => $rowArray['name'],
@@ -223,13 +223,20 @@ class DosenImport implements ToCollection, WithHeadingRow
                 'telp' => $rowArray['telp'],
                 'password' => Hash::make($rowArray['password']),
                 'role' => 'dosen',
-                'kompetensi' => $rowArray['kompetensi'],
-                'peran_kurikulum' => $rowArray['peran_kurikulum'],
-                'peran_utama' => $rowArray['peran_utama'],
-                'matkul_ketua_id' => $rowArray['matkul_ketua_id'],
-                'matkul_anggota_id' => $rowArray['matkul_anggota_id'],
-                'peran_kurikulum_mengajar' => $rowArray['peran_kurikulum_mengajar'],
-            ]);
+                'keahlian' => is_array($rowArray['keahlian']) ? $rowArray['keahlian'] : explode(',', $rowArray['keahlian']),
+            ];
+
+            // Add kompetensi only if not standby
+            if (!$isStandby && !empty($rowArray['kompetensi'])) {
+                $userData['kompetensi'] = is_array($rowArray['kompetensi']) ? $rowArray['kompetensi'] : explode(',', $rowArray['kompetensi']);
+            }
+
+            // Set peran_utama based on standby status
+            if ($isStandby) {
+                $userData['peran_utama'] = 'standby';
+            }
+
+            User::create($userData);
         }
     }
 

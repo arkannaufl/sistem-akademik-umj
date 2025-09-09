@@ -132,21 +132,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/pbls/check-blok/{blokId}', [App\Http\Controllers\MataKuliahPBLController::class, 'checkBlokGenerated']);
     Route::post('/pbls/assign-dosen-batch', [App\Http\Controllers\MataKuliahPBLController::class, 'assignDosenBatch']);
     Route::post('/pbls/reset-dosen-batch', [App\Http\Controllers\MataKuliahPBLController::class, 'resetDosenBatch']);
-    
+
     // Assignment dosen ke PBL
     Route::post('/pbls/{pbl}/assign-dosen', [App\Http\Controllers\MataKuliahPBLController::class, 'assignDosen']);
     Route::delete('/pbls/{pbl}/unassign-dosen/{dosen}', [App\Http\Controllers\MataKuliahPBLController::class, 'unassignDosen']);
     Route::get('/pbls/{pbl}/assigned-dosen', [App\Http\Controllers\MataKuliahPBLController::class, 'assignedDosen']);
     Route::post('/pbls/assigned-dosen-batch', [App\Http\Controllers\MataKuliahPBLController::class, 'assignedDosenBatch']);
     Route::delete('/pbls/{pbl}/reset-dosen', [App\Http\Controllers\MataKuliahPBLController::class, 'resetDosen']);
-    
+
     // Get PBL assignments for specific dosen
     Route::get('/dosen/{dosenId}/pbl-assignments', [App\Http\Controllers\MataKuliahPBLController::class, 'getDosenPBLAssignments']);
-    
+
     // Admin notification tracking routes (MUST come BEFORE parameterized routes)
     Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->get('/notifications/admin/all', [App\Http\Controllers\NotificationController::class, 'getAllNotificationsForAdmin']);
     Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->get('/notifications/admin/stats', [App\Http\Controllers\NotificationController::class, 'getNotificationStats']);
-    
+
     // Notification routes - Allow both super_admin and dosen to access their respective endpoints
     Route::middleware(['auth:sanctum'])->get('/notifications/dosen/{userId}', [App\Http\Controllers\NotificationController::class, 'getUserNotifications']);
     Route::middleware(['auth:sanctum', 'role:super_admin'])->get('/notifications/admin/{userId}', [App\Http\Controllers\NotificationController::class, 'getAdminNotifications']);
@@ -158,7 +158,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(['auth:sanctum'])->delete('/notifications/dosen/{userId}/clear-all', [App\Http\Controllers\NotificationController::class, 'clearAllNotifications']);
     Route::middleware(['auth:sanctum', 'role:super_admin'])->delete('/notifications/admin/{userId}/clear-all', [App\Http\Controllers\NotificationController::class, 'clearAllNotifications']);
     Route::middleware(['auth:sanctum', 'sanitize'])->delete('/notifications/{notificationId}', [App\Http\Controllers\NotificationController::class, 'deleteNotification']);
-    
+
     // Dosen replacement routes
     Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->post('/notifications/ask-again', [App\Http\Controllers\NotificationController::class, 'askDosenAgain']);
     Route::middleware(['auth:sanctum', 'role:super_admin,tim_akademik'])->post('/notifications/replace-dosen', [App\Http\Controllers\NotificationController::class, 'replaceDosen']);
@@ -217,7 +217,7 @@ Route::middleware('auth:sanctum')->prefix('mata-kuliah/{kode}')->group(function 
     Route::apiResource('jadwal-pbl', App\Http\Controllers\JadwalPBLController::class)->parameters([
         'jadwal-pbl' => 'id'
     ]);
-    
+
     // Batch endpoint untuk DetailBlok page optimization
     Route::get('/batch-data', [App\Http\Controllers\DetailBlokController::class, 'getBatchData']);
 });
@@ -350,7 +350,7 @@ Route::middleware('auth:sanctum')->prefix('csr')->group(function () {
     Route::post('/jadwal/{kode}', [JadwalCSRController::class, 'store']);
     Route::put('/jadwal/{kode}/{id}', [JadwalCSRController::class, 'update']);
     Route::delete('/jadwal/{kode}/{id}', [JadwalCSRController::class, 'destroy']);
-    
+
     // Routes untuk absensi CSR
     Route::get('/{kode}/jadwal/{jadwalId}/absensi', [JadwalCSRController::class, 'getAbsensi']);
     Route::post('/{kode}/jadwal/{jadwalId}/absensi', [JadwalCSRController::class, 'storeAbsensi']);
@@ -442,7 +442,7 @@ Route::get('/test/users-check', function () {
     $totalUsers = \App\Models\User::count();
     $superAdminCount = \App\Models\User::where('role', 'super_admin')->count();
     $latestSuperAdmin = \App\Models\User::where('role', 'super_admin')->latest()->first(['name', 'email', 'username', 'created_at']);
-    
+
     return response()->json([
         'total_users' => $totalUsers,
         'super_admin_count' => $superAdminCount,
