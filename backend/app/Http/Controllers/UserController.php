@@ -63,7 +63,7 @@ class UserController extends Controller
     {
         try {
             $user = User::findOrFail($id);
-            
+
             // Jika user adalah dosen, tambahkan data dosen_peran
             if ($user->role === 'dosen') {
                 $userArr = $user->toArray();
@@ -80,7 +80,7 @@ class UserController extends Controller
                 });
                 return response()->json($userArr);
             }
-            
+
             return response()->json($user);
         } catch (\Exception $e) {
             return response()->json([
@@ -155,12 +155,12 @@ class UserController extends Controller
             }
         }
         $user = User::create($validated);
-        
+
         // Jika user adalah mahasiswa, update semester berdasarkan semester aktif
         if ($user->role === 'mahasiswa') {
             $this->semesterService->updateNewStudentSemester($user);
         }
-        
+
         // Simpan peran ke tabel dosen_peran
         foreach ($dosenPeran as $peran) {
             DosenPeran::create([
@@ -250,6 +250,9 @@ class UserController extends Controller
     // Import Dosen
     public function importDosen(Request $request)
     {
+        // Set timeout yang lebih lama untuk import data banyak
+        set_time_limit(300); // 5 menit
+
         $request->validate([
             'file' => 'required|mimes:xlsx,xls',
         ]);
@@ -293,42 +296,85 @@ class UserController extends Controller
     // Import Mahasiswa
     public function importMahasiswa(Request $request)
     {
-        $request->validate([
-            'file' => 'required|mimes:xlsx,xls',
-        ]);
+        try {
+            $request->validate([
+                'file' => 'required|mimes:xlsx,xls',
+            ]);
 
-        $import = new MahasiswaImport();
-        \Maatwebsite\Excel\Facades\Excel::import($import, $request->file('file'));
+            // Set timeout untuk proses import yang besar
+            set_time_limit(1200); // 20 menit
+            ini_set('memory_limit', '2048M'); // 2GB
+            ini_set('max_execution_time', 1200);
 
-        $errors = $import->getErrors();
-        $failedRows = $import->getFailedRows();
-        $cellErrors = $import->getCellErrors();
+            // Optimize database for speed (removed problematic settings)
+            DB::statement('SET SESSION sql_mode = ""');
 
-        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('file')->getPathname());
-        $sheet = $spreadsheet->getActiveSheet();
-        $totalRows = $sheet->getHighestDataRow() - 1; // -1 untuk header
+            $import = new \App\Imports\HybridMahasiswaImport();
 
-        $importedCount = $totalRows - count($failedRows);
+            // Gunakan chunk untuk import yang lebih efisien dengan transaction safety
+            DB::beginTransaction();
+            try {
+                \Maatwebsite\Excel\Facades\Excel::import($import, $request->file('file'));
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::error("Import failed, transaction rolled back: " . $e->getMessage());
+                throw $e;
+            }
 
-        activity()
-            ->causedBy(Auth::user())
-            ->log("Mengimpor {$importedCount} data mahasiswa dari file: {$request->file('file')->getClientOriginalName()}");
+            $errors = $import->getErrors();
+            $failedRows = $import->getFailedRows();
+            $cellErrors = $import->getCellErrors();
+            $totalProcessed = $import->getTotalProcessed();
+            $totalFailed = $import->getTotalFailed();
+            $importedCount = $import->getImportedCount();
 
-        if ($importedCount > 0) {
-            // Ada data valid yang berhasil diimpor
+            // Debug logging
+            Log::info("Import Debug - Total processed: {$totalProcessed}, Total failed: {$totalFailed}, Imported count: {$importedCount}");
+            Log::info("Import Response - Errors count: " . count($errors) . ", Failed rows count: " . count($failedRows));
+
+            // Database settings restored automatically
+
+            activity()
+                ->causedBy(Auth::user())
+                ->log("Mengimpor {$importedCount} data mahasiswa dari file: {$request->file('file')->getClientOriginalName()}");
+
+            if ($importedCount > 0) {
+                // Ada data valid yang berhasil diimpor
+                if ($totalFailed > 0) {
+                    $message = "Berhasil mengimpor {$importedCount} dari {$totalProcessed} data mahasiswa. Ada {$totalFailed} data yang gagal diimpor.";
+                } else {
+                    $message = "Berhasil mengimpor {$importedCount} data mahasiswa.";
+                }
+
+                return response()->json([
+                    'imported_count' => $importedCount,
+                    'total_rows' => $totalProcessed,
+                    'failed_count' => $totalFailed,
+                    'errors' => $errors,
+                    'failed_rows' => $failedRows,
+                    'cell_errors' => $cellErrors,
+                    'message' => $message,
+                    'success' => true
+                ], 200);
+            } else {
+                // Semua data gagal, return 422
+                return response()->json([
+                    'imported_count' => 0,
+                    'total_rows' => $totalProcessed,
+                    'failed_count' => $totalFailed,
+                    'message' => 'Semua data gagal diimpor. Periksa kembali format dan isian data.',
+                    'errors' => $errors,
+                    'cell_errors' => $cellErrors,
+                    'success' => false
+                ], 422);
+            }
+        } catch (\Exception $e) {
+            Log::error("Error in importMahasiswa: " . $e->getMessage());
             return response()->json([
-                'imported_count' => $importedCount,
-                'errors' => $errors,
-                'failed_rows' => $failedRows,
-                'cell_errors' => $cellErrors,
-            ], 200);
-        } else {
-            // Semua data gagal, return 422
-            return response()->json([
-                'message' => 'Semua data gagal diimpor. Periksa kembali format dan isian data.',
-                'errors' => $errors,
-                'cell_errors' => $cellErrors,
-            ], 422);
+                'message' => 'Terjadi kesalahan saat mengimpor data: ' . $e->getMessage(),
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -393,7 +439,7 @@ class UserController extends Controller
                 $kuliahBesarRequest->query->set('semester_type', $semesterType);
                 $kuliahBesarResponse = $kuliahBesarController->getJadwalForDosen($id, $kuliahBesarRequest);
                 $kuliahBesarData = $kuliahBesarResponse->getData();
-                
+
                 if (isset($kuliahBesarData->data)) {
                     $jadwalKuliahBesar = collect($kuliahBesarData->data)->map(function($item) {
                         return (object) [
@@ -425,7 +471,7 @@ class UserController extends Controller
                 $praktikumRequest->query->set('semester_type', $semesterType);
                 $praktikumResponse = $praktikumController->getJadwalForDosen($id, $praktikumRequest);
                 $praktikumData = $praktikumResponse->getData();
-                
+
                 if (isset($praktikumData->data)) {
                     $jadwalPraktikum = collect($praktikumData->data)->map(function($item) {
                         return (object) [
@@ -457,7 +503,7 @@ class UserController extends Controller
                 $jurnalRequest->query->set('semester_type', $semesterType);
                 $jurnalResponse = $jurnalController->getJadwalForDosen($id, $jurnalRequest);
                 $jurnalData = $jurnalResponse->getData();
-                
+
                 if (isset($jurnalData->data)) {
                     $jadwalJurnal = collect($jurnalData->data)->map(function($item) {
                         return (object) [
@@ -489,13 +535,13 @@ class UserController extends Controller
                 $pblRequest->query->set('semester_type', $semesterType);
                 $pblResponse = $pblController->getJadwalForDosen($id, $pblRequest);
                 $pblData = $pblResponse->getData();
-                
+
                 if (isset($pblData->data)) {
                     Log::info("PBL data found: " . count($pblData->data) . " records for semester_type: {$semesterType}");
                     $jadwalPBL = collect($pblData->data)->map(function($item) {
                         // Handle both array and object data
                         $isArray = is_array($item);
-                        
+
                         return (object) [
                             'id' => $isArray ? $item['id'] : $item->id,
                             'mata_kuliah_kode' => $isArray ? $item['mata_kuliah_kode'] : $item->mata_kuliah_kode,
@@ -528,12 +574,12 @@ class UserController extends Controller
                 $csrRequest->query->set('semester_type', $semesterType);
                 $csrResponse = $csrController->getJadwalForDosen($id, $csrRequest);
                 $csrData = $csrResponse->getData();
-                
+
                 if (isset($csrData->data)) {
                     $jadwalCSR = collect($csrData->data)->map(function($item) {
                         // Handle both array and object data
                         $isArray = is_array($item);
-                        
+
                         return (object) [
                             'id' => $isArray ? $item['id'] : $item->id,
                             'mata_kuliah_kode' => $isArray ? $item['mata_kuliah_kode'] : $item->mata_kuliah_kode,
@@ -565,12 +611,12 @@ class UserController extends Controller
                 $nonBlokRequest->query->set('semester_type', $semesterType);
                 $nonBlokResponse = $nonBlokController->getJadwalForDosen($id, $nonBlokRequest);
                 $nonBlokData = $nonBlokResponse->getData();
-                
+
                 if (isset($nonBlokData->data)) {
                     $jadwalNonBlok = collect($nonBlokData->data)->map(function($item) {
                         // Handle both array and object data
                         $isArray = is_array($item);
-                        
+
                         return (object) [
                             'id' => $isArray ? $item['id'] : $item->id,
                             'mata_kuliah_kode' => $isArray ? $item['mata_kuliah_kode'] : $item->mata_kuliah_kode,
@@ -585,8 +631,8 @@ class UserController extends Controller
                             'jumlah_sesi' => $isArray ? $item['jumlah_sesi'] : $item->jumlah_sesi,
                             'semester' => '',
                             'blok' => null,
-                            'kelompok_kecil' => $isArray ? 
-                                ($item['kelompok_besar']['semester'] ?? $item['kelompok_besar_antara']['nama_kelompok'] ?? '') : 
+                            'kelompok_kecil' => $isArray ?
+                                ($item['kelompok_besar']['semester'] ?? $item['kelompok_besar_antara']['nama_kelompok'] ?? '') :
                                 ($item->kelompok_besar->semester ?? $item->kelompok_besar_antara->nama_kelompok ?? '')
                         ];
                     });
@@ -621,21 +667,21 @@ class UserController extends Controller
      {
          try {
              $query = $request->get('q');
- 
+
              if (!$query || strlen($query) < 2) {
                  return response()->json([
                      'success' => true,
                      'data' => []
                  ]);
              }
- 
+
              $users = User::where('name', 'like', "%{$query}%")
                  ->orWhere('username', 'like', "%{$query}%")
                  ->orWhere('email', 'like', "%{$query}%")
                  ->select(['id', 'name', 'username', 'email', 'role'])
                  ->limit(20)
                  ->get();
- 
+
              return response()->json([
                  'success' => true,
                  'data' => $users
