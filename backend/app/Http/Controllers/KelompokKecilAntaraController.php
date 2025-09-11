@@ -23,7 +23,7 @@ class KelompokKecilAntaraController extends Controller
                     'mahasiswa_ids' => $kelompok->mahasiswa_ids ?? []
                 ];
             });
-        
+
         return response()->json($kelompokKecil);
     }
 
@@ -49,7 +49,7 @@ class KelompokKecilAntaraController extends Controller
         }
 
         $kelompokKecil = KelompokKecilAntara::create($data);
-        
+
         return response()->json($kelompokKecil, Response::HTTP_CREATED);
     }
 
@@ -78,7 +78,7 @@ class KelompokKecilAntaraController extends Controller
         }
 
         $kelompokKecil->update($data);
-        
+
         return response()->json($kelompokKecil);
     }
 
@@ -88,9 +88,9 @@ class KelompokKecilAntaraController extends Controller
     public function destroy($mataKuliahKode = null, $id)
     {
         $kelompokKecil = KelompokKecilAntara::findOrFail($id);
-        
+
         $kelompokKecil->delete();
-        
+
         return response()->json(['message' => 'Kelompok kecil berhasil dihapus'], Response::HTTP_NO_CONTENT);
     }
 
@@ -100,13 +100,13 @@ class KelompokKecilAntaraController extends Controller
     public function getByNama(Request $request)
     {
         $namaKelompok = $request->query('nama_kelompok');
-        
+
         if (!$namaKelompok) {
             return response()->json(['message' => 'Nama kelompok diperlukan'], 400);
         }
 
         $kelompok = KelompokKecilAntara::where('nama_kelompok', $namaKelompok)->first();
-        
+
         if (!$kelompok) {
             return response()->json(['message' => 'Kelompok tidak ditemukan'], 404);
         }

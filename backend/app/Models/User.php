@@ -22,7 +22,7 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name', 'username', 'email', 'password', 'avatar',
-        'nip', 'nid', 'nidn', 'nim', 'gender', 'ipk', 'status', 'angkatan',
+        'nip', 'nid', 'nidn', 'nuptk', 'nim', 'gender', 'ipk', 'status', 'angkatan',
         'telp', 'ket', 'role',
         'kompetensi',
         'keahlian',
@@ -104,7 +104,7 @@ class User extends Authenticatable
     {
         return $this->hasMany(PenilaianJurnal::class, 'mahasiswa_nim', 'nim');
     }
-    
+
     /**
      * Get all bookmarks for this user
      */

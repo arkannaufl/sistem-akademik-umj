@@ -18,7 +18,7 @@ class KelompokBesarAntaraController extends Controller
             ->select('id', 'name', 'email', 'ipk')
             ->orderBy('name')
             ->get();
-        
+
         return response()->json($mahasiswa);
     }
 
@@ -37,7 +37,7 @@ class KelompokBesarAntaraController extends Controller
                     'mahasiswa' => $mahasiswa
                 ];
             });
-        
+
         return response()->json($kelompokBesar);
     }
 
@@ -63,7 +63,7 @@ class KelompokBesarAntaraController extends Controller
         }
 
         $kelompokBesar = KelompokBesarAntara::create($data);
-        
+
         return response()->json($kelompokBesar, Response::HTTP_CREATED);
     }
 
@@ -92,7 +92,7 @@ class KelompokBesarAntaraController extends Controller
         }
 
         $kelompokBesar->update($data);
-        
+
         return response()->json($kelompokBesar);
     }
 
@@ -102,9 +102,9 @@ class KelompokBesarAntaraController extends Controller
     public function destroy($mataKuliahKode = null, $id)
     {
         $kelompokBesar = KelompokBesarAntara::findOrFail($id);
-        
+
         $kelompokBesar->delete();
-        
+
         return response()->json(['message' => 'Kelompok besar berhasil dihapus'], Response::HTTP_NO_CONTENT);
     }
 }

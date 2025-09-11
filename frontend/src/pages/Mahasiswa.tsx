@@ -86,6 +86,7 @@ export default function Mahasiswa() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [previewPage, setPreviewPage] = useState(1);
@@ -137,12 +138,13 @@ export default function Mahasiswa() {
   }, []);
 
   useEffect(() => {
-    if (importedFile && previewData.length > 0) {
+    // Only validate if we have preview data and no success message (import not completed)
+    if (importedFile && previewData.length > 0 && !success) {
       const validationResult = validateExcelData(previewData, data);
       setValidationErrors(validationResult.errors);
       setCellErrors(validationResult.cellErrors);
     }
-  }, [previewData, data]);
+  }, [previewData, data, success]);
 
   useEffect(() => {
     if (importedCount > 0) {
@@ -313,6 +315,15 @@ export default function Mahasiswa() {
   const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
+    
+    // Clear all previous states when new file is selected
+    setError("");
+    setSuccess("");
+    setValidationErrors([]);
+    setCellErrors([]);
+    setPreviewData([]);
+    setPreviewPage(1);
+    
     setImportedFile(file);
     try {
       const excelParsedData = await readExcelFile(file);
@@ -320,7 +331,6 @@ export default function Mahasiswa() {
       setPreviewData(excelParsedData);
       setValidationErrors(validationResult.errors);
       setCellErrors(validationResult.cellErrors);
-      setError("");
     } catch (err: any) {
       setError(err.message || "Gagal membaca file Excel");
       setPreviewData([]);
@@ -351,6 +361,7 @@ export default function Mahasiswa() {
       setCellErrors([]);
     }
 
+    setIsImporting(true);
     try {
       const ws = XLSX.utils.json_to_sheet(previewData);
       const wb = XLSX.utils.book_new();
@@ -362,26 +373,35 @@ export default function Mahasiswa() {
       const res = await api.post('/users/import-mahasiswa', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         validateStatus: () => true,
+        timeout: 1200000, // 20 menit timeout untuk import data besar
       });
       
       if (res.status === 200) {
         setImportedCount(res.data.imported_count || 0);
+        
+        // Always show success message if any data was imported
         if (res.data.imported_count > 0) {
-          setError("");
-        }
-        if (res.data.errors && res.data.errors.length > 0) {
-          setError("Sebagian data gagal diimpor karena tidak valid:");
-          if (res.data.failed_rows && res.data.failed_rows.length > 0) {
-            setPreviewData(res.data.failed_rows);
-          }
-          setValidationErrors(res.data.errors);
-          setCellErrors(res.data.cell_errors || []);
-        } else {
+          setSuccess(res.data.message || `Berhasil mengimpor ${res.data.imported_count} data mahasiswa`);
+          setError(""); // Clear error message
+          
+          // Clear all preview and validation states since import was successful
           setImportedFile(null);
           setPreviewData([]);
           setValidationErrors([]);
           setCellErrors([]);
+          setPreviewPage(1); // Reset preview pagination
+        } else {
+          // No data imported, show error
+          setError(res.data.message || 'Tidak ada data yang berhasil diimpor');
+          setSuccess("");
+          if (res.data.failed_rows && res.data.failed_rows.length > 0) {
+            setPreviewData(res.data.failed_rows);
+          }
+          setValidationErrors(res.data.errors || []);
+          setCellErrors(res.data.cell_errors || []);
         }
+        
+        // Refresh data
         const mahasiswaRes = await api.get("/users?role=mahasiswa");
         setData(mahasiswaRes.data);
       } else if (res.status === 422) {
@@ -403,6 +423,7 @@ export default function Mahasiswa() {
       setCellErrors([]);
     } finally {
       setIsSaving(false);
+      setIsImporting(false);
       setLoading(false);
     }
   };
@@ -900,7 +921,7 @@ export default function Mahasiswa() {
                   Menampilkan {paginatedPreviewData.length} dari {previewData.length} data
                 </span>
               </div>
-              <div className="flex gap-1">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
                   disabled={previewPage === 1}
@@ -908,19 +929,73 @@ export default function Mahasiswa() {
                 >
                   Prev
                 </button>
-                {Array.from({ length: previewTotalPages }, (_, i) => (
+                
+                {/* Smart Pagination with Scroll for Preview */}
+                <div className="flex items-center gap-1 max-w-[400px] overflow-x-auto pagination-scroll" style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#cbd5e1 #f1f5f9'
+                }}>
+                  {/* Always show first page */}
                   <button
-                    key={i}
-                    onClick={() => setPreviewPage(i + 1)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 ${
-                      previewPage === i + 1
+                    onClick={() => setPreviewPage(1)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                      previewPage === 1
                         ? 'bg-brand-500 text-white'
                         : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    } transition`}
+                    }`}
                   >
-                    {i + 1}
+                    1
                   </button>
-                ))}
+                  
+                  {/* Show ellipsis if current page is far from start */}
+                  {previewPage > 4 && (
+                    <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+                  )}
+                  
+                  {/* Show pages around current page */}
+                  {Array.from({ length: previewTotalPages }, (_, i) => {
+                    const pageNum = i + 1;
+                    // Show pages around current page (2 pages before and after)
+                    const shouldShow = pageNum > 1 && pageNum < previewTotalPages && 
+                      (pageNum >= previewPage - 2 && pageNum <= previewPage + 2);
+                    
+                    if (!shouldShow) return null;
+                    
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setPreviewPage(pageNum)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                          previewPage === pageNum
+                            ? 'bg-brand-500 text-white'
+                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  
+                  {/* Show ellipsis if current page is far from end */}
+                  {previewPage < previewTotalPages - 3 && (
+                    <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+                  )}
+                  
+                  {/* Always show last page if it's not the first page */}
+                  {previewTotalPages > 1 && (
+                    <button
+                      onClick={() => setPreviewPage(previewTotalPages)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                        previewPage === previewTotalPages
+                          ? 'bg-brand-500 text-white'
+                          : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {previewTotalPages}
+                    </button>
+                  )}
+                </div>
+                
                 <button
                   onClick={() => setPreviewPage((p) => Math.min(previewTotalPages, p + 1))}
                   disabled={previewPage === previewTotalPages}
@@ -939,6 +1014,9 @@ export default function Mahasiswa() {
                 setPreviewData([]);
                 setValidationErrors([]);
                 setCellErrors([]);
+                setError("");
+                setSuccess("");
+                setPreviewPage(1);
               }}
               type="button"
             >
@@ -950,15 +1028,15 @@ export default function Mahasiswa() {
                   ? 'bg-emerald-800 text-white opacity-60 cursor-not-allowed'
                   : 'bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600'}`}
               onClick={handleSubmitImport}
-              disabled={isSaving || loading}
+              disabled={isSaving || isImporting || loading}
             >
-              {isSaving ? (
+              {(isSaving || isImporting) ? (
                 <>
                   <svg className="w-5 h-5 mr-2 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                   </svg>
-                  Mengimpor...
+                  {isImporting ? 'Mengimpor data...' : 'Mengimpor...'}
                 </>
               ) : (
                 'Import ke Database'
@@ -1108,7 +1186,7 @@ export default function Mahasiswa() {
               Menampilkan {paginatedData.length} dari {filteredData.length} data
             </span>
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
@@ -1116,19 +1194,101 @@ export default function Mahasiswa() {
             >
               Prev
             </button>
-            {Array.from({ length: totalPages }, (_, i) => (
+            
+            {/* Smart Pagination with Scroll */}
+            <div className="flex items-center gap-1 max-w-[400px] overflow-x-auto pagination-scroll" style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#cbd5e1 #f1f5f9'
+            }}>
+              <style dangerouslySetInnerHTML={{
+                __html: `
+                  .pagination-scroll::-webkit-scrollbar {
+                    height: 6px;
+                  }
+                  .pagination-scroll::-webkit-scrollbar-track {
+                    background: #f1f5f9;
+                    border-radius: 3px;
+                  }
+                  .pagination-scroll::-webkit-scrollbar-thumb {
+                    background: #cbd5e1;
+                    border-radius: 3px;
+                  }
+                  .pagination-scroll::-webkit-scrollbar-thumb:hover {
+                    background: #94a3b8;
+                  }
+                  .dark .pagination-scroll::-webkit-scrollbar-track {
+                    background: #1e293b;
+                  }
+                  .dark .pagination-scroll::-webkit-scrollbar-thumb {
+                    background: #475569;
+                  }
+                  .dark .pagination-scroll::-webkit-scrollbar-thumb:hover {
+                    background: #64748b;
+                  }
+                `
+              }} />
+              
+              {/* Always show first page */}
               <button
-                key={i}
-                onClick={() => setPage(i + 1)}
-                className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 ${
-                  page === i + 1
+                onClick={() => setPage(1)}
+                className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                  page === 1
                     ? 'bg-brand-500 text-white'
                     : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-                } transition`}
+                }`}
               >
-                {i + 1}
+                1
               </button>
-            ))}
+              
+              {/* Show ellipsis if current page is far from start */}
+              {page > 4 && (
+                <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+              )}
+              
+              {/* Show pages around current page */}
+              {Array.from({ length: totalPages }, (_, i) => {
+                const pageNum = i + 1;
+                // Show pages around current page (2 pages before and after)
+                const shouldShow = pageNum > 1 && pageNum < totalPages && 
+                  (pageNum >= page - 2 && pageNum <= page + 2);
+                
+                if (!shouldShow) return null;
+                
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setPage(pageNum)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                      page === pageNum
+                        ? 'bg-brand-500 text-white'
+                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              
+              {/* Show ellipsis if current page is far from end */}
+              {page < totalPages - 3 && (
+                <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+              )}
+              
+              {/* Always show last page if it's not the first page */}
+              {totalPages > 1 && (
+                <button
+                  onClick={() => setPage(totalPages)}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                    page === totalPages
+                      ? 'bg-brand-500 text-white'
+                      : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {totalPages}
+                </button>
+              )}
+            </div>
+            
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
