@@ -39,9 +39,11 @@ class DosenImport implements ToCollection, WithHeadingRow
             $isStandby = strpos($keahlianString, 'standby') !== false;
 
             // 1. Validasi keberadaan field wajib dan isinya tidak kosong (basic validation)
+            // Allow "-" for NID, NIDN, and NUPTK fields
             $validationRules = [
-                'nid' => 'required',
-                'nidn' => 'required',
+                'nid' => 'required', // Still required but can be "-"
+                'nidn' => 'required', // Still required but can be "-"
+                'nuptk' => 'required', // Still required but can be "-"
                 'name' => 'required',
                 'username' => 'required',
                 'email' => 'required|email',
@@ -53,6 +55,7 @@ class DosenImport implements ToCollection, WithHeadingRow
             $validationMessages = [
                 'nid.required' => 'NID harus diisi (Baris '.($index+2).')',
                 'nidn.required' => 'NIDN harus diisi (Baris '.($index+2).')',
+                'nuptk.required' => 'NUPTK harus diisi (Baris '.($index+2).')',
                 'name.required' => 'Nama harus diisi (Baris '.($index+2).')',
                 'username.required' => 'Username harus diisi (Baris '.($index+2).')',
                 'email.required' => 'Email harus diisi (Baris '.($index+2).')',
@@ -113,9 +116,37 @@ class DosenImport implements ToCollection, WithHeadingRow
                 }
             }
 
-            // 2. Validasi duplikat dalam file Excel ini
-            // Pastikan NID tidak kosong sebelum cek duplikat
-            if (isset($rowArray['nid']) && trim($rowArray['nid']) !== '') {
+            // 2. Validasi format NID, NIDN, NUPTK
+            // NID dan NIDN wajib diisi dengan angka atau "-"
+            if (isset($rowArray['nid']) && $rowArray['nid'] !== '-' && !is_numeric($rowArray['nid'])) {
+                $currentRowErrors[] = [
+                    'type' => 'format_error',
+                    'field' => 'nid',
+                    'message' => 'NID harus diisi dengan angka atau "-" (Baris '.($index+2).')',
+                    'nid' => $rowArray['nid'] ?? null,
+                ];
+            }
+            if (isset($rowArray['nidn']) && $rowArray['nidn'] !== '-' && !is_numeric($rowArray['nidn'])) {
+                $currentRowErrors[] = [
+                    'type' => 'format_error',
+                    'field' => 'nidn',
+                    'message' => 'NIDN harus diisi dengan angka atau "-" (Baris '.($index+2).')',
+                    'nid' => $rowArray['nid'] ?? null,
+                ];
+            }
+            // NUPTK wajib diisi dengan angka atau "-"
+            if (isset($rowArray['nuptk']) && $rowArray['nuptk'] !== '-' && !is_numeric($rowArray['nuptk'])) {
+                $currentRowErrors[] = [
+                    'type' => 'format_error',
+                    'field' => 'nuptk',
+                    'message' => 'NUPTK harus diisi dengan angka atau "-" (Baris '.($index+2).')',
+                    'nid' => $rowArray['nid'] ?? null,
+                ];
+            }
+
+            // 3. Validasi duplikat dalam file Excel ini
+            // Pastikan NID tidak kosong dan bukan "-" sebelum cek duplikat
+            if (isset($rowArray['nid']) && trim($rowArray['nid']) !== '' && trim($rowArray['nid']) !== '-') {
                 if (in_array(trim($rowArray['nid']), $this->seenNidsInFile)) {
                     $currentRowErrors[] = [
                         'type' => 'duplicate_in_file',
@@ -127,7 +158,7 @@ class DosenImport implements ToCollection, WithHeadingRow
                     $this->seenNidsInFile[] = trim($rowArray['nid']);
                 }
             }
-            if (isset($rowArray['nidn']) && trim($rowArray['nidn']) !== '') {
+            if (isset($rowArray['nidn']) && trim($rowArray['nidn']) !== '' && trim($rowArray['nidn']) !== '-') {
                 if (in_array(trim($rowArray['nidn']), $this->seenNidnsInFile)) {
                     $currentRowErrors[] = [
                         'type' => 'duplicate_in_file',
@@ -165,14 +196,23 @@ class DosenImport implements ToCollection, WithHeadingRow
             }
 
 
-            // 3. Validasi duplikat terhadap database yang sudah ada
+            // 4. Validasi duplikat terhadap database yang sudah ada
             // Gunakan Laravel Validator untuk unique di database
-            $dbValidator = Validator::make($rowArray, [
-                'nid' => [Rule::unique('users', 'nid')->ignore($originalRowArray['id'] ?? null, 'id')],
-                'nidn' => [Rule::unique('users', 'nidn')->ignore($originalRowArray['id'] ?? null, 'id')],
+            // Skip unique validation for NID and NIDN if they are "-"
+            $dbValidationRules = [
                 'username' => [Rule::unique('users', 'username')->ignore($originalRowArray['id'] ?? null, 'id')],
                 'email' => ['nullable', Rule::unique('users', 'email')->ignore($originalRowArray['id'] ?? null, 'id')], // Email bisa null tapi kalau ada harus unique dan valid
-            ], [
+            ];
+
+            // Only add NID and NIDN unique validation if they are not "-"
+            if (isset($rowArray['nid']) && trim($rowArray['nid']) !== '' && trim($rowArray['nid']) !== '-') {
+                $dbValidationRules['nid'] = [Rule::unique('users', 'nid')->ignore($originalRowArray['id'] ?? null, 'id')];
+            }
+            if (isset($rowArray['nidn']) && trim($rowArray['nidn']) !== '' && trim($rowArray['nidn']) !== '-') {
+                $dbValidationRules['nidn'] = [Rule::unique('users', 'nidn')->ignore($originalRowArray['id'] ?? null, 'id')];
+            }
+
+            $dbValidator = Validator::make($rowArray, $dbValidationRules, [
                 'nid.unique' => 'NID sudah terdaftar di database (Baris '.($index+2).')',
                 'nidn.unique' => 'NIDN sudah terdaftar di database (Baris '.($index+2).')',
                 'username.unique' => 'Username sudah terdaftar di database (Baris '.($index+2).')',
@@ -214,9 +254,11 @@ class DosenImport implements ToCollection, WithHeadingRow
             }
 
             // Simpan data jika semua validasi berhasil
+            // Convert "-" to null for NID, NIDN, and NUPTK fields
             $userData = [
-                'nid' => $rowArray['nid'],
-                'nidn' => $rowArray['nidn'],
+                'nid' => ($rowArray['nid'] === '-' || $rowArray['nid'] === '') ? null : $rowArray['nid'],
+                'nidn' => ($rowArray['nidn'] === '-' || $rowArray['nidn'] === '') ? null : $rowArray['nidn'],
+                'nuptk' => ($rowArray['nuptk'] === '-' || $rowArray['nuptk'] === '') ? null : $rowArray['nuptk'],
                 'name' => $rowArray['name'],
                 'username' => $rowArray['username'],
                 'email' => $rowArray['email'],

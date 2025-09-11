@@ -45,18 +45,20 @@ class AuthController extends Controller
         }
 
         // Tambahkan pengecekan single-device login
-        if ($user->is_logged_in) {
-            return response()->json([
-                'message' => 'Akun ini sudah login di perangkat lain.',
-            ], 403);
-        }
+            // Jika status login masih aktif, hapus semua token dan reset status agar bisa login ulang
+            if ($user->is_logged_in) {
+                $user->tokens()->delete();
+                $user->is_logged_in = 0;
+                $user->current_token = null;
+                $user->save();
+            }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+            $token = $user->createToken('auth_token')->plainTextToken;
 
-        // Update status login dan token
-        $user->is_logged_in = 1;
-        $user->current_token = $token;
-        $user->save();
+            // Update status login dan token
+            $user->is_logged_in = 1;
+            $user->current_token = $token;
+            $user->save();
 
         // Log successful login
         activity()

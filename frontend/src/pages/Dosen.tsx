@@ -25,6 +25,7 @@ type UserDosen = {
   id?: number;
   nid: string;
   nidn: string;
+  nuptk?: string;
   name: string;
   username: string;
   email: string;
@@ -67,6 +68,7 @@ export default function Dosen() {
   const [form, setForm] = useState<UserDosen>({
     nid: "",
     nidn: "",
+    nuptk: "",
     name: "",
     username: "",
     email: "",
@@ -105,6 +107,7 @@ export default function Dosen() {
   const [cellErrors, setCellErrors] = useState<
     { row: number; field: string; message: string; nid?: string }[]
   >([]);
+  const [editingCell, setEditingCell] = useState<{ row: number; key: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [modalError, setModalError] = useState("");
   const [filterKompetensi, setFilterKompetensi] = useState<string[]>([]);
@@ -175,11 +178,10 @@ export default function Dosen() {
 
   // Fungsi untuk download template Excel
   const downloadTemplate = async () => {
-    // Data contoh untuk template
+    // Data contoh untuk template dengan format gabungan NID/NIDN/NUPTK
     const templateData = [
       {
-        nid: "1987654301",
-        nidn: "0123456701",
+        "nid/nidn/nuptk": "1987654301/0123456701/7241754655230123",
         nama: "Nama Dosen Contoh",
         username: "username_dosen",
         email: "dosen.contoh@umj.ac.id",
@@ -187,8 +189,16 @@ export default function Dosen() {
         password: "password123",
         kompetensi: "Klinik, penelitian",
         keahlian: "Kardiologi, Pendidikan",
-        peran_dalam_kurikulum:
-          "Tutor PBL Blok Sistem Kardiovaskular, Koordinator Praktikum Histologi",
+      },
+      {
+        "nid/nidn/nuptk": "-/-/-",
+        nama: "Dosen Belum Ada Data",
+        username: "dosen_belum_ada_data",
+        email: "dosen.belum@umj.ac.id",
+        telepon: "081234567891",
+        password: "password123",
+        kompetensi: "Klinik",
+        keahlian: "Pendidikan",
       },
     ];
 
@@ -208,6 +218,7 @@ export default function Dosen() {
     setForm({
       nid: "",
       nidn: "",
+      nuptk: "",
       name: "",
       username: "",
       email: "",
@@ -316,7 +327,10 @@ export default function Dosen() {
 
   useEffect(() => {
     if (showModal) {
-      setPeranUtama("aktif");
+      // Hanya set peranUtama default untuk mode add (bukan edit)
+      if (!editMode) {
+        setPeranUtama("aktif");
+      }
     } else {
       setPeranUtama("");
       setMatkulKetua("");
@@ -329,7 +343,49 @@ export default function Dosen() {
         { mata_kuliah_kode: "", peran_kurikulum: "", blok: "", semester: "" },
       ]);
     }
-  }, [showModal]);
+  }, [showModal, editMode]);
+
+  // Handle perubahan peranUtama untuk dosen standby
+  useEffect(() => {
+    if (peranUtama === "standby") {
+      // Set keahlian menjadi "Standby" dan kompetensi kosong
+      setForm((prev) => ({
+        ...prev,
+        keahlian: ["Standby"],
+        kompetensi: [],
+      }));
+    } else if (peranUtama === "aktif") {
+      // Hanya reset jika bukan edit mode atau jika kompetensi/keahlian masih kosong
+      setForm((prev) => {
+        if (!editMode || (Array.isArray(prev.kompetensi) && prev.kompetensi.length === 0)) {
+          return {
+            ...prev,
+            keahlian: [],
+            kompetensi: [],
+          };
+        }
+        return prev;
+      });
+    }
+  }, [peranUtama, editMode]);
+
+  // Handle in-cell editing untuk preview data
+  const handleCellEdit = (rowIndex: number, field: string, value: string) => {
+    setPreviewData((prevData) =>
+      prevData.map((row, idx) =>
+        idx === rowIndex ? { ...row, [field]: value } : row
+      )
+    );
+  };
+
+  // Re-validate data setelah edit
+  useEffect(() => {
+    if (previewData.length > 0) {
+      const validationResult = validateExcelData(previewData, data);
+      setValidationErrors(validationResult.errors);
+      setCellErrors(validationResult.cellErrors);
+    }
+  }, [previewData, data]);
 
   useEffect(() => {
     // Extract unique kompetensi dari data dosen, handle jika string JSON
@@ -496,8 +552,12 @@ export default function Dosen() {
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    if (["nid", "nidn", "telp"].includes(name)) {
+    if (name === "telp") {
+      // Hanya telepon yang harus angka saja
       setForm({ ...form, [name]: value.replace(/[^0-9]/g, "") });
+    } else if (["nid", "nidn", "nuptk"].includes(name)) {
+      // NID, NIDN, NUPTK bisa angka atau "-"
+      setForm({ ...form, [name]: value.replace(/[^0-9-]/g, "") });
     } else if (name === "peran_kurikulum" || name === "kompetensi") {
       // Simpan nilai input sebagai string biasa (bukan array)
       setForm({ ...form, [name]: value });
@@ -526,7 +586,8 @@ export default function Dosen() {
       ["a", "c", "v", "x"].includes(e.key.toLowerCase())
     )
       return;
-    if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+    // Allow numbers and dash (-)
+    if (!/^[0-9-]$/.test(e.key)) e.preventDefault();
   }
 
   // Perbaikan untuk handleAdd function
@@ -546,10 +607,14 @@ export default function Dosen() {
       // 2. Validasi total peran (max 4) - HILANGKAN peranMengajar
       const totalPeran = peranKetua.length + peranAnggota.length;
       if (totalPeran > 4) throw new Error("Maksimal 4 peran untuk satu dosen.");
-      // Payload
+      // Payload - konversi "-" menjadi null untuk field NID, NIDN, NUPTK
       let payload: any = {
         ...form,
+        nid: form.nid === "-" || form.nid === "" ? null : form.nid,
+        nidn: form.nidn === "-" || form.nidn === "" ? null : form.nidn,
+        nuptk: form.nuptk === "-" || form.nuptk === "" ? null : form.nuptk,
         role: "dosen",
+        peran_utama: peranUtama === "standby" ? "standby" : "dosen_mengajar",
       };
       // Hanya kirim dosen_peran jika peranUtama 'aktif'
       if (peranUtama === "aktif") {
@@ -658,11 +723,21 @@ export default function Dosen() {
 
     setForm({
       ...d,
+      nid: d.nid || "-",
+      nidn: d.nidn || "-",
+      nuptk: d.nuptk || "-",
       password: "",
       kompetensi: kompetensiArr,
       keahlian: keahlianArr,
     });
-    setPeranUtama(d.peran_utama || "");
+    
+    // Tentukan status berdasarkan keahlian
+    console.log("Debug handleEdit - Data dosen:", d);
+    console.log("Debug handleEdit - Keahlian raw:", d.keahlian);
+    console.log("Debug handleEdit - Keahlian array:", keahlianArr);
+    const isStandby = keahlianArr.some(k => k.toLowerCase() === "standby");
+    console.log("Debug handleEdit - Is standby:", isStandby);
+    setPeranUtama(isStandby ? "standby" : "aktif");
     setMatkulKetua(
       d.matkul_ketua_nama
         ? matkulList.find((mk) => mk.nama === d.matkul_ketua_nama)?.kode || ""
@@ -754,6 +829,47 @@ export default function Dosen() {
       const transformedData = excelParsedData.map((row) => {
         const newRow: any = { ...row };
 
+        // Hapus field peran_dalam_kurikulum jika ada (field sudah tidak digunakan)
+        delete newRow.peran_dalam_kurikulum;
+
+        // Cek apakah ada kolom gabungan NID/NIDN/NUPTK
+        const headers = Object.keys(row);
+        let combinedIdKey = headers.find(h => 
+          h.toLowerCase().includes('nid') && h.toLowerCase().includes('/')
+        );
+        
+        // Cek juga untuk format yang lebih spesifik
+        if (!combinedIdKey) {
+          combinedIdKey = headers.find(h => 
+            h.toLowerCase() === 'nid/nidn/nuptk' || 
+            h.toLowerCase().includes('nid/nidn') ||
+            h.toLowerCase().includes('nid/nidn/nuptk')
+          );
+        }
+        
+        // Jika tidak ada header yang jelas, cari berdasarkan data
+        if (!combinedIdKey) {
+          combinedIdKey = headers.find(h => {
+            const value = row[h];
+            if (typeof value === 'string' && value.includes('/')) {
+              const parts = value.split('/');
+              return parts.length >= 2 && parts.every(part => /^[0-9]+$/.test(part.trim()));
+            }
+            return false;
+          });
+        }
+        
+        if (combinedIdKey && row[combinedIdKey]) {
+          // Parse data gabungan menjadi field terpisah
+          const parsedData = parseCombinedIdData(String(row[combinedIdKey]));
+          newRow.nid = parsedData.nid;
+          newRow.nidn = parsedData.nidn;
+          newRow.nuptk = parsedData.nuptk;
+          
+          // Hapus kolom gabungan dari data
+          delete newRow[combinedIdKey];
+        }
+
         // Handle kompetensi - simpan sebagai string
         if (typeof newRow.kompetensi === "string") {
           newRow.kompetensi = newRow.kompetensi;
@@ -761,16 +877,6 @@ export default function Dosen() {
           newRow.kompetensi = newRow.kompetensi.join(", ");
         } else {
           newRow.kompetensi = "";
-        }
-
-        // Handle peran_dalam_kurikulum - simpan sebagai string
-        if (typeof newRow.peran_dalam_kurikulum === "string") {
-          newRow.peran_dalam_kurikulum = newRow.peran_dalam_kurikulum;
-        } else if (Array.isArray(newRow.peran_dalam_kurikulum)) {
-          newRow.peran_dalam_kurikulum =
-            newRow.peran_dalam_kurikulum.join(", ");
-        } else {
-          newRow.peran_dalam_kurikulum = "";
         }
 
         // Handle keahlian - simpan sebagai string
@@ -785,8 +891,35 @@ export default function Dosen() {
         return newRow;
       });
 
+      // Gabungkan kolom NID/NIDN/NUPTK untuk preview
+      const previewDataWithCombinedColumns = transformedData.map((row) => {
+        const newRow = { ...row };
+        
+        // Gabungkan NID/NIDN/NUPTK menjadi satu kolom
+        if (newRow.nid || newRow.nidn || newRow.nuptk) {
+          const nid = newRow.nid || '';
+          const nidn = newRow.nidn || '';
+          const nuptk = newRow.nuptk || '';
+          
+          if (nid && nidn) {
+            newRow['NID / NIDN / NUPTK'] = `${nid} / ${nidn}${nuptk ? ` / ${nuptk}` : ''}`;
+          } else {
+            newRow['NID / NIDN / NUPTK'] = nid || nidn || nuptk || '-';
+          }
+        } else {
+          newRow['NID / NIDN / NUPTK'] = '-';
+        }
+        
+        // Hapus kolom terpisah
+        delete newRow.nid;
+        delete newRow.nidn;
+        delete newRow.nuptk;
+        
+        return newRow;
+      });
+
       const validationResult = validateExcelData(transformedData, data);
-      setPreviewData(transformedData);
+      setPreviewData(transformedData); // Gunakan data asli untuk preview
       setValidationErrors(validationResult.errors);
       setCellErrors(validationResult.cellErrors);
       setError("");
@@ -807,6 +940,11 @@ export default function Dosen() {
     setLoading(true);
     setImportedCount(0);
     setCellErrors([]);
+    
+    // Show progress message for large datasets
+    if (previewData.length > 50) {
+      setSuccess("Sedang memproses data... Mohon tunggu, ini mungkin memakan waktu beberapa menit untuk data yang banyak.");
+    }
 
     const validationResult = validateExcelData(previewData, data);
     if (validationResult.errors.length > 0) {
@@ -820,7 +958,7 @@ export default function Dosen() {
     try {
       // Transform data untuk dikirim ke backend
       const dataToExport = previewData.map((row) => {
-        // Konversi string ke array untuk kompetensi dan peran_dalam_kurikulum
+        // Konversi string ke array untuk kompetensi dan keahlian
         const kompetensiArray =
           typeof row.kompetensi === "string"
             ? row.kompetensi
@@ -833,17 +971,6 @@ export default function Dosen() {
                 .filter((item: string) => item !== "")
             : [];
 
-        const peranKurikulumArray =
-          typeof row.peran_dalam_kurikulum === "string"
-            ? row.peran_dalam_kurikulum
-                .split(",")
-                .map((item: string) => item.trim())
-                .filter((item: string) => item !== "")
-            : Array.isArray(row.peran_dalam_kurikulum)
-            ? row.peran_dalam_kurikulum
-                .map((item: string) => item.trim())
-                .filter((item: string) => item !== "")
-            : [];
 
         const keahlianArray =
           typeof row.keahlian === "string"
@@ -862,13 +989,13 @@ export default function Dosen() {
         return {
           nid: row.nid,
           nidn: row.nidn,
+          nuptk: row.nuptk, // Include NUPTK field
           nama: row.nama, // Use original 'nama' column name
           username: row.username,
           email: row.email,
           telepon: row.telepon, // Use original 'telepon' column name
           password: row.password,
           kompetensi: kompetensiArray.join(", "), // Convert back to string for Excel export
-          peran_dalam_kurikulum: peranKurikulumArray.join(", "), // Convert back to string for Excel export with original column name
           keahlian: keahlianArray.join(", "),
         };
       });
@@ -887,6 +1014,7 @@ export default function Dosen() {
       const res = await api.post("/users/import-dosen", formData, {
         headers: { "Content-Type": "multipart/form-data" },
         validateStatus: () => true,
+        timeout: 120000, // 2 menit timeout untuk import data banyak
       });
 
       // After successful import, re-fetch the entire list of users
@@ -930,11 +1058,18 @@ export default function Dosen() {
       }
     } catch (err: any) {
       setImportedCount(0);
-      setError(err.message || "Gagal mengimpor data");
+      
+      // Handle timeout specifically
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setError("Import memakan waktu terlalu lama. Data mungkin terlalu banyak. Silakan coba dengan file yang lebih kecil atau hubungi administrator.");
+      } else {
+        setError(err.message || "Gagal mengimpor data");
+      }
       setCellErrors([]);
     } finally {
       setIsSaving(false);
       setLoading(false);
+      setSuccess(null); // Clear progress message
     }
   };
 
@@ -986,6 +1121,20 @@ export default function Dosen() {
     });
   };
 
+  // Fungsi untuk memisahkan data NID/NIDN/NUPTK dari format gabungan
+  const parseCombinedIdData = (combinedData: string) => {
+    if (!combinedData || typeof combinedData !== 'string') {
+      return { nid: '', nidn: '', nuptk: '' };
+    }
+    
+    const parts = combinedData.split('/');
+    return {
+      nid: parts[0]?.trim() || '',
+      nidn: parts[1]?.trim() || '',
+      nuptk: parts[2]?.trim() || ''
+    };
+  };
+
   // Fungsi validasi data Excel saat diunggah
   const validateExcelData = (excelData: any[], existingDbData: UserDosen[]) => {
     const errors: string[] = [];
@@ -1003,18 +1152,63 @@ export default function Dosen() {
 
     // Cek header kolom
     const firstRow = excelData[0];
-    const requiredHeaders = [
+    const headers = Object.keys(firstRow);
+    
+    // Cek apakah ada kolom gabungan NID/NIDN/NUPTK atau kolom terpisah
+    const hasCombinedId = headers.some(h => 
+      h.toLowerCase().includes('nid') && h.toLowerCase().includes('/')
+    );
+    
+    // Cek juga untuk format "nid/nidn/nuptk" yang lebih spesifik
+    const hasSpecificCombinedId = headers.some(h => 
+      h.toLowerCase() === 'nid/nidn/nuptk' || 
+      h.toLowerCase().includes('nid/nidn') ||
+      h.toLowerCase().includes('nid/nidn/nuptk')
+    );
+    
+    // Cek apakah ada kolom yang berisi data gabungan (berdasarkan data, bukan header)
+    const hasCombinedData = excelData.some(row => {
+      return Object.values(row).some(value => {
+        if (typeof value === 'string' && value.includes('/')) {
+          const parts = value.split('/');
+          // Cek apakah format seperti NID/NIDN/NUPTK (angka/angka/angka)
+          return parts.length >= 2 && parts.every(part => /^[0-9]+$/.test(part.trim()));
+        }
+        return false;
+      });
+    });
+    
+    const hasSeparateNid = headers.includes('nid');
+    const hasSeparateNidn = headers.includes('nidn');
+    
+    let requiredHeaders: string[];
+    
+    if (hasCombinedId || hasSpecificCombinedId || hasCombinedData) {
+      // Jika ada kolom gabungan atau data gabungan, tidak perlu kolom nid dan nidn terpisah
+      requiredHeaders = [
+        "nama",
+        "username", 
+        "email",
+        "telepon",
+        "password",
+        "kompetensi",
+        "keahlian",
+      ];
+    } else {
+      // Jika tidak ada kolom gabungan, perlu kolom nid, nidn, dan nuptk terpisah
+      requiredHeaders = [
       "nid",
       "nidn",
+      "nuptk",
       "nama",
       "username",
       "email",
       "telepon",
       "password",
       "kompetensi",
-      "peran_dalam_kurikulum",
+      "keahlian",
     ];
-    const headers = Object.keys(firstRow);
+    }
 
     const missingHeaders = requiredHeaders.filter(
       (h) => !headers.includes(h.toLowerCase())
@@ -1034,30 +1228,76 @@ export default function Dosen() {
 
     excelData.forEach((row, index) => {
       const rowNum = index + 2; // +2 karena header di row 1 dan index mulai dari 0
-      const rowNid = row.nid ? String(row.nid) : "";
-      const rowNidn = row.nidn ? String(row.nidn) : "";
+      
+      let rowNid = "";
+      let rowNidn = "";
+      let rowNuptk = "";
+      
+      // Cek apakah data dalam format gabungan atau terpisah
+      if (hasCombinedId || hasSpecificCombinedId || hasCombinedData) {
+        // Cari kolom yang berisi data gabungan
+        let combinedIdKey = headers.find(h => 
+          h.toLowerCase().includes('nid') && h.toLowerCase().includes('/')
+        );
+        
+        // Jika tidak ada header yang jelas, cari berdasarkan data
+        if (!combinedIdKey) {
+          combinedIdKey = headers.find(h => {
+            const value = row[h];
+            if (typeof value === 'string' && value.includes('/')) {
+              const parts = value.split('/');
+              return parts.length >= 2 && parts.every(part => /^[0-9]+$/.test(part.trim()));
+            }
+            return false;
+          });
+        }
+        
+        if (combinedIdKey && row[combinedIdKey]) {
+          const parsedData = parseCombinedIdData(String(row[combinedIdKey]));
+          rowNid = parsedData.nid;
+          rowNidn = parsedData.nidn;
+          rowNuptk = parsedData.nuptk;
+        }
+      } else {
+        // Data terpisah
+        rowNid = row.nid ? String(row.nid).trim() : "";
+        rowNidn = row.nidn ? String(row.nidn).trim() : "";
+        rowNuptk = row.nuptk ? String(row.nuptk).trim() : "";
+      }
+      
       const rowUsername = row.username
         ? String(row.username).toLowerCase()
         : "";
       const rowEmail = row.email ? String(row.email).toLowerCase() : "";
 
       // Basic required and format validations
-      if (!row.nid || !/^[0-9]+$/.test(row.nid)) {
-        errors.push(`NID harus diisi dengan angka (Baris ${rowNum})`);
+      // NID dan NIDN wajib diisi dengan angka atau "-"
+      if (!rowNid || (!/^[0-9]+$/.test(rowNid) && rowNid !== '-')) {
+        errors.push(`NID harus diisi dengan angka atau "-" (Baris ${rowNum}, Kolom NID): ${rowNid}`);
         newCellErrors.push({
           row: index,
           field: "nid",
-          message: `NID harus diisi dengan angka`,
+          message: `NID harus diisi dengan angka atau "-"`,
           nid: rowNid,
         });
       }
-      if (!row.nidn || !/^[0-9]+$/.test(row.nidn)) {
-        errors.push(`NIDN harus diisi dengan angka (Baris ${rowNum})`);
+      if (!rowNidn || (!/^[0-9]+$/.test(rowNidn) && rowNidn !== '-')) {
+        errors.push(`NIDN harus diisi dengan angka atau "-" (Baris ${rowNum}, Kolom NIDN): ${rowNidn}`);
         newCellErrors.push({
           row: index,
           field: "nidn",
-          message: `NIDN harus diisi dengan angka`,
+          message: `NIDN harus diisi dengan angka atau "-"`,
           nid: rowNidn,
+        });
+      }
+      // NUPTK wajib diisi dengan angka atau "-"
+      if (!rowNuptk || (!/^[0-9]+$/.test(rowNuptk) && rowNuptk !== '-')) {
+        errors.push(`NUPTK harus diisi dengan angka atau "-" (Baris ${rowNum}, Kolom NUPTK): ${rowNuptk}`);
+        newCellErrors.push({
+          row: index,
+          field: "nuptk",
+          message: `NUPTK harus diisi dengan angka atau "-"`,
+          nid: rowNuptk,
         });
       }
       if (!row.nama) {
@@ -1107,32 +1347,51 @@ export default function Dosen() {
           nid: rowNid,
         });
       }
-      // Validate kompetensi: should not be an empty string
-      if (!row.kompetensi || String(row.kompetensi).trim() === "") {
-        errors.push(`Kompetensi harus diisi (Baris ${rowNum})`);
+      // Validasi keahlian dan kompetensi berdasarkan standby logic
+      const keahlianValue = String(row.keahlian || "").trim();
+      const kompetensiValue = String(row.kompetensi || "").trim();
+      
+      // Cek apakah keahlian mengandung "standby"
+      const isStandby = keahlianValue.toLowerCase().includes("standby");
+      
+      if (isStandby) {
+        // Jika standby, keahlian harus HANYA "standby"
+        const keahlianArray = keahlianValue.split(",").map(k => k.trim().toLowerCase());
+        if (keahlianArray.length !== 1 || keahlianArray[0] !== "standby") {
+          errors.push(`Jika keahlian mengandung "standby", maka harus HANYA "standby" saja (Baris ${rowNum})`);
+          newCellErrors.push({
+            row: index,
+            field: "keahlian",
+            message: `Jika keahlian mengandung "standby", maka harus HANYA "standby" saja`,
+            nid: rowNid,
+          });
+        }
+        
+        // Jika standby, kompetensi harus kosong
+        if (kompetensiValue !== "") {
+          errors.push(`Jika keahlian "standby", kompetensi harus kosong (Baris ${rowNum})`);
         newCellErrors.push({
           row: index,
           field: "kompetensi",
-          message: `Kompetensi harus diisi`,
+            message: `Jika keahlian "standby", kompetensi harus kosong`,
           nid: rowNid,
         });
       }
-      // Validate peran_dalam_kurikulum: should not be an empty string
-      if (
-        !row.peran_dalam_kurikulum ||
-        String(row.peran_dalam_kurikulum).trim() === ""
-      ) {
-        errors.push(`Peran dalam Kurikulum harus diisi (Baris ${rowNum})`);
+      } else {
+        // Jika tidak standby, kompetensi harus diisi
+        if (!kompetensiValue) {
+          errors.push(`Kompetensi harus diisi (Baris ${rowNum})`);
         newCellErrors.push({
           row: index,
-          field: "peran_dalam_kurikulum",
-          message: `Peran dalam Kurikulum harus diisi`,
+            field: "kompetensi",
+            message: `Kompetensi harus diisi`,
           nid: rowNid,
         });
+        }
       }
 
-      // Duplikat dalam file Excel
-      if (rowNid) {
+      // Duplikat dalam file Excel - skip untuk nilai "-"
+      if (rowNid && rowNid !== '-') {
         if (nidSetInFile.has(rowNid)) {
           errors.push(
             `NID ${rowNid} sudah terdaftar dalam file Excel ini (Baris ${rowNum})`
@@ -1147,7 +1406,7 @@ export default function Dosen() {
           nidSetInFile.add(rowNid);
         }
       }
-      if (rowNidn) {
+      if (rowNidn && rowNidn !== '-') {
         if (nidnSetInFile.has(rowNidn)) {
           errors.push(
             `NIDN ${rowNidn} sudah terdaftar dalam file Excel ini (Baris ${rowNum})`
@@ -1574,10 +1833,6 @@ export default function Dosen() {
       try {
         setLoading(true);
         const res = await api.get("/users?role=dosen");
-
-
-
-
         setData(res.data);
       } catch (error) {
         console.error("Failed to fetch dosen data:", error);
@@ -2025,517 +2280,52 @@ export default function Dosen() {
               <table className="min-w-full divide-y divide-gray-100 dark:divide-white/[0.05] text-sm">
                 <thead className="border-b border-gray-100 dark:border-white/[0.05] bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-4">
-                      <button
-                        type="button"
-                        aria-checked={
-                          paginatedData.length > 0 &&
-                          paginatedData.every((d) =>
-                            selectedRows.includes(String(d.id || d.nid))
-                          )
-                        }
-                        role="checkbox"
-                        onClick={() => {
-                          if (
-                            paginatedData.length > 0 &&
-                            paginatedData.every((d) =>
-                              selectedRows.includes(String(d.id || d.nid))
-                            )
-                          ) {
-                            setSelectedRows([]);
-                          } else {
-                            setSelectedRows(
-                              paginatedData.map((d) => String(d.id || d.nid))
-                            );
-                          }
-                        }}
-                        className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-                          paginatedData.length > 0 &&
-                          paginatedData.every((d) =>
-                            selectedRows.includes(String(d.id || d.nid))
-                          )
-                            ? "bg-brand-500 border-brand-500"
-                            : "bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700"
-                        } cursor-pointer`}
-                      >
-                        {paginatedData.length > 0 &&
-                          paginatedData.every((d) =>
-                            selectedRows.includes(String(d.id || d.nid))
-                          ) && (
-                            <svg
-                              className="w-3 h-3 text-white"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={3}
-                              viewBox="0 0 24 24"
-                            >
-                              <polyline points="20 7 11 17 4 10" />
-                            </svg>
-                          )}
-                      </button>
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      NID
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      NIDN
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      Nama
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      Username
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      Email
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      No. Telepon
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      Kompetensi
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      Keahlian
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                      Mata Kuliah/Peran Kurikulum
-                    </th>
-                    <th className="px-6 py-4 font-semibold text-gray-500 text-center text-xs uppercase tracking-wider dark:text-gray-400">
-                      Aksi
-                    </th>
+                    {previewData[0] && Object.keys(previewData[0]).map((colKey) => (
+                      <th key={colKey} className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
+                        {colKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {loading ? (
-                    // Skeleton loading: tampilkan 5 baris skeleton
-                    Array.from({ length: 5 }).map((_, idx) => (
-                      <tr key={idx} className="animate-pulse">
-                        {/* Checkbox */}
-                        <td className="px-4 py-4">
-                          <div className="w-5 h-5 rounded-md bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* NID */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* NIDN */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Nama */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Username */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-24 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Email */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Telp */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Kompetensi */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Keahlian */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Peran Kurikulum */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Peran Utama */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Matkul/Peran Kurikulum */}
-                        <td className="px-6 py-4">
-                          <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
-                        </td>
-                        {/* Aksi */}
-                        <td className="px-6 py-4 text-center">
-                          <div className="h-8 w-16 rounded bg-gray-200 dark:bg-gray-700 mx-auto" />
-                        </td>
-                      </tr>
-                    ))
-                  ) : paginatedData.length > 0 ? (
-                    paginatedData.map((d, idx) => (
-                      <tr
-                        key={d.nid}
-                        className={
-                          idx % 2 === 1 ? "bg-gray-50 dark:bg-white/[0.02]" : ""
-                        }
-                      >
-                        <td className="px-4 py-4">
-                          <button
-                            type="button"
-                            aria-checked={selectedRows.includes(
-                              String(d.id || d.nid)
-                            )}
-                            role="checkbox"
-                            onClick={() => {
-                              if (
-                                selectedRows.includes(String(d.id || d.nid))
-                              ) {
-                                setSelectedRows(
-                                  selectedRows.filter(
-                                    (id) => id !== String(d.id || d.nid)
-                                  )
-                                );
-                              } else {
-                                setSelectedRows([
-                                  ...selectedRows,
-                                  String(d.id || d.nid),
-                                ]);
-                              }
-                            }}
-                            className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-                              selectedRows.includes(String(d.id || d.nid))
-                                ? "bg-brand-500 border-brand-500"
-                                : "bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700"
-                            } cursor-pointer`}
-                          >
-                            {selectedRows.includes(String(d.id || d.nid)) && (
-                              <svg
-                                className="w-3 h-3 text-white"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth={3}
-                                viewBox="0 0 24 24"
-                              >
-                                <polyline points="20 7 11 17 4 10" />
-                              </svg>
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800 dark:text-white/90 align-middle">
-                          {d.nid}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
-                          {d.nidn}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
-                          {d.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
-                          {d.username}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
-                          {d.email}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle min-w-[120px]">
-                          {d.telp}
-                        </td>
-                        {/* Kolom Kompetensi */}
-                        <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
-                          {(() => {
-                            let val = d.kompetensi;
-                            if (!val) return "-";
-                            if (Array.isArray(val)) return val.join(", ");
-                            try {
-                              const arr = JSON.parse(val);
-                              return Array.isArray(arr)
-                                ? arr.join(", ")
-                                : String(val);
-                            } catch {
-                              return String(val);
-                            }
-                          })()}
-                        </td>
-                        {/* Kolom Keahlian */}
-                        <td className="px-6 py-4 whitespace-pre-line text-gray-700 dark:text-gray-300 align-middle min-w-[200px]">
-                          {(() => {
-                            let val = d.keahlian;
-                            if (!val) return "-";
-                            if (Array.isArray(val)) return val.join(", ");
-                            try {
-                              const arr = JSON.parse(val);
-                              return Array.isArray(arr)
-                                ? arr.join(", ")
-                                : String(val);
-                            } catch {
-                              return String(val);
-                            }
-                          })()}
-                        </td>
-                        {/* Kolom Mata Kuliah/Peran Kurikulum */}
-                        <td className="px-6 py-4 align-top min-w-[300px]">
-                          {/* Koordinator Badge */}
-                          {(() => {
-                            const koordinatorPeran = Array.isArray(
-                              d.dosen_peran
-                            )
-                              ? d.dosen_peran.filter(
-                                  (p) => p.tipe_peran === "koordinator"
-                                ).filter((p, index, self) => 
-                                  // HILANGKAN DUPLIKASI: Unique berdasarkan mata_kuliah_kode
-                                  index === self.findIndex(peran => 
-                                    peran.mata_kuliah_kode === p.mata_kuliah_kode
-                                  )
-                                )
-                              : [];
-
-                            if (koordinatorPeran.length > 0) {
-                              const rowKey = `${d.id || d.nid}_koordinator`;
-                              const isExpanded = !!expandedGroups[rowKey];
-                              const isShowAll = !!showAllPeran[rowKey];
-                              const peranToShow = isShowAll
-                                ? koordinatorPeran
-                                : koordinatorPeran.slice(0, 2);
-                              const hasMore = koordinatorPeran.length > 2;
-
+                  {paginatedPreviewData.map((row, i) => {
+                    const globalRowIdx = (previewPage - 1) * previewPageSize + i;
                               return (
-                                <div className="mb-3">
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-700 focus:outline-none cursor-pointer flex items-center gap-1"
-                                    onClick={() => toggleGroup(rowKey)}
-                                    title="Klik untuk buka/tutup detail"
-                                  >
-                                    Koordinator ({koordinatorPeran.length})
-                                    <FontAwesomeIcon
-                                      icon={
-                                        isExpanded ? faChevronUp : faChevronDown
-                                      }
-                                      className="ml-1 w-3 h-3"
-                                    />
-                                  </button>
-                                  {isExpanded && (
-                                    <ul className="ml-0 mt-2 flex flex-col gap-2">
-                                      {peranToShow.map((p, idx) => (
-                                        <li
-                                          key={idx}
-                                          className="flex items-start gap-2 bg-gray-100 dark:bg-white/5 rounded-lg px-3 py-2 transition"
-                                        >
-                                          <FontAwesomeIcon
-                                            icon={faBookOpen}
-                                            className="text-blue-400 mt-1 w-3 h-3"
-                                          />
-                                          <div>
-                                            <div className="font-medium text-brand-400">
-                                              {getMataKuliahNama(
-                                                p.mata_kuliah_kode
-                                              )}
-                                            </div>
-                                            <div className="text-xs text-gray-400">
-                                              Semester {p.semester} | Blok{" "}
-                                              {p.blok}
-                                            </div>
-                                            <div className="text-xs text-gray-500">
-                                              {p.peran_kurikulum}
-                                            </div>
-                                          </div>
-                                        </li>
-                                      ))}
-                                      {hasMore && !isShowAll && (
-                                        <li className="mt-2">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setShowAllPeran((prev) => ({
-                                                ...prev,
-                                                [rowKey]: true,
-                                              }))
-                                            }
-                                            className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
-                                          >
-                                            Tampilkan{" "}
-                                            {koordinatorPeran.length - 2}{" "}
-                                            lagi...
-                                          </button>
-                                        </li>
-                                      )}
-                                      {hasMore && isShowAll && (
-                                        <li className="mt-2">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setShowAllPeran((prev) => ({
-                                                ...prev,
-                                                [rowKey]: false,
-                                              }))
-                                            }
-                                            className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
-                                          >
-                                            Sembunyikan
-                                          </button>
-                                        </li>
-                                      )}
-                                    </ul>
-                                  )}
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-
-                          {/* Tim Blok Badge */}
-                          {(() => {
-                            const timBlokPeran = Array.isArray(d.dosen_peran)
-                              ? d.dosen_peran.filter(
-                                  (p) => p.tipe_peran === "tim_blok"
-                                ).filter((p, index, self) => 
-                                  // HILANGKAN DUPLIKASI: Unique berdasarkan mata_kuliah_kode
-                                  index === self.findIndex(peran => 
-                                    peran.mata_kuliah_kode === p.mata_kuliah_kode
-                                  )
-                                )
-                              : [];
-
-                            if (timBlokPeran.length > 0) {
-                              const rowKey = `${d.id || d.nid}_tim_blok`;
-                              const isExpanded = !!expandedGroups[rowKey];
-                              const isShowAll = !!showAllPeran[rowKey];
-                              const peranToShow = isShowAll
-                                ? timBlokPeran
-                                : timBlokPeran.slice(0, 2);
-                              const hasMore = timBlokPeran.length > 2;
-
-                              return (
-                                <div className="mb-3">
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 focus:outline-none cursor-pointer flex items-center gap-1"
-                                    onClick={() => toggleGroup(rowKey)}
-                                    title="Klik untuk buka/tutup detail"
-                                  >
-                                    Tim Blok ({timBlokPeran.length})
-                                    <FontAwesomeIcon
-                                      icon={
-                                        isExpanded ? faChevronUp : faChevronDown
-                                      }
-                                      className="ml-1 w-3 h-3"
-                                    />
-                                  </button>
-                                  {isExpanded && (
-                                    <ul className="ml-0 mt-2 flex flex-col gap-2">
-                                      {peranToShow.map((p, idx) => (
-                                        <li
-                                          key={idx}
-                                          className="flex items-start gap-2 bg-gray-100 dark:bg-white/5 rounded-lg px-3 py-2 transition"
-                                        >
-                                          <FontAwesomeIcon
-                                            icon={faBookOpen}
-                                            className="text-green-400 mt-1 w-3 h-3"
-                                          />
-                                          <div>
-                                            <div className="font-medium text-brand-400">
-                                              {getMataKuliahNama(
-                                                p.mata_kuliah_kode
-                                              )}
-                                            </div>
-                                            <div className="text-xs text-gray-400">
-                                              Semester {p.semester} | Blok{" "}
-                                              {p.blok}
-                                            </div>
-                                            <div className="text-xs text-gray-500">
-                                              {p.peran_kurikulum}
-                                            </div>
-                                          </div>
-                                        </li>
-                                      ))}
-                                      {hasMore && !isShowAll && (
-                                        <li className="mt-2">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setShowAllPeran((prev) => ({
-                                                ...prev,
-                                                [rowKey]: true,
-                                              }))
-                                            }
-                                            className="text-xs text-green-500 hover:text-green-700 dark:hover:text-green-300 font-medium"
-                                          >
-                                            Tampilkan {timBlokPeran.length - 2}{" "}
-                                            lagi...
-                                          </button>
-                                        </li>
-                                      )}
-                                      {hasMore && isShowAll && (
-                                        <li className="mt-2">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setShowAllPeran((prev) => ({
-                                                ...prev,
-                                                [rowKey]: false,
-                                              }))
-                                            }
-                                            className="text-xs text-green-500 hover:text-green-700 dark:hover:text-green-300 font-medium"
-                                          >
-                                            Sembunyikan
-                                          </button>
-                                        </li>
-                                      )}
-                                    </ul>
-                                  )}
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-
-
-                        </td>
-                        {/* Kolom Aksi */}
-                        <td className="px-6 py-4 whitespace-nowrap text-center align-middle">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleEdit(d)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-brand-500 hover:text-brand-700 dark:hover:text-brand-300 transition"
-                              title="Edit"
+                      <tr key={i} className={i % 2 === 1 ? "bg-gray-50 dark:bg-white/[0.02]" : ""}>
+                        {previewData[0] && Object.keys(previewData[0]).map((colKey, _) => {
+                          const isEditing = editingCell?.row === globalRowIdx && editingCell?.key === colKey;
+                          return (
+                            <td
+                              key={colKey}
+                              className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 cursor-pointer ${
+                                cellErrors.some(error => error.row === globalRowIdx && error.field === colKey) ? 'bg-red-100 dark:bg-red-900/30' : ''
+                              }`}
+                              title={cellErrors.find(error => error.row === globalRowIdx && error.field === colKey)?.message || ''}
+                              onClick={() => setEditingCell({ row: globalRowIdx, key: colKey })}
                             >
-                              <FontAwesomeIcon
-                                icon={faPenToSquare}
-                                className="w-5 h-5"
-                              />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(d.id!.toString())}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 transition"
-                              title="Delete"
-                            >
-                              <FontAwesomeIcon
-                                icon={faTrash}
-                                className="w-5 h-5"
-                              />
-                              Delete
-                            </button>
-                            <button
-                              onClick={() =>
-                                navigate(`/dosen/${d.id || d.nid}/riwayat`)
-                              }
-                              className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 rounded transition focus:outline-none focus:ring-0"
-                              title="Detail Riwayat"
-                            >
-                              <FontAwesomeIcon
-                                icon={faBookOpen}
-                                className="w-5 h-5"
-                              />
-                              Detail Riwayat
-                            </button>
-                          </div>
-                        </td>
+                              {isEditing ? (
+                                <input
+                                  className="w-full px-1 border-none outline-none text-xs md:text-sm"
+                                  value={previewData[editingCell.row][editingCell.key] || ""}
+                                  onChange={e => {
+                                    let val = e.target.value;
+                                    if (["nid", "nidn", "nuptk", "telepon"].includes(colKey)) {
+                                      val = val.replace(/[^0-9-]/g, ""); // Allow dash for NID fields
+                                    }
+                                    handleCellEdit(globalRowIdx, colKey, val);
+                                  }}
+                                  onBlur={() => setEditingCell(null)}
+                                  autoFocus
+                                />
+                              ) : (
+                                row[colKey]
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={10}
-                        className="text-center py-8 text-gray-400 dark:text-gray-500"
-                      >
-                        Belum ada data.
-                      </td>
-                    </tr>
-                  )}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2562,7 +2352,7 @@ export default function Dosen() {
                   {previewData.length} data
                 </span>
               </div>
-              <div className="flex gap-1">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
                   disabled={previewPage === 1}
@@ -2570,19 +2360,73 @@ export default function Dosen() {
                 >
                   Prev
                 </button>
-                {Array.from({ length: previewTotalPages }, (_, i) => (
+                
+                {/* Smart Pagination with Scroll for Preview */}
+                <div className="flex items-center gap-1 max-w-[400px] overflow-x-auto pagination-scroll" style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#cbd5e1 #f1f5f9'
+                }}>
+                  {/* Always show first page */}
                   <button
-                    key={i}
-                    onClick={() => setPreviewPage(i + 1)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 ${
-                      previewPage === i + 1
-                        ? "bg-brand-500 text-white"
-                        : "bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    } transition`}
+                    onClick={() => setPreviewPage(1)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                      previewPage === 1
+                        ? 'bg-brand-500 text-white'
+                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
                   >
-                    {i + 1}
+                    1
                   </button>
-                ))}
+                  
+                  {/* Show ellipsis if current page is far from start */}
+                  {previewPage > 4 && (
+                    <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+                  )}
+                  
+                  {/* Show pages around current page */}
+                  {Array.from({ length: previewTotalPages }, (_, i) => {
+                    const pageNum = i + 1;
+                    // Show pages around current page (2 pages before and after)
+                    const shouldShow = pageNum > 1 && pageNum < previewTotalPages && 
+                      (pageNum >= previewPage - 2 && pageNum <= previewPage + 2);
+                    
+                    if (!shouldShow) return null;
+                    
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setPreviewPage(pageNum)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                          previewPage === pageNum
+                            ? 'bg-brand-500 text-white'
+                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  
+                  {/* Show ellipsis if current page is far from end */}
+                  {previewPage < previewTotalPages - 3 && (
+                    <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+                  )}
+                  
+                  {/* Always show last page if it's not the first page */}
+                  {previewTotalPages > 1 && (
+                    <button
+                      onClick={() => setPreviewPage(previewTotalPages)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                        previewPage === previewTotalPages
+                          ? 'bg-brand-500 text-white'
+                          : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {previewTotalPages}
+                    </button>
+                  )}
+                </div>
+                
                 <button
                   onClick={() =>
                     setPreviewPage((p) => Math.min(previewTotalPages, p + 1))
@@ -2685,37 +2529,37 @@ export default function Dosen() {
                   <button
                     type="button"
                     aria-checked={
-                      paginatedData.length > 0 &&
-                      paginatedData.every((d) =>
+                      filteredAndSearchedData.length > 0 &&
+                      filteredAndSearchedData.every((d) =>
                         selectedRows.includes(String(d.id || d.nid))
                       )
                     }
                     role="checkbox"
                     onClick={() => {
                       if (
-                        paginatedData.length > 0 &&
-                        paginatedData.every((d) =>
+                        filteredAndSearchedData.length > 0 &&
+                        filteredAndSearchedData.every((d) =>
                           selectedRows.includes(String(d.id || d.nid))
                         )
                       ) {
                         setSelectedRows([]);
                       } else {
                         setSelectedRows(
-                          paginatedData.map((d) => String(d.id || d.nid))
+                          filteredAndSearchedData.map((d) => String(d.id || d.nid))
                         );
                       }
                     }}
                     className={`inline-flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-                      paginatedData.length > 0 &&
-                      paginatedData.every((d) =>
+                      filteredAndSearchedData.length > 0 &&
+                      filteredAndSearchedData.every((d) =>
                         selectedRows.includes(String(d.id || d.nid))
                       )
                         ? "bg-brand-500 border-brand-500"
                         : "bg-white border-gray-300 dark:bg-gray-900 dark:border-gray-700"
                     } cursor-pointer`}
                   >
-                    {paginatedData.length > 0 &&
-                      paginatedData.every((d) =>
+                    {filteredAndSearchedData.length > 0 &&
+                      filteredAndSearchedData.every((d) =>
                         selectedRows.includes(String(d.id || d.nid))
                       ) && (
                         <svg
@@ -2731,10 +2575,7 @@ export default function Dosen() {
                   </button>
                 </th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                  NID
-                </th>
-                <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
-                  NIDN
+                  NID / NIDN / NUPTK
                 </th>
                 <th className="px-6 py-4 font-semibold text-gray-500 text-left text-xs uppercase tracking-wider dark:text-gray-400">
                   Nama
@@ -2771,13 +2612,9 @@ export default function Dosen() {
                     <td className="px-4 py-4">
                       <div className="w-5 h-5 rounded-md bg-gray-200 dark:bg-gray-700" />
                     </td>
-                    {/* NID */}
+                    {/* NID / NIDN / NUPTK */}
                     <td className="px-6 py-4">
-                      <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
-                    </td>
-                    {/* NIDN */}
-                    <td className="px-6 py-4">
-                      <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+                      <div className="h-4 w-48 rounded bg-gray-200 dark:bg-gray-700" />
                     </td>
                     {/* Nama */}
                     <td className="px-6 py-4">
@@ -2870,10 +2707,14 @@ export default function Dosen() {
                       </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-800 dark:text-white/90 align-middle">
-                      {d.nid || "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
-                      {d.nidn || "-"}
+                      {(() => {
+                        // NID, NIDN, dan NUPTK wajib ada (dengan "-" jika kosong di database)
+                        const nid = d.nid || "-";
+                        const nidn = d.nidn || "-";
+                        const nuptk = d.nuptk || "-";
+                        
+                        return `${nid} / ${nidn} / ${nuptk}`;
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300 align-middle">
                       {d.name || "-"}
@@ -3279,7 +3120,7 @@ export default function Dosen() {
               {filteredAndSearchedData.length} data
             </span>
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
@@ -3287,19 +3128,101 @@ export default function Dosen() {
             >
               Prev
             </button>
-            {Array.from({ length: totalPages }, (_, i) => (
+            
+            {/* Smart Pagination with Scroll */}
+            <div className="flex items-center gap-1 max-w-[400px] overflow-x-auto pagination-scroll" style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#cbd5e1 #f1f5f9'
+            }}>
+              <style dangerouslySetInnerHTML={{
+                __html: `
+                  .pagination-scroll::-webkit-scrollbar {
+                    height: 6px;
+                  }
+                  .pagination-scroll::-webkit-scrollbar-track {
+                    background: #f1f5f9;
+                    border-radius: 3px;
+                  }
+                  .pagination-scroll::-webkit-scrollbar-thumb {
+                    background: #cbd5e1;
+                    border-radius: 3px;
+                  }
+                  .pagination-scroll::-webkit-scrollbar-thumb:hover {
+                    background: #94a3b8;
+                  }
+                  .dark .pagination-scroll::-webkit-scrollbar-track {
+                    background: #1e293b;
+                  }
+                  .dark .pagination-scroll::-webkit-scrollbar-thumb {
+                    background: #475569;
+                  }
+                  .dark .pagination-scroll::-webkit-scrollbar-thumb:hover {
+                    background: #64748b;
+                  }
+                `
+              }} />
+              
+              {/* Always show first page */}
               <button
-                key={i}
-                onClick={() => setPage(i + 1)}
-                className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 ${
-                  page === i + 1
-                    ? "bg-brand-500 text-white"
-                    : "bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                } transition`}
+                onClick={() => setPage(1)}
+                className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                  page === 1
+                    ? 'bg-brand-500 text-white'
+                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
               >
-                {i + 1}
+                1
               </button>
-            ))}
+              
+              {/* Show ellipsis if current page is far from start */}
+              {page > 4 && (
+                <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+              )}
+              
+              {/* Show pages around current page */}
+              {Array.from({ length: totalPages }, (_, i) => {
+                const pageNum = i + 1;
+                // Show pages around current page (2 pages before and after)
+                const shouldShow = pageNum > 1 && pageNum < totalPages && 
+                  (pageNum >= page - 2 && pageNum <= page + 2);
+                
+                if (!shouldShow) return null;
+                
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setPage(pageNum)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                      page === pageNum
+                        ? 'bg-brand-500 text-white'
+                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              
+              {/* Show ellipsis if current page is far from end */}
+              {page < totalPages - 3 && (
+                <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+              )}
+              
+              {/* Always show last page if it's not the first page */}
+              {totalPages > 1 && (
+                <button
+                  onClick={() => setPage(totalPages)}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 transition whitespace-nowrap ${
+                    page === totalPages
+                      ? 'bg-brand-500 text-white'
+                      : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {totalPages}
+                </button>
+              )}
+            </div>
+            
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
@@ -3422,8 +3345,8 @@ export default function Dosen() {
                       className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
-                  {/* NID & NIDN */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   {/* NID, NIDN & NUPTK */}
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                         NID
@@ -3431,14 +3354,12 @@ export default function Dosen() {
                       <input
                         type="text"
                         name="nid"
-                        value={form.nid}
+                        value={form.nid || ""}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        disabled={editMode}
-                        pattern="[0-9]*"
-                        inputMode="numeric"
-                        onKeyDown={handleNumberInput}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        placeholder="Masukkan NID atau - jika belum ada"
                         autoComplete="off"
+                        disabled={false}
                       />
                     </div>
                     <div className="mb-4">
@@ -3448,15 +3369,27 @@ export default function Dosen() {
                       <input
                         type="text"
                         name="nidn"
-                        value={form.nidn}
+                        value={form.nidn || ""}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        pattern="[0-9]*"
-                        inputMode="numeric"
-                        onKeyDown={handleNumberInput}
+                        placeholder="Masukkan NIDN atau - jika belum ada"
                         autoComplete="off"
                       />
                     </div>
+                     <div className="mb-4">
+                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                         NUPTK
+                       </label>
+                       <input
+                         type="text"
+                         name="nuptk"
+                         value={form.nuptk || ""}
+                         onChange={handleInputChange}
+                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-normal text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+                         placeholder="Masukkan NUPTK atau - jika belum ada"
+                         autoComplete="off"
+                       />
+                     </div>
                   </div>
                   {/* Email & Telepon */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -3497,30 +3430,28 @@ export default function Dosen() {
                       <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-2xl w-fit px-1 py-1 bg-gray-100 dark:bg-[#181F2A]">
                         <button
                           type="button"
-                          onClick={() => !editMode && setPeranUtama("standby")}
+                          onClick={() => setPeranUtama("standby")}
                           className={`px-5 py-2 rounded-xl font-semibold text-sm transition focus:outline-none
         ${
           peranUtama === "standby"
-            ? "bg-gray-300 text-gray-800 dark:bg-brand-500 dark:text-white"
+            ? "bg-green-500 text-white dark:bg-green-500"
             : "bg-transparent text-gray-700 dark:text-white opacity-70"
-        }
-        ${editMode ? "opacity-60 pointer-events-none" : ""}`}
+        }`}
                           style={{ minWidth: 60 }}
                         >
                           Standby
                         </button>
                         <button
                           type="button"
-                          onClick={() => !editMode && setPeranUtama("aktif")}
+                          onClick={() => setPeranUtama("aktif")}
                           className={`
         px-5 py-2 rounded-xl text-sm transition focus:outline-none
         font-semibold
         ${
           peranUtama === "aktif"
-            ? "bg-green-500 text-white dark:bg-brand-500"
+            ? "bg-green-500 text-white dark:bg-green-500"
             : "bg-transparent text-gray-700 dark:text-white opacity-70"
-        }
-        ${editMode ? "opacity-60 pointer-events-none" : ""}`}
+        }`}
                           style={{ minWidth: 60 }}
                         >
                           Aktif
@@ -3541,11 +3472,11 @@ export default function Dosen() {
                               <button
                                 type="button"
                                 className={`text-xs font-medium px-2 py-1 rounded transition ${
-                                  totalPeran >= 4 || editMode
+                                  totalPeran >= 4
                                     ? "text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-60"
                                     : "text-brand-500 hover:text-brand-600"
                                 }`}
-                                disabled={totalPeran >= 4 || editMode}
+                                disabled={totalPeran >= 4}
                                 onClick={() =>
                                   setPeranKetua([
                                     ...peranKetua,
@@ -3573,18 +3504,12 @@ export default function Dosen() {
                                   {peranKetua.length > 0 && (
                                     <button
                                       type="button"
-                                      className={`text-xs text-red-500 hover:text-red-600 ${
-                                        editMode
-                                          ? "opacity-60 cursor-not-allowed pointer-events-none"
-                                          : ""
-                                      }`}
+                                      className="text-xs text-red-500 hover:text-red-600"
                                       onClick={() =>
-                                        !editMode &&
                                         setPeranKetua(
                                           peranKetua.filter((_, i) => i !== idx)
                                         )
                                       }
-                                      disabled={editMode}
                                     >
                                       Hapus
                                     </button>
@@ -3594,7 +3519,6 @@ export default function Dosen() {
                                 <Listbox
                                   value={item.mata_kuliah_kode}
                                   onChange={(value) => {
-                                    if (editMode) return;
                                     const selectedMatkul = matkulList.find(
                                       (mk) => mk.kode === value
                                     );
@@ -3615,7 +3539,6 @@ export default function Dosen() {
                                       )
                                     );
                                   }}
-                                  disabled={editMode}
                                 >
                                   {({ open }) => (
                                     <div className="relative mb-2">
@@ -3851,11 +3774,11 @@ export default function Dosen() {
                               <button
                                 type="button"
                                 className={`text-xs font-medium px-2 py-1 rounded transition ${
-                                  totalPeran >= 4 || editMode
+                                  totalPeran >= 4
                                     ? "text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-60"
                                     : "text-brand-500 hover:text-brand-600"
                                 }`}
-                                disabled={totalPeran >= 4 || editMode}
+                                disabled={totalPeran >= 4}
                                 onClick={() =>
                                   setPeranAnggota([
                                     ...peranAnggota,
@@ -3906,7 +3829,6 @@ export default function Dosen() {
                                 <Listbox
                                   value={item.mata_kuliah_kode}
                                   onChange={(value) => {
-                                    if (editMode) return;
                                     const selectedMatkul = matkulList.find(
                                       (mk) => mk.kode === value
                                     );
@@ -3927,7 +3849,6 @@ export default function Dosen() {
                                       )
                                     );
                                   }}
-                                  disabled={editMode}
                                 >
                                   {({ open }) => (
                                     <div className="relative mb-2">
@@ -4174,6 +4095,27 @@ export default function Dosen() {
                       </div>
                     </div>
                   )}
+                  
+                  {/* Info khusus untuk dosen standby */}
+                  {peranUtama === "standby" && (
+                    <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                      <div className="flex items-start space-x-3">
+                        <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                        <div>
+                          <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
+                            📋 Dosen Standby
+                          </h3>
+                          <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                            Dosen ini akan otomatis memiliki keahlian "Standby" dan kompetensi kosong. 
+                            Dosen standby siap untuk di-assign ke modul PBL kapan saja.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* Field kompetensi & keahlian hanya muncul jika bukan standby */}
                   {peranUtama !== "standby" && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4191,13 +4133,29 @@ export default function Dosen() {
                                   .map((k) => k.trim())
                                   .filter((k) => k !== "")
                           }
-                          onChange={(newSelection) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              kompetensi: newSelection,
-                            }))
-                          }
+                          onChange={(newSelection) => {
+                            // Cek apakah keahlian mengandung standby
+                            const hasStandby = Array.isArray(form.keahlian) 
+                              ? form.keahlian.some(k => k.toLowerCase() === "standby")
+                              : (form.keahlian || "").toLowerCase().includes("standby");
+                            
+                            // Jika standby, kompetensi harus kosong
+                            if (hasStandby) {
+                              setForm((prev) => ({
+                                ...prev,
+                                kompetensi: [],
+                              }));
+                            } else {
+                              setForm((prev) => ({
+                                ...prev,
+                                kompetensi: newSelection,
+                              }));
+                            }
+                          }}
                           multiple
+                          disabled={Array.isArray(form.keahlian) 
+                            ? form.keahlian.some(k => k.toLowerCase() === "standby")
+                            : (form.keahlian || "").toLowerCase().includes("standby")}
                         >
                           {({ open }) => (
                             <div className="relative">
@@ -4347,12 +4305,25 @@ export default function Dosen() {
                                   .map((k) => k.trim())
                                   .filter((k) => k !== "")
                           }
-                          onChange={(newSelection) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              keahlian: newSelection,
-                            }))
-                          }
+                          onChange={(newSelection) => {
+                            // Validasi standby: jika ada "standby", harus HANYA "standby"
+                            const hasStandby = newSelection.some(k => k.toLowerCase() === "standby");
+                            if (hasStandby && newSelection.length > 1) {
+                              // Jika ada standby dan ada keahlian lain, hanya ambil standby
+                              setForm((prev) => ({
+                                ...prev,
+                                keahlian: ["Standby"],
+                                kompetensi: [], // Reset kompetensi jika standby
+                              }));
+                            } else {
+                              setForm((prev) => ({
+                                ...prev,
+                                keahlian: newSelection,
+                                // Jika standby, reset kompetensi
+                                kompetensi: hasStandby ? [] : prev.kompetensi,
+                              }));
+                            }
+                          }}
                           multiple
                         >
                           {({ open }) => (
@@ -4692,3 +4663,4 @@ export default function Dosen() {
     </div>
   );
 }
+

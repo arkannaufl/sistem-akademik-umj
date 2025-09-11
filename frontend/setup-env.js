@@ -36,10 +36,29 @@ try {
   console.log(`✅ Environment ${environment} berhasil di-setup!`);
   console.log(`📁 File .env telah dibuat dari ${envFile}`);
   
-  if (environment === 'development') {
-    console.log('🔧 Development mode: API akan menggunakan http://localhost:8000');
-  } else if (environment === 'production') {
-    console.log('🚀 Production mode: API akan menggunakan https://isme.fkkumj.ac.id');
+  // Baca nilai aktual dari file .env yang baru dibuat dan tampilkan
+  try {
+    const fileContent = fs.readFileSync(targetFile, 'utf8');
+    const lines = fileContent.split(/\r?\n/);
+    const envMap = {};
+    for (const line of lines) {
+      if (!line || line.trim().startsWith('#')) continue;
+      const idx = line.indexOf('=');
+      if (idx === -1) continue;
+      const key = line.slice(0, idx).trim();
+      const value = line.slice(idx + 1).trim();
+      envMap[key] = value;
+    }
+
+    const apiUrl = envMap['VITE_API_URL'];
+    const nodeEnv = envMap['NODE_ENV'] || environment;
+
+    console.log(`🔧 NODE_ENV: ${nodeEnv ?? '-'} (dari ${envFile})`);
+    if (apiUrl) {
+      console.log(`🌐 VITE_API_URL: ${apiUrl} (dari ${envFile})`);
+    }
+  } catch (readErr) {
+    console.warn('⚠️ Gagal membaca nilai dari .env:', readErr.message);
   }
 } catch (error) {
   console.error('❌ Error saat setup environment:', error.message);
